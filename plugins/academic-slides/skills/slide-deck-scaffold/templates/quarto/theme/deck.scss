@@ -1,0 +1,98 @@
+/*-- scss:defaults --*/
+/* ===== Palette: change these five lines to recolour the whole deck ===== */
+$deck-primary: #1f4e79;   /* titles, theorem bars, outline numbers, table headers  */
+$deck-accent:  #c0504d;   /* takeaway boxes, subtitle, failures to highlight         */
+$deck-green:   #2e7d5b;   /* probability / "holds at every t" / the method you propose */
+$deck-purple:  #7b4f9d;   /* constants and derived quantities                         */
+$deck-ink:     #1c2b33;   /* body text                                                */
+
+$body-bg: #ffffff;
+$body-color: $deck-ink;
+$link-color: $deck-primary;
+$presentation-heading-color: $deck-primary;
+
+$font-family-sans-serif: "Avenir Next", "Helvetica Neue", "PingFang TC", "Noto Sans TC", sans-serif;
+$presentation-font-size-root: 28px;
+$presentation-heading-font-weight: 650;
+$presentation-h2-font-size: 1.35em;
+
+/*-- scss:rules --*/
+/* Title slide */
+.reveal .quarto-title-block .title { color: $deck-primary; font-weight: 750; }
+.reveal .quarto-title-block .subtitle { color: $deck-accent; }
+
+/* Frame titles: one line, with a subtle underline bar */
+.reveal h2 {
+  border-bottom: 3px solid rgba($deck-primary, .25);
+  padding-bottom: .15em;
+  margin-bottom: .6em;
+}
+
+/* Footer stays readable above slide content, with an opaque backing */
+.reveal .footer, .reveal .slide-number { z-index: 20; }
+.reveal .footer { background: rgba(255, 255, 255, .92); padding: .1em .4em; border-radius: .3em; }
+/* Breathing room so boxes never reach the footer band */
+.reveal .slides > section, .reveal .slides > section > section { padding-bottom: 1.1em; }
+
+/* Tables: booktabs-like */
+.reveal table { font-size: .85em; }
+.reveal table th { border-top: 2px solid $deck-ink; border-bottom: 1.5px solid $deck-ink; color: $deck-primary; }
+.reveal table td { border-bottom: 1px solid #d8dee2; }
+.reveal ul, .reveal ol { line-height: 1.45; }
+
+/* Definition / assumption / theorem block */
+.theorem { background: #f2f6f8; border-left: .3em solid $deck-primary; border-radius: .3em; padding: .45em .8em; margin: .3em 0 .5em; }
+.theorem .thm-title { color: $deck-primary; font-weight: 700; }
+
+/* One-sentence takeaway under a result */
+.takeaway { background: rgba($deck-accent, .1); border-left: 5px solid $deck-accent; border-radius: 4px; padding: .35em .8em; font-size: .8em; font-weight: 600; color: mix(#000000, $deck-accent, 55%); margin-top: .4em; }
+
+/* Section-level punchline */
+.punchline { background: $deck-primary; color: #fff; border-radius: .5em; padding: .5em 1em; font-weight: 650; font-size: .95em; text-align: center; margin-top: .45em; }
+
+/* Algorithm box: lines separated by <br/>, indents with &emsp; */
+.algo { background: #f4f7f9; border-left: 5px solid $deck-primary; border-radius: 4px; padding: .5em .9em; font-size: .82em; line-height: 1.6; margin: .3em 0 .6em 0; }
+
+/* Notation table directly under an equation */
+.notation table { font-size: .78em; }
+
+/* Small grey source line: citations only, never file paths */
+.source { color: #7a868c; font-size: .6em; margin-top: .4em; }
+
+/* Research slide: short labelled lines for data, method, finding */
+.research { font-size: .72em; line-height: 1.38; color: #2b3a42; }
+.research p { margin: 0 0 .6em 0; }
+.research .rlabel { font-weight: 700; color: $deck-primary; margin-right: .35em; }
+.fig-row { display: flex; justify-content: center; align-items: flex-start; gap: 16px; }
+
+/* Outline: one large row per part, section titles only */
+.outline { margin-top: .6em; }
+.outline p { font-size: 1.05em; background: #f4f7f9; border-left: 6px solid $deck-primary; border-radius: 4px; padding: .32em .8em; margin: .35em 0; }
+.outline .onum { color: $deck-primary; font-weight: 700; margin-right: .5em; }
+
+/* Figure slot for the template; replace with an <img> */
+.placeholder { border: 2px dashed #9aa7ae; background: #f6f8f9; border-radius: .4em; min-height: 240px; display: flex; align-items: center; justify-content: center; color: #5d6d76; font-size: .6em; }
+
+/* Sparse slides: scale the body (never the title or source line), at most 1.18 times.
+   roomy-1 for 58–70% fill, roomy-2 for 45–58%, roomy-3 below 45% (see slide-qa/check-fill.mjs). */
+.reveal .slides section.roomy-1 > *:not(h2):not(aside):not(.source) { font-size: 1.06em; }
+.reveal .slides section.roomy-2 > *:not(h2):not(aside):not(.source) { font-size: 1.12em; }
+.reveal .slides section.roomy-3 > *:not(h2):not(aside):not(.source) { font-size: 1.18em; }
+.reveal .slides section.roomy-2 li, .reveal .slides section.roomy-3 li { margin-bottom: .45em; }
+
+/* Centre the body of a sparse slide between title and footer; the title stays put */
+.reveal .slides section.vc.present, .reveal.print-pdf .slides section.vc { display: flex !important; flex-direction: column; height: 100%; padding-bottom: 64px; box-sizing: border-box; }
+.reveal .slides section.vc > h2 + * { margin-top: auto; }
+.reveal .slides section.vc::after { content: ""; margin-bottom: auto; }
+
+/* Two side-by-side tables (design | methods compared) with equal rows and a clear gap.
+   Quarto gives column children .25em side margins; the specific selector resets them. */
+.setting-pair { margin-top: .6em; }
+.reveal .columns.setting-pair > .column > table { width: 100%; font-size: .74em; margin: 0; box-sizing: border-box; }
+.setting-pair td, .setting-pair th { padding: .3em .5em; }
+.reveal .columns.setting-pair > .column + .column { margin-left: 2%; }
+
+/* Highlight only the numbers you discuss: the key value, the method you recommend, the failure */
+.hl-key  { color: $deck-primary; font-weight: 700; }
+.hl-good { color: $deck-green;   font-weight: 700; }
+.hl-bad  { color: $deck-accent;  font-weight: 700; }

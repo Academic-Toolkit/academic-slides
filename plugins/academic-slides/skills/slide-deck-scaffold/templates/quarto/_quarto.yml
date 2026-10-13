@@ -1,0 +1,20 @@
+# Quarto revealjs project for one talk. Render with `quarto render`; the output is talk.html.
+project:
+  title: "Talk title"
+  render:
+    - "talk.qmd"
+
+format:
+  revealjs:
+    theme: [default, theme/deck.scss]
+    width: 1280
+    height: 720
+    slide-number: c/t
+    menu: true
+    progress: true
+    hash: true
+    center: false
+    transition: fade
+    background-transition: fade
+    footer: "Venue · Date"
+    html-math-method: mathjax

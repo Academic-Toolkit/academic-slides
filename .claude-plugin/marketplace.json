@@ -1,0 +1,20 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "academic-slides",
+  "description": "Research-talk slides that a seminar audience can read: design principles, a Quarto revealjs + beamer starter, and scripted layout checks.",
+  "owner": {
+    "name": "Hau-Hung Yang"
+  },
+  "plugins": [
+    {
+      "name": "academic-slides",
+      "version": "0.1.0",
+      "description": "Design, scaffold, and check academic slide decks (Quarto revealjs with a mirrored beamer deck): readable mathematics with colored braces, consistent layout rules, and Playwright-based checks for overflow, sparse slides, text density, and MathJax errors.",
+      "author": {
+        "name": "Hau-Hung Yang"
+      },
+      "source": "./plugins/academic-slides",
+      "category": "productivity"
+    }
+  ]
+}

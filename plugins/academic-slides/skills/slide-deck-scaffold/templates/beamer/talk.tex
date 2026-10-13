@@ -1,0 +1,264 @@
+% Beamer mirror of ../quarto/talk.qmd (the content master): same main-body titles in the same order,
+% same palette and slide elements. Compile with XeLaTeX twice; keep this file outside cloud-synced
+% folders while compiling (or copy the PDF back afterwards) to avoid sync conflicts.
+\documentclass[10pt,aspectratio=169]{beamer}
+
+%======================================================================
+% Theme
+%======================================================================
+\usetheme[progressbar=frametitle,numbering=fraction,block=fill]{metropolis}
+\usepackage{appendixnumberbeamer}
+\usepackage[american]{babel}
+% For CJK names or text, uncomment and pick an installed font:
+% \usepackage{xeCJK}
+% \setCJKmainfont{Noto Sans CJK TC}\setCJKsansfont{Noto Sans CJK TC}
+
+%======================================================================
+% Mathematics, graphics, tables
+%======================================================================
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{graphicx}
+\graphicspath{{figures/}}
+\usepackage{booktabs}
+
+%======================================================================
+% Palette: same RGB values as theme/deck.scss and the hidden MathJax block in talk.qmd
+%======================================================================
+\definecolor{deckB}{RGB}{31,78,121}    % $deck-primary
+\definecolor{deckO}{RGB}{192,80,77}    % $deck-accent
+\definecolor{deckG}{RGB}{46,125,91}    % $deck-green
+\definecolor{deckP}{RGB}{123,79,157}   % $deck-purple
+\definecolor{softgray}{HTML}{7A868C}
+\colorlet{takeawaybg}{deckO!10}
+\colorlet{takeawayfg}{deckO!45!black}
+\setbeamercolor{frametitle}{bg=deckB,fg=white}
+\setbeamercolor{progress bar}{fg=deckO,bg=deckB!25}
+\setbeamercolor{alerted text}{fg=deckO}
+\setbeamercolor{block title}{fg=deckB,bg=deckB!12}
+\setbeamercolor{block body}{bg=deckB!5}
+\setbeamertemplate{frame footer}{Venue $\cdot$ Date}
+\hypersetup{colorlinks=true,linkcolor=deckB,urlcolor=deckB}
+% metropolis's title page box is \paperheight tall and overflows the plain frame by about 14pt;
+% the same template with a box that fits.
+\makeatletter
+\setbeamertemplate{title page}{%
+  \begin{minipage}[b][\dimexpr\paperheight-16pt\relax]{\textwidth}
+    \vfill%
+    \ifx\inserttitle\@empty\else\usebeamertemplate*{title}\fi
+    \ifx\insertsubtitle\@empty\else\usebeamertemplate*{subtitle}\fi
+    \usebeamertemplate*{title separator}
+    \ifx\beamer@shortauthor\@empty\else\usebeamertemplate*{author}\fi
+    \ifx\insertdate\@empty\else\usebeamertemplate*{date}\fi
+    \ifx\insertinstitute\@empty\else\usebeamertemplate*{institute}\fi
+    \vfill
+    \vspace*{1mm}
+  \end{minipage}}
+\makeatother
+
+%======================================================================
+% Math macros (same names as the hidden MathJax block in talk.qmd)
+%======================================================================
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\R}{\mathbb{R}}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator{\Var}{Var}
+\DeclareMathOperator{\Cov}{Cov}
+% colour-coded symbols: one colour per object, in the formula and in its notation table
+\newcommand{\cB}[1]{{\color{deckB}#1}}
+\newcommand{\cO}[1]{{\color{deckO}#1}}
+\newcommand{\cG}[1]{{\color{deckG}#1}}
+\newcommand{\cP}[1]{{\color{deckP}#1}}
+% table highlights, as .hl-key / .hl-good / .hl-bad
+\newcommand{\hlkey}[1]{\textbf{\cB{#1}}}
+\newcommand{\hlgood}[1]{\textbf{\cG{#1}}}
+\newcommand{\hlbad}[1]{\textbf{\cO{#1}}}
+
+%======================================================================
+% Slide elements (counterparts of the Quarto classes)
+%======================================================================
+% \sourceline{text}: small grey source line (citations only), as .source
+\newcommand{\sourceline}[1]{\par\smallskip{\tiny\color{softgray}#1\par}}
+% \takeaway{text}: one-sentence takeaway under a result, as .takeaway
+\newcommand{\takeaway}[1]{\par\smallskip\noindent
+  \colorbox{takeawaybg}{\parbox{\dimexpr\linewidth-2\fboxsep}{\color{takeawayfg}\bfseries\small\strut #1\strut}}\par}
+% \punchline{text}: section-level punchline box, as .punchline
+\newcommand{\punchline}[1]{\par\medskip\noindent
+  \colorbox{deckB}{\parbox{\dimexpr\linewidth-2\fboxsep}{\centering\color{white}\bfseries\strut #1\strut}}\par}
+% \algobox{lines}: algorithm box, as .algo
+\newcommand{\algobox}[1]{\par\smallskip\noindent
+  \colorbox{deckB!6}{\parbox{\dimexpr\linewidth-2\fboxsep}{\small #1}}\par}
+% \bibent{entry}: hanging-indent reference for the References backup slide
+\newcommand{\bibent}[1]{\par\hangindent=1.5em\hangafter=1 #1\par\smallskip}
+\renewcommand{\arraystretch}{1.15}
+
+%======================================================================
+% Title
+%======================================================================
+\title{Talk title: the claim in a few words}
+\subtitle{Subtitle: the method or setting}
+\author{Speaker Name}
+\institute{Institution}
+\date{January 1, 2026 $\cdot$ Venue}
+
+\begin{document}
+
+\begin{frame}[plain]
+\titlepage
+\end{frame}
+
+\begin{frame}{Outline}
+\centering\large
+\begin{tabular}{@{}l@{}}
+\toprule
+1. Models and guarantees \\
+2. Evidence \\
+3. Discussion \\
+\bottomrule
+\end{tabular}
+\end{frame}
+
+%======================================================================
+\section{Models and guarantees}
+%======================================================================
+
+\begin{frame}{Worker and firm effects decompose wage variance}
+\small
+\[ \log w_{it} = x_{it}'\beta + \underbrace{\cB{\alpha_i}}_{\cB{\text{worker}}} + \underbrace{\cO{\psi_{j(i,t)}}}_{\cO{\text{firm}}} + \epsilon_{it} \]
+\[ \Var(\log w - x'\beta) = \underbrace{\Var(\cB{\alpha})}_{\cB{\text{worker differences}}} + \underbrace{\Var(\cO{\psi})}_{\cO{\text{firm premia}}} + \underbrace{\cG{2\Cov(\alpha, \psi)}}_{\cG{\text{sorting}}} + \underbrace{\Var(\epsilon)}_{\text{residual}} \]
+\begin{columns}[T]
+\begin{column}{0.55\linewidth}
+\footnotesize
+\begin{tabular}{@{}ll@{}}
+\toprule
+Symbol & How it is obtained \\
+\midrule
+$\cB{\alpha_i}$ & worker fixed effect \\
+$\cO{\psi_j}$ & firm fixed effect, identified from job movers \\
+$x_{it}$ & year and age terms \\
+\bottomrule
+\end{tabular}
+\end{column}
+\begin{column}{0.42\linewidth}
+\centering\fbox{\parbox[c][0.22\textheight][c]{0.9\linewidth}{\centering\scriptsize Result figure or table here}}
+\end{column}
+\end{columns}
+\takeaway{One sentence with the finding and its number.}
+\sourceline{Model: Abowd, Kramarz \& Margolis (1999). Data: source, years, sample size.}
+\end{frame}
+
+\begin{frame}{Hoeffding's inequality bounds the sample mean}
+\begin{block}{Assumption}
+$X_1, \dots, X_n$ are independent with $a \le X_i \le b$.
+\end{block}
+\begin{block}{Theorem (Hoeffding, 1963)}
+For every $\varepsilon > 0$,
+\[ \Pr\big(\underbrace{\cB{|\bar X_n - \E\bar X_n| \ge \varepsilon}}_{\cB{\text{deviation}}}\big) \le 2\exp\Big(-\frac{2n\varepsilon^2}{\underbrace{\cO{(b-a)^2}}_{\cO{\text{range}}}}\Big). \]
+\end{block}
+Proof idea: Markov's inequality on the moment generating function (backup).
+\end{frame}
+
+\begin{frame}{Bridge: allocation in a trial as a bandit}
+\centering\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+Multi-armed bandit & Adaptive clinical trial \\
+\midrule
+arm $a_t$ & treatment given to patient $t$ \\
+reward $u_t(a)$ & outcome under treatment $a$ \\
+regret & outcomes lost relative to the best treatment \\
+\bottomrule
+\end{tabular}
+\par\raggedright
+\begin{block}{Definition (Regret)}
+\[ R_T = \underbrace{\cB{\max_{a}\sum_{t=1}^{T} u_t(a)}}_{\cB{\text{best fixed arm}}} - \underbrace{\cO{\sum_{t=1}^{T} u_t(a_t)}}_{\cO{\text{chosen arms}}} \]
+\end{block}
+\sourceline{Lai \& Robbins (1985).}
+\end{frame}
+
+%======================================================================
+\section{Evidence}
+%======================================================================
+
+\begin{frame}{Simulation setting: three binomial intervals}
+\begin{columns}[T]
+\begin{column}{0.47\linewidth}
+\centering\footnotesize
+\begin{tabular}{@{}ll@{}}
+\toprule
+Design & \\
+\midrule
+Sample size & $n \in \{20, 50, 100\}$ \\
+True proportion & $p \in \{0.05, 0.2, 0.5\}$ \\
+Level & $\alpha = 0.05$ \\
+Replications & 10,000 per cell \\
+\bottomrule
+\end{tabular}
+\end{column}
+\begin{column}{0.51\linewidth}
+\centering\footnotesize
+\begin{tabular}{@{}ll@{}}
+\toprule
+Intervals compared & Source \\
+\midrule
+Wald & normal approximation \\
+Wilson & score inversion (Wilson, 1927) \\
+Clopper--Pearson & exact binomial (1934) \\
+\bottomrule
+\end{tabular}
+\end{column}
+\end{columns}
+\medskip
+Metrics: coverage and mean width; definitions in the backup.
+\end{frame}
+
+\begin{frame}{Simulation result: highlight only the numbers you discuss}
+\centering\small
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+Interval & Coverage, $n = 20$ & Coverage, $n = 100$ & Mean width \\
+\midrule
+Wald & \hlbad{x.xx} & x.xx & x.xx \\
+\hlgood{Wilson} & \hlgood{x.xx} & \hlgood{x.xx} & \hlgood{x.xx} \\
+Clopper--Pearson & x.xx & x.xx & \hlbad{x.xx} \\
+\bottomrule
+\end{tabular}
+\par\medskip\raggedright
+Replace x.xx with your results; colour only the failure and the method you recommend.
+\sourceline{Source: this study; pooled over $p$.}
+\end{frame}
+
+%======================================================================
+\section{Discussion}
+%======================================================================
+
+\begin{frame}{Takeaways}
+\begin{itemize}
+  \item One sentence per line, each a claim the talk supported.
+  \item A second takeaway, with its number if it has one.
+  \item A third takeaway; limitations go in the notes.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Thank you}
+\centering
+Speaker Name $\cdot$ email $\cdot$ website
+\end{frame}
+
+\appendix
+
+\begin{frame}{Hoeffding's inequality: proof sketch}
+For $\lambda > 0$, Markov's inequality gives $\Pr(\bar X_n - \E\bar X_n \ge \varepsilon) \le e^{-\lambda\varepsilon}\,\E e^{\lambda(\bar X_n - \E\bar X_n)}$. Hoeffding's lemma bounds each factor by $e^{\lambda^2(b-a)^2/(8n^2)}$; choosing $\lambda = 4n\varepsilon/(b-a)^2$ gives the bound, and symmetry doubles it.
+\end{frame}
+
+\begin{frame}{References}
+\scriptsize
+\setlength{\parindent}{0pt}
+\bibent{Abowd, J. M., Kramarz, F., \& Margolis, D. N. (1999). High wage workers and high wage firms. \emph{Econometrica}, 67(2), 251--333.}
+\bibent{Clopper, C. J., \& Pearson, E. S. (1934). The use of confidence or fiducial limits illustrated in the case of the binomial. \emph{Biometrika}, 26(4), 404--413.}
+\bibent{Hoeffding, W. (1963). Probability inequalities for sums of bounded random variables. \emph{Journal of the American Statistical Association}, 58(301), 13--30.}
+\bibent{Lai, T. L., \& Robbins, H. (1985). Asymptotically efficient adaptive allocation rules. \emph{Advances in Applied Mathematics}, 6(1), 4--22.}
+\bibent{Wilson, E. B. (1927). Probable inference, the law of succession, and statistical inference. \emph{Journal of the American Statistical Association}, 22(158), 209--212.}
+\end{frame}
+
+\end{document}

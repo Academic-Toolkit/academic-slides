@@ -1,0 +1,217 @@
+---
+title: "Talk title: the claim in a few words"
+subtitle: "Subtitle: the method or setting"
+author: "Speaker Name"
+institute: "Institution"
+date: 2026-01-01
+date-format: "MMMM D, YYYY [· Venue]"
+---
+
+## Outline {.roomy-2 .vc}
+
+::: {.hidden}
+$$
+\newcommand{\argmax}{\operatorname*{arg\,max}}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\R}{\mathbb{R}}
+\definecolor{deckB}{RGB}{31,78,121}
+\definecolor{deckO}{RGB}{192,80,77}
+\definecolor{deckG}{RGB}{46,125,91}
+\definecolor{deckP}{RGB}{123,79,157}
+\newcommand{\cB}[1]{{\color{deckB}{#1}}}
+\newcommand{\cO}[1]{{\color{deckO}{#1}}}
+\newcommand{\cG}[1]{{\color{deckG}{#1}}}
+\newcommand{\cP}[1]{{\color{deckP}{#1}}}
+$$
+:::
+
+::: {.outline}
+[1]{.onum} Models and guarantees
+
+[2]{.onum} Evidence
+
+[3]{.onum} Discussion
+:::
+
+::: {.notes}
+**Purpose**: give the map of the talk. (about 0.5 min)
+
+**Script**: "Three parts: the model and what we can guarantee, the evidence, and what remains open."
+:::
+
+# Models and guarantees
+
+## Worker and firm effects decompose wage variance
+
+$$\log w_{it} = x_{it}'\beta + \underbrace{\cB{\alpha_i}}_{\cB{\text{worker}}} + \underbrace{\cO{\psi_{j(i,t)}}}_{\cO{\text{firm}}} + \epsilon_{it}$$
+$$\Var(\log w - x'\beta) = \underbrace{\Var(\cB{\alpha})}_{\cB{\text{worker differences}}} + \underbrace{\Var(\cO{\psi})}_{\cO{\text{firm premia}}} + \underbrace{\cG{2\Cov(\alpha, \psi)}}_{\cG{\text{sorting}}} + \underbrace{\Var(\epsilon)}_{\text{residual}}$$
+
+:::: {.columns}
+::: {.column width="55%"}
+::: {.notation}
+| Symbol | How it is obtained |
+|:--|:--|
+| $\cB{\alpha_i}$ | worker fixed effect |
+| $\cO{\psi_j}$ | firm fixed effect, identified from job movers |
+| $x_{it}$ | year and age terms |
+:::
+:::
+::: {.column width="43%"}
+::: {.placeholder}
+Result figure or table here
+:::
+:::
+::::
+
+::: {.takeaway}
+One sentence with the finding and its number.
+:::
+
+::: {.source}
+Model: Abowd, Kramarz & Margolis (1999). Data: source, years, sample size.
+:::
+
+::: {.notes}
+**Purpose**: show the model behind the result before the result itself. (about 1 min)
+
+**Script**: "Log wages are split into a worker effect, a firm effect, and controls. The variance then splits into four parts; the labels under the braces say what each part means."
+
+**Cue**: point at the braces from left to right.
+:::
+
+## Hoeffding's inequality bounds the sample mean {.roomy-1}
+
+::: {.theorem}
+[Assumption]{.thm-title} $X_1, \dots, X_n$ are independent with $a \le X_i \le b$.
+:::
+
+::: {.theorem}
+[Theorem (Hoeffding, 1963)]{.thm-title} For every $\varepsilon > 0$,
+$$\Pr\big(\underbrace{\cB{|\bar X_n - \E\bar X_n| \ge \varepsilon}}_{\cB{\text{deviation}}}\big) \le 2\exp\Big(-\frac{2n\varepsilon^2}{\underbrace{\cO{(b-a)^2}}_{\cO{\text{range}}}}\Big).$$
+:::
+
+Proof idea: Markov's inequality on the moment generating function (backup).
+
+::: {.notes}
+**Purpose**: state the result as in the source, with braces naming the two quantities that matter. (about 1 min)
+
+**Script**: "The probability of a deviation larger than epsilon decays exponentially in n; the only feature of the distribution that enters is its range."
+:::
+
+## Bridge: allocation in a trial as a bandit
+
+| Multi-armed bandit | Adaptive clinical trial |
+|:--|:--|
+| arm $a_t$ | treatment given to patient $t$ |
+| reward $u_t(a)$ | outcome under treatment $a$ |
+| regret | outcomes lost relative to the best treatment |
+
+::: {.theorem}
+[Definition (Regret)]{.thm-title}
+$$R_T = \underbrace{\cB{\max_{a}\sum_{t=1}^{T} u_t(a)}}_{\cB{\text{best fixed arm}}} - \underbrace{\cO{\sum_{t=1}^{T} u_t(a_t)}}_{\cO{\text{chosen arms}}}$$
+:::
+
+::: {.source}
+Lai & Robbins (1985).
+:::
+
+::: {.notes}
+**Purpose**: map the general framework onto the application, row by row. (about 1 min)
+
+**Script**: "Each row of the table translates one concept. Regret is then defined in the application's own terms."
+:::
+
+# Evidence
+
+## Simulation setting: three binomial intervals {.roomy-2 .vc}
+
+:::: {.columns .setting-pair}
+::: {.column width="47%"}
+| Design | |
+|:--|:--|
+| Sample size | $n \in \{20, 50, 100\}$ |
+| True proportion | $p \in \{0.05, 0.2, 0.5\}$ |
+| Level | $\alpha = 0.05$ |
+| Replications | 10,000 per cell |
+:::
+::: {.column width="51%"}
+| Intervals compared | Source |
+|:--|:--|
+| Wald | normal approximation |
+| Wilson | score inversion (Wilson, 1927) |
+| Clopper–Pearson | exact binomial (1934) |
+:::
+::::
+
+Metrics: coverage and mean width; definitions in the backup.
+
+::: {.notes}
+**Purpose**: restate the methods being compared, with their sources, before any result. (about 1 min)
+
+**Script**: "Three intervals for a binomial proportion, compared over sample sizes and true proportions."
+:::
+
+## Simulation result: highlight only the numbers you discuss {.roomy-1 .vc}
+
+| Interval | Coverage, $n = 20$ | Coverage, $n = 100$ | Mean width |
+|:--|--:|--:|--:|
+| Wald | [x.xx]{.hl-bad} | x.xx | x.xx |
+| [Wilson]{.hl-good} | [x.xx]{.hl-good} | [x.xx]{.hl-good} | [x.xx]{.hl-good} |
+| Clopper–Pearson | x.xx | x.xx | [x.xx]{.hl-bad} |
+
+Replace x.xx with your results; colour only the failure and the method you recommend.
+
+::: {.source}
+Source: this study; pooled over $p$.
+:::
+
+::: {.notes}
+**Purpose**: one table, two highlighted comparisons. (about 1 min)
+
+**Script**: "Say the highlighted numbers aloud; the rest of the table is there for reference."
+:::
+
+# Discussion
+
+## Takeaways {.roomy-3 .vc}
+
+- One sentence per line, each a claim the talk supported.
+- A second takeaway, with its number if it has one.
+- A third takeaway; limitations go in the notes.
+
+::: {.notes}
+**Purpose**: three conclusions, then the limits in words. (about 1.5 min)
+
+**Script**: "Three things to remember. And the limits: say them here rather than in grey text on the slide."
+:::
+
+## Thank you {.vc}
+
+Speaker Name · email · website
+
+::: {.notes}
+**Purpose**: close and open questions. (about 0.5 min)
+:::
+
+# Backup
+
+## Hoeffding's inequality: proof sketch
+
+For $\lambda > 0$, Markov's inequality gives $\Pr(\bar X_n - \E\bar X_n \ge \varepsilon) \le e^{-\lambda\varepsilon}\,\E e^{\lambda(\bar X_n - \E\bar X_n)}$. Hoeffding's lemma bounds each factor by $e^{\lambda^2(b-a)^2/(8n^2)}$; choosing $\lambda = 4n\varepsilon/(b-a)^2$ gives the bound, and symmetry doubles it.
+
+## References
+
+::: {style="font-size:0.64em; line-height:1.35;"}
+Abowd, J. M., Kramarz, F., & Margolis, D. N. (1999). High wage workers and high wage firms. *Econometrica*, 67(2), 251--333.
+
+Clopper, C. J., & Pearson, E. S. (1934). The use of confidence or fiducial limits illustrated in the case of the binomial. *Biometrika*, 26(4), 404--413.
+
+Hoeffding, W. (1963). Probability inequalities for sums of bounded random variables. *Journal of the American Statistical Association*, 58(301), 13--30.
+
+Lai, T. L., & Robbins, H. (1985). Asymptotically efficient adaptive allocation rules. *Advances in Applied Mathematics*, 6(1), 4--22.
+
+Wilson, E. B. (1927). Probable inference, the law of succession, and statistical inference. *Journal of the American Statistical Association*, 22(158), 209--212.
+:::

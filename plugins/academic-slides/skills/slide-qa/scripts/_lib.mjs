@@ -1,0 +1,62 @@
+// Shared helpers for the slide-qa scripts: argument parsing, Playwright loading, and a static
+// file server rooted at the folder that holds the rendered deck (revealjs needs http, not file://).
+import { createServer } from 'http';
+import { readFile } from 'fs/promises';
+import { existsSync } from 'fs';
+import path from 'path';
+
+export function args(help) {
+  const argv = process.argv.slice(2);
+  if (argv.includes('--help') || argv.includes('-h')) { console.log(help); process.exit(0); }
+  const get = (name, fallback) => { const i = argv.indexOf(`--${name}`); return i >= 0 ? argv[i + 1] : fallback; };
+  const has = (name) => argv.includes(`--${name}`);
+  return { get, has };
+}
+
+export async function playwright() {
+  try {
+    return (await import('playwright')).chromium;
+  } catch {
+    console.error('Playwright not found. Install with: npm i -D playwright && npx playwright install chromium');
+    process.exit(1);
+  }
+}
+
+// Resolve the deck path; exit 2 when it does not exist.
+export function deckPath(html) {
+  const file = path.resolve(html);
+  if (!existsSync(file)) { console.error(`HTML not found: ${file} (render the deck first)`); process.exit(2); }
+  return { root: path.dirname(file), name: path.basename(file) };
+}
+
+const MIME = {
+  '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css',
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.svg': 'image/svg+xml',
+  '.mp4': 'video/mp4', '.json': 'application/json', '.woff2': 'font/woff2', '.woff': 'font/woff', '.ttf': 'font/ttf',
+};
+
+export async function serve(root) {
+  const server = createServer(async (req, res) => {
+    try {
+      const file = path.join(root, decodeURIComponent(req.url.split('?')[0]));
+      if (!file.startsWith(root) || !existsSync(file)) return res.writeHead(404).end();
+      res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
+      res.end(await readFile(file));
+    } catch {
+      res.writeHead(500).end();
+    }
+  });
+  await new Promise((r) => server.listen(0, r));
+  return { server, port: server.address().port };
+}
+
+// Load the deck, wait for MathJax and Reveal, and freeze transitions so geometry is final.
+export async function openDeck(page, url) {
+  await page.goto(url, { waitUntil: 'networkidle' });
+  await page.waitForFunction(() => window.Reveal && window.Reveal.isReady());
+  await page.evaluate(async () => { if (window.MathJax && window.MathJax.startup) await window.MathJax.startup.promise; });
+  await page.addStyleTag({ content: '.reveal .progress, .reveal .slide-menu-button { display: none !important; }'
+    + ' .reveal .slides section, .reveal .slides section > * { transition: none !important; animation: none !important; }'
+    + ' .reveal .slides section:not(.present) { display: none !important; }' });
+  await page.evaluate(() => { window.Reveal.configure({ transition: 'none', backgroundTransition: 'none' }); window.Reveal.slide(0, 0); });
+}

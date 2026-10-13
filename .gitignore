@@ -1,0 +1,16 @@
+# Spectra app data
+.spectra/
+node_modules/
+.quarto/
+*_files/
+talk.html
+talk.pdf
+*.aux
+*.log
+*.nav
+*.out
+*.snm
+*.toc
+*.xdv
+.DS_Store
+docs/spectra/.vector-search.db*
