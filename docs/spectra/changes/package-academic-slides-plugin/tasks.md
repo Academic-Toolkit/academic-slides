@@ -21,4 +21,4 @@
 ## 5. 文件與發布
 
 - [x] 5.1 [Req: No project-specific content] [Req: Private distribution under PsychQuant] [after: 2.3, 3.3, 4.1] 撰寫 README.md（用途、三個 skill、安裝指令、需要的工具與測試過的版本、快速上手、來源說明）；驗證：在 README.md 與 docs/spectra/ 之外 grep 不到 ncku、成大、econblue；`claude plugin validate --strict` 兩處皆通過。
-- [ ] 5.2 [Req: Private distribution under PsychQuant] [after: 5.1] 依 D7「發布為 PsychQuant private repo」提交並建立 private repo PsychQuant/academic-slides、推送 main；驗證：`gh repo view PsychQuant/academic-slides --json visibility,defaultBranchRef` 回報 PRIVATE 與 main，遠端可看到 plugins/academic-slides/.claude-plugin/plugin.json。
+- [x] 5.2 [Req: Private distribution under PsychQuant] [after: 5.1] 依 D7「發布為 PsychQuant private repo」提交並建立 private repo PsychQuant/academic-slides、推送 main；驗證：`gh repo view PsychQuant/academic-slides --json visibility,defaultBranchRef` 回報 PRIVATE 與 main，遠端可看到 plugins/academic-slides/.claude-plugin/plugin.json。
