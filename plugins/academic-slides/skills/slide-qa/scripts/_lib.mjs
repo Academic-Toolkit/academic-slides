@@ -35,18 +35,23 @@ const MIME = {
   '.mp4': 'video/mp4', '.json': 'application/json', '.woff2': 'font/woff2', '.woff': 'font/woff', '.ttf': 'font/ttf',
 };
 
+// Serve only files inside `root`, and only to this machine: bind to 127.0.0.1 so the deck folder is
+// never exposed on the local network, and reject any path that resolves outside root
+// (a bare prefix test would let /deck-other through when root is /deck).
 export async function serve(root) {
+  const base = path.resolve(root);
   const server = createServer(async (req, res) => {
     try {
-      const file = path.join(root, decodeURIComponent(req.url.split('?')[0]));
-      if (!file.startsWith(root) || !existsSync(file)) return res.writeHead(404).end();
+      const file = path.resolve(base, '.' + decodeURIComponent(req.url.split('?')[0]));
+      const inside = file === base || file.startsWith(base + path.sep);
+      if (!inside || !existsSync(file)) return res.writeHead(404).end();
       res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
       res.end(await readFile(file));
     } catch {
       res.writeHead(500).end();
     }
   });
-  await new Promise((r) => server.listen(0, r));
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
   return { server, port: server.address().port };
 }
 

@@ -29,7 +29,7 @@ const { server, port } = await serve(root);
 await mkdir(OUT, { recursive: true });
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: WIDTH, height: HEIGHT } });
-await openDeck(page, `http://localhost:${port}/${name}`);
+await openDeck(page, `http://127.0.0.1:${port}/${name}`);
 const offenders = [];
 
 for (let i = 0; i < 500; i++) {
