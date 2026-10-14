@@ -14,3 +14,4 @@ talk.pdf
 *.xdv
 .DS_Store
 docs/spectra/.vector-search.db*
+qa/

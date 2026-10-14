@@ -16,7 +16,7 @@ const { server, port } = await serve(root);
 const browser = await chromium.launch();
 try {
   const page = await browser.newPage({ viewport: { width: WIDTH, height: HEIGHT } });
-  await page.goto(`http://127.0.0.1:${port}/${name}?print-pdf`, { waitUntil: 'networkidle' });
+  await page.goto(`http://127.0.0.1:${port}/${encodeURIComponent(name)}?print-pdf`, { waitUntil: 'networkidle' });
   await page.evaluate(async () => { if (window.MathJax && window.MathJax.startup) await window.MathJax.startup.promise; });
   await page.waitForFunction(() => window.Reveal && window.Reveal.isReady());
   await page.waitForTimeout(1500);

@@ -33,7 +33,7 @@ SKILLS=~/.claude/plugins/marketplaces/academic-slides/plugins/academic-slides/sk
 cp -R $SKILLS/slide-deck-scaffold/templates/quarto my-talk
 cd my-talk && quarto render
 
-node $SKILLS/slide-qa/scripts/check-layout.mjs --shots --out qa
+node $SKILLS/slide-qa/scripts/check-layout.mjs --shots        # screenshots in qa/
 node $SKILLS/slide-qa/scripts/check-mathjax.mjs
 node $SKILLS/slide-qa/scripts/check-density.mjs --qmd talk.qmd
 node $SKILLS/slide-qa/scripts/check-fill.mjs

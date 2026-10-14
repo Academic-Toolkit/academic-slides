@@ -10,16 +10,18 @@ import path from 'path';
 import { args, playwright, deckPath, serve, openDeck } from './_lib.mjs';
 
 const { get, has } = args(`Usage: node check-layout.mjs [--html talk.html] [--width 1280] [--height 720]
-                             [--footer '.reveal .footer'] [--out /tmp/slide-layout] [--shots]
-  --shots  save one screenshot per slide (slide-NN.png) in --out; offenders are always saved
+                             [--footer '.reveal .footer'] [--out <deck folder>/qa] [--shots]
+  --out    screenshot folder (default: qa/ next to the deck HTML)
+  --shots  save one screenshot per slide as <deck>-NN.png; flagged slides are always saved as <deck>-NN-flagged.png
 Exit status: 0 no problems, 1 at least one flagged slide, 2 HTML not found.`);
 const WIDTH = Number(get('width', 1280));
 const HEIGHT = Number(get('height', 720));
 const FOOTER = get('footer', '.reveal .footer');
-const OUT = get('out', '/tmp/slide-layout');
 const SHOTS = has('shots');
 const { root, name } = deckPath(get('html', 'talk.html'));
 const deck = name.replace(/\.html?$/, '');
+// default output sits next to the deck (owned by the user, specific to the project), never a shared temp path
+const OUT = path.resolve(get('out', path.join(root, 'qa')));
 // band margins avoid the menu button (bottom left) and the slide number (bottom right)
 const X0 = 110;
 const BAND_W = WIDTH - X0 - 150;
@@ -29,7 +31,7 @@ const { server, port } = await serve(root);
 await mkdir(OUT, { recursive: true });
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: WIDTH, height: HEIGHT } });
-await openDeck(page, `http://127.0.0.1:${port}/${name}`);
+await openDeck(page, `http://127.0.0.1:${port}/${encodeURIComponent(name)}`);
 const offenders = [];
 
 for (let i = 0; i < 500; i++) {
@@ -81,9 +83,10 @@ for (let i = 0; i < 500; i++) {
     return n;
   }, [band.toString('base64'), ref.toString('base64')]);
 
-  if (SHOTS) await writeFile(path.join(OUT, `slide-${String(i).padStart(2, '0')}.png`), await page.screenshot());
+  const nn = String(i).padStart(2, '0');
+  if (SHOTS) await writeFile(path.join(OUT, `${deck}-${nn}.png`), await page.screenshot());
   if (nonBg > 200 || info.domOver > 2 || info.rightOver > 2 || info.titleLines > 1) {
-    const file = path.join(OUT, `${deck}-${String(i).padStart(2, '0')}.png`);
+    const file = path.join(OUT, `${deck}-${nn}-flagged.png`);
     await writeFile(file, await page.screenshot());
     offenders.push({ index: i, ...info, pixels: nonBg, file });
   }

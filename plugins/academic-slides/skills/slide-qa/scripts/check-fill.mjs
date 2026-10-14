@@ -26,7 +26,7 @@ const chromium = await playwright();
 const { server, port } = await serve(root);
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: WIDTH, height: HEIGHT } });
-await openDeck(page, `http://127.0.0.1:${port}/${name}`);
+await openDeck(page, `http://127.0.0.1:${port}/${encodeURIComponent(name)}`);
 const rows = [];
 
 for (let i = 0; i < 500; i++) {
