@@ -22,3 +22,11 @@
 
 - [x] 5.1 [Req: No project-specific content] [Req: Private distribution under PsychQuant] [after: 2.3, 3.3, 4.1] 撰寫 README.md（用途、三個 skill、安裝指令、需要的工具與測試過的版本、快速上手、來源說明）；驗證：在 README.md 與 docs/spectra/ 之外 grep 不到 ncku、成大、econblue；`claude plugin validate --strict` 兩處皆通過。
 - [x] 5.2 [Req: Private distribution under PsychQuant] [after: 5.1] 依 D7「發布為 PsychQuant private repo」提交並建立 private repo PsychQuant/academic-slides、推送 main；驗證：`gh repo view PsychQuant/academic-slides --json visibility,defaultBranchRef` 回報 PRIVATE 與 main，遠端可看到 plugins/academic-slides/.claude-plugin/plugin.json。
+
+## 6. GitHub issues #1–#3（2026-10-14）
+
+- [x] 6.1 [Req: Screenshots stay with the deck] check-layout.mjs 預設輸出改為投影片旁的 qa/，--shots 檔名改為 <deck>-NN.png、被標記的頁為 <deck>-NN-flagged.png，並同步 --help、SKILL.md 與 fix-table.md（issue #1；決定採 qa/ 而非 mkdtemp：位置固定好找，且與 SKILL.md 範例一致）；驗證：不給 --out 時截圖出現在 talk.html 旁的 qa/，系統暫存資料夾下沒有 slide-layout；同一資料夾檢查兩份投影片，兩者的逐頁截圖都保留。
+- [x] 6.2 [Req: Deck file names are URL-encoded] check-layout、check-fill、check-mathjax、export-pdf 組網址時對檔名做 encodeURIComponent（issue #2；決定採「編碼後照常開啟」）；驗證：把範本 talk.html 複製為 `a#b%c?.html` 後，四支腳本都正常完成，不再逾時。
+- [x] 6.3 [Req: Local server answers only requests addressed to itself] _lib.mjs 的 serve() 檢查 Host header，非 127.0.0.1:<port> 或 localhost:<port> 時回 403（issue #3）；驗證：以 curl 帶 `Host: example.com:<port>` 請求回 403，帶 `Host: 127.0.0.1:<port>` 回 200；範本上四支腳本照常通過。
+- [ ] 6.4 [Req: Screenshots stay with the deck] [Req: Deck file names are URL-encoded] [Req: Local server answers only requests addressed to itself] [after: 6.1, 6.2, 6.3] 推送分支 fix/slide-qa-issues-1-3 並開 PR，內文以 Fixes #1、Fixes #2、Fixes #3 連結 issue，並寫明 #1、#2 兩個待決選項的決定；驗證：`gh pr view` 顯示 PR 為 open，且連結了三個 issue。
+

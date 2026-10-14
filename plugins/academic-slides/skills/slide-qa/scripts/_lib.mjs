@@ -36,12 +36,15 @@ const MIME = {
 };
 
 // Serve only files inside `root`, and only to this machine: bind to 127.0.0.1 so the deck folder is
-// never exposed on the local network, and reject any path that resolves outside root
-// (a bare prefix test would let /deck-other through when root is /deck).
+// never exposed on the local network, reject any path that resolves outside root (a bare prefix
+// test would let /deck-other through when root is /deck), and answer only requests addressed to
+// this server by Host header, so a web page using DNS rebinding cannot read the deck folder.
 export async function serve(root) {
   const base = path.resolve(root);
   const server = createServer(async (req, res) => {
     try {
+      const { port } = server.address();
+      if (req.headers.host !== `127.0.0.1:${port}` && req.headers.host !== `localhost:${port}`) return res.writeHead(403).end();
       const file = path.resolve(base, '.' + decodeURIComponent(req.url.split('?')[0]));
       const inside = file === base || file.startsWith(base + path.sep);
       if (!inside || !existsSync(file)) return res.writeHead(404).end();

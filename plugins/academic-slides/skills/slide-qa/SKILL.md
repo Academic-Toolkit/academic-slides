@@ -32,14 +32,14 @@ What `check-density.mjs` counts: English body words and bullet lines on each mai
 
 ```bash
 quarto render                                   # 1. produce talk.html
-node scripts/check-layout.mjs --shots --out qa  # 2. layout; screenshots of every slide in qa/
+node scripts/check-layout.mjs --shots           # 2. layout; screenshots of every slide in qa/ next to the deck
 node scripts/check-mathjax.mjs                  # 3. red math
 node scripts/check-density.mjs --qmd talk.qmd --tex beamer/talk.tex   # 4. words, bullets, titles
 node scripts/check-fill.mjs                     # 5. half-empty slides (advice, never fails)
 node scripts/export-pdf.mjs                     # 6. offline PDF; page count = slide count
 ```
 
-Then look at the screenshots from step 2. Check label collisions in figures, awkward line breaks inside narrow columns, and whether highlighted numbers are the ones the speaker talks about.
+Then look at the screenshots from step 2: `qa/<deck>-NN.png` for every slide, and `qa/<deck>-NN-flagged.png` for flagged slides. Add `qa/` to the project's `.gitignore`. Check label collisions in figures, awkward line breaks inside narrow columns, and whether highlighted numbers are the ones the speaker talks about.
 
 For each failure, see [references/fix-table.md](references/fix-table.md). It lists the usual cause and the fix that keeps the deck consistent with the rules in the `academic-slide-design` skill.
 

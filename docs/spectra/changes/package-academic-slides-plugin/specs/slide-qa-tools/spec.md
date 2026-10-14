@@ -44,3 +44,31 @@ Provide scripted checks that catch the layout and density problems a human revie
 
 - **WHEN** a slide contains an undefined macro
 - **THEN** check-mathjax reports at least one error and exits with status 1
+
+### Requirement: Screenshots stay with the deck
+
+`check-layout.mjs` SHALL write screenshots to `--out` when given and otherwise to a `qa/` folder next to the deck HTML, never to a fixed shared temporary path. With `--shots`, every per-slide file name SHALL start with the deck name (`<deck>-NN.png`), and flagged slides SHALL be saved as `<deck>-NN-flagged.png`, so two decks checked into the same folder never overwrite each other.
+
+#### Scenario: Default output next to the deck
+
+- **WHEN** `check-layout.mjs --html talk.html --shots` runs without `--out`
+- **THEN** the screenshots are written to `qa/talk-00.png`, `qa/talk-01.png`, … beside `talk.html`, and nothing is written under the system temporary folder
+
+### Requirement: Deck file names are URL-encoded
+
+Every script that opens a deck SHALL URL-encode the deck file name when building the page URL, so that a deck whose file name contains `#`, `?`, or `%` opens normally.
+
+#### Scenario: Unusual file name
+
+- **WHEN** a rendered deck is saved as `a#b%c?.html` and `check-mathjax.mjs --html 'a#b%c?.html'` runs
+- **THEN** the deck loads and the script reports its math nodes instead of timing out
+
+### Requirement: Local server answers only requests addressed to itself
+
+The static server in `_lib.mjs` SHALL respond 403 to any request whose `Host` header is not `127.0.0.1:<port>` or `localhost:<port>` for its own port, as a defence against DNS rebinding.
+
+#### Scenario: Foreign Host header rejected
+
+- **WHEN** a request for an existing file in the deck folder carries `Host: example.com:<port>`
+- **THEN** the server responds 403, while the same request with `Host: 127.0.0.1:<port>` responds 200
+

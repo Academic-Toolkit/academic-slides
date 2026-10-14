@@ -14,7 +14,7 @@ const chromium = await playwright();
 const { server, port } = await serve(root);
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
-await page.goto(`http://127.0.0.1:${port}/${name}`, { waitUntil: 'networkidle' });
+await page.goto(`http://127.0.0.1:${port}/${encodeURIComponent(name)}`, { waitUntil: 'networkidle' });
 await page.evaluate(async () => { if (window.MathJax && window.MathJax.startup) await window.MathJax.startup.promise; });
 await page.waitForTimeout(1000);
 const r = await page.evaluate(() => {
