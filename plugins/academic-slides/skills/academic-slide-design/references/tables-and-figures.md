@@ -4,6 +4,7 @@
 
 - **Order rows by the comparison** you want to make, for example from the classical method to the one with the strongest guarantee.
 - **Highlight only what you will say aloud.** Usually two or three cells: the failure (accent color, bold), the recommended method or key value (green or primary, bold), and perhaps one comparison number. Use classes (`.hl-bad`, `.hl-good`, `.hl-key`) rather than literal colors, so recoloring the deck recolors the highlights.
+- **Three rules, no boxes.** A rule above the header, one below it, and one below the last row, as booktabs' `\toprule`, `\midrule`, and `\bottomrule`; no vertical lines and no boxed cells. Rows between may keep a light separator. The three rules show where the table starts, where the header ends, and where the data end; every other line is one the reader has to ignore. The scaffold theme draws all three (the bottom rule from version 0.2.0, issue #8).
 - **Never color rows by category**, for example all baseline methods in grey and all proposed methods in green. It dilutes the highlight and reads as decoration.
 - **Under the table, one line saying why the highlight matters**, for example "only this interval keeps its coverage at every step". Then a citation line.
 - **Show all methods compared, in one table**, when a reviewer could ask about any of them. Put the methods' definitions and citations on the setting slide, not in the result table.

@@ -96,6 +96,39 @@ check-layout.mjs 在成大 talk.html 上的結果，必須和原 check-overflow.
 
 建 repo 前先確認 PsychQuant/academic-slides 不存在。用 `gh repo create PsychQuant/academic-slides --private --source . --push` 推送 main 分支，推送後以 `gh repo view --json visibility` 確認為 PRIVATE。
 
+### D8. 範本只放內容骨架，主題只有一份（issue #8）
+
+- `templates/quarto/_theme/deck.scss` 是唯一的樣式檔；四個範本資料夾（research-talk、short-talk、results-report、lecture）只有 `_quarto.yml` 與 `talk.qmd`。
+- scaffold 建立投影片時，每次都從 plugin 複製當下的 `_theme/deck.scss`。範本若自帶 `deck.scss` 或 `_theme/`，印出警告並改用官方主題。理由：#5 的列印修正只改了一份 `deck.scss`；範本若各帶一份主題，同一個修正要改 N 次，而且一定會漏。
+- 色票五個變數加上 `!default`，讓排在後面的個人或專案主題可以覆寫。這取決於 Quarto 如何排列主題清單裡各檔的 `scss:defaults`，以 render 測試確認，不靠推論。
+- 語言：research-talk、short-talk 寫英文示範，results-report、lecture 寫繁體中文；各範本在 front matter 宣告 `lang`，設定檔可覆寫。
+
+### D9. 三層設定逐欄合併，不是找到第一份就停
+
+- 層次與優先序：專案 > 個人 > 官方（範本自己的 front matter 與 `_quarto.yml`）；命令列的 `--template`、`--title` 最優先。
+- 與 `.claude/.idd/local.json` 的差別：IDD 的設定只回答一個問題（issue 開在哪個 repo），最近的一份就決定一切；投影片設定是「個人預設加上專案例外」，找到第一份就停會逼專案設定重抄所有個人欄位。
+- 專案層只用最近的一份（同 `.idd` 的往上找），停在家目錄之前，個人資料夾不會被讀兩次。
+- 欄位是封閉清單：`template`、`lang`、`author`、`affiliation`、`footer`；值為字串或 `null`，`null` 代表拿掉。未知欄位警告後忽略；型別錯誤或不是 JSON 物件時，在寫入任何檔案之前以狀態 1 停止。
+- 主題覆寫：個人與專案的 `theme.scss` 分別複製成 `theme/personal.scss`、`theme/project.scss`，主題清單依序為 `default, _theme/deck.scss, theme/personal.scss, theme/project.scss`（只列存在的）。
+
+### D10. scaffold 腳本的介面
+
+- `node scaffold.mjs --out <資料夾> [--template <名稱>] [--title <標題>] [--dry-run]`；`--list` 列出所有範本與所在層，標示被遮蔽的同名範本；`--help` 印用法。
+- 只用 Node 內建模組，沿用 slide-qa 腳本的慣例：狀態 0 成功、1 拒絕（資料夾非空、找不到範本、設定錯誤）、2 用法錯誤。
+- 只寫進不存在或空的資料夾；`--dry-run` 印出同樣的解析結果但不寫任何檔案。
+- front matter 逐行改寫：範本的 `title`、`author`、`institute`、`lang` 必須各佔一行 `key: value`；值以 JSON 字串寫入（YAML 可讀）。`_quarto.yml` 必須有 `theme:` 與 `footer:` 各一行。
+- 範本名稱只接受 `^[a-z0-9][a-z0-9-]*$`，範本內的符號連結略過並警告。
+- 安全（依 commit 安全審查補上）：專案層是往上找到的，可能來自別人的 repo，所以信任與否看檔案的來源，不看內容（內容掃描列不完 Quarto 執行程式的寫法：YAML flow 寫法、加引號的鍵、`~~~` fence、profile 檔都能繞過，第一版這樣做被審查指出可以繞過，已撤回）。專案層的範本與 `theme.scss` 必須加 `--trust-project` 才會使用；專案層的 `local.json` 只有純文字欄位，不需要旗標。設定值不得含 `<`、`{`、`[`、`]`、`&`、反斜線、反引號與控制字元（U+0000–U+001F、U+007F）：Quarto 把這些值當 markdown 讀，要擋住 HTML、連結與圖片（打開投影片時會對外連線）、shortcode、屬性與行內程式碼（第三輪審查補上方括號；#8 verify 第 1 輪補上 `&` 與反斜線，因為 Pandoc 會在檢查之後解碼字元參照與反斜線跳脫，`&#123;` 會變回 `{`）。`lang` 必須是語言標籤（Quarto 用它組 `_language-<lang>.yml` 檔名，#8 verify 第 2 輪）。範本檔落在 scaffold 自己要寫的路徑、或只差大小寫或 Unicode 形式的同一路徑上時，寫入前就跳過並警告，不會寫到一半失敗（#8 verify 第 1、2 輪）。從設定層讀的 `local.json`、`theme.scss`、範本的 `talk.qmd`、`_quarto.yml` 不跟隨符號連結，範本資料夾的實際位置必須在該層的 `templates/` 之內，專案設定資料夾必須屬於目前的使用者；系統無法回報擁有者時視為不受信任，整個專案層都需要 `--trust-project`。個人與官方範本不需要旗標。
+
+### D11. 表格三條線
+
+booktabs 的三條線：表頭上方 2px、表頭下方 1.5px、最後一列下方 2px，顏色都是 `$deck-ink`；列與列之間保留 1px 淺灰線（風格選擇）。beamer 鏡像本來就有 `\bottomrule`，這次讓 Quarto 與它一致，並把三條線寫進 academic-slide-design 的表格規則。
+
+### D12. 根目錄的 templates 入口與測試位置
+
+- repo 根目錄放 `templates` 符號連結，指向 `plugins/academic-slides/skills/slide-deck-scaffold/templates`。安裝 plugin 時只複製 `plugins/academic-slides/`，所以連結不影響使用者；README 仍寫出真正的路徑，給不支援符號連結的環境。
+- 測試放在 repo 根目錄 `tests/`（不隨 plugin 發布）：`node --test tests/` 跑 scaffold 的單元與命令列測試；`tests/render-templates.sh` 用 Quarto 與 Playwright 實際 render 四個範本並跑檢查。Playwright 以根目錄 `package.json` 的 devDependency 安裝，`node_modules/` 不進 git。
+
 ## Implementation Contract
 
 **Behavior：**

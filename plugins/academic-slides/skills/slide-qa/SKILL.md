@@ -52,4 +52,4 @@ For each failure, see [references/fix-table.md](references/fix-table.md). It lis
 - `check-fill.mjs` measures geometry only. A low fill on a closing slide such as "Thank you" is expected.
 - Title comparison normalizes case, punctuation, dashes, `\emph`, and inline math. A deliberate wording difference between the two decks will still be reported.
 - If a newer Quarto release changes the revealjs DOM, update the selectors at the top of each script.
-- A deck keeps its own copy of `theme/deck.scss`. A deck made from the template before the print fix for `.vc` slides and the footer (issue #5) can still overlap the footer in the PDF; copy the two `html.print-pdf` rules from the template's `deck.scss` into it.
+- A deck keeps its own copy of the shared theme: `_theme/deck.scss`, or `theme/deck.scss` in a deck made before version 0.2.0. A later fix to the plugin's theme, such as the print rules for `.vc` slides and the footer (issue #5) or the table bottom rule (issue #8), does not reach an existing deck; copy the rules from the plugin's `slide-deck-scaffold/templates/quarto/_theme/deck.scss` into it (issue #10 tracks a command that does this).

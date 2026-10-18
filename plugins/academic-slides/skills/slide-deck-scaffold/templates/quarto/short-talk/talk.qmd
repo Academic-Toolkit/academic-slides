@@ -1,0 +1,138 @@
+---
+title: "Short talk title: the claim in a few words"
+subtitle: "Conference session or venue"
+author: "Speaker Name"
+institute: "Institution"
+date: 2026-01-01
+date-format: "MMMM D, YYYY"
+lang: en
+---
+
+## The question {.roomy-3 .vc}
+
+::: {.hidden}
+$$
+\definecolor{deckB}{RGB}{31,78,121}
+\definecolor{deckO}{RGB}{192,80,77}
+\definecolor{deckG}{RGB}{46,125,91}
+\definecolor{deckP}{RGB}{123,79,157}
+\newcommand{\cB}[1]{{\color{deckB}{#1}}}
+\newcommand{\cO}[1]{{\color{deckO}{#1}}}
+\newcommand{\cG}[1]{{\color{deckG}{#1}}}
+\newcommand{\cP}[1]{{\color{deckP}{#1}}}
+$$
+:::
+
+- Does a short reminder before an exam raise the share who finish it?
+- Unfinished exams cause most low scores in large courses.
+
+::: {.takeaway}
+Answer: yes, by about [x]{.hl-key} percentage points.
+:::
+
+::: {.notes}
+**Purpose**: the question and the answer before anything else; a short talk has no time for suspense. (about 1.5 min)
+
+**Script**: "One question today, and here is the answer up front. The rest of the talk shows where the number comes from."
+:::
+
+## Approach: compare sections with and without the reminder {.roomy-1 .vc}
+
+$$
+\text{finished}_{i} = \underbrace{\cB{\alpha}}_{\text{baseline rate}} + \underbrace{\cG{\beta}\,\text{reminder}_{i}}_{\text{effect of the reminder}} + \underbrace{\cP{\gamma}^{\top} x_{i}}_{\text{prior grades}} + \varepsilon_{i}
+$$
+
+::: {.research}
+[Data]{.rlabel} one semester, students in sections that did or did not receive the reminder.
+
+[Method]{.rlabel} linear probability model; standard errors clustered by section.
+
+[Finding]{.rlabel} $\cG{\beta}$ is the number on the next slide.
+:::
+
+::: {.notes}
+**Purpose**: one slide for the method: the model, what each term means, and what is estimated. (about 2 min)
+
+**Script**: "The green term is the effect we care about. Prior grades enter so that we compare similar students."
+
+**Cue**: point at the green brace when saying "effect".
+:::
+
+## Result 1: the reminder raises completion {.roomy-1 .vc}
+
+| Group | Finished the exam | Difference |
+|:--|--:|--:|
+| No reminder | xx% | — |
+| [Reminder]{.hl-good} | [xx%]{.hl-good} | [+x pts]{.hl-key} |
+| Reminder, prior grades held fixed | xx% | +x pts |
+
+::: {.source}
+Source: this study; replace xx with your results.
+:::
+
+::: {.notes}
+**Purpose**: the main number, highlighted once. (about 2 min)
+
+**Script**: "Say the highlighted difference aloud; the last row shows it does not depend on prior grades."
+:::
+
+## Result 2: the effect is largest for late starters {.roomy-1 .vc}
+
+:::: {.columns}
+::: {.column width="58%"}
+::: {.placeholder}
+Figure: effect by starting time, with intervals
+:::
+:::
+::: {.column width="40%"}
+- Late starters gain the most.
+- Early starters change little.
+:::
+::::
+
+::: {.notes}
+**Purpose**: one figure that says who benefits. (about 2 min)
+
+**Script**: "Split by when students usually start: the gain sits with the late starters."
+
+**Cue**: replace the placeholder with your figure; label the curves directly.
+:::
+
+## What to take away {.roomy-3 .vc}
+
+- A one-line reminder raised completion by about x points.
+- The gain is concentrated among students who start late.
+
+::: {.punchline}
+Cheap to send, and it reaches the students who need it.
+:::
+
+::: {.notes}
+**Purpose**: two conclusions and one sentence to remember; limits are spoken. (about 1.5 min)
+
+**Script**: "Two things to remember. The main limit is that sections were not randomised; say it here rather than on the slide."
+:::
+
+## Thank you {.vc}
+
+Speaker Name · email · website
+
+::: {.notes}
+**Purpose**: close and open questions. (about 0.5 min)
+
+**Script**: "Thank you. I am happy to take questions."
+:::
+
+# Backup
+
+## Backup: robustness {.roomy-1 .vc}
+
+| Specification | Difference | 95% interval |
+|:--|--:|--:|
+| Main model | +x pts | [x, x] |
+| Without prior grades | +x pts | [x, x] |
+| Sections with two instructors dropped | +x pts | [x, x] |
+
+::: {.notes}
+**Purpose**: answer "does it survive other choices?".
+:::

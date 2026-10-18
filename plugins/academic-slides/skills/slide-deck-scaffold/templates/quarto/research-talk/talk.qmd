@@ -5,6 +5,7 @@ author: "Speaker Name"
 institute: "Institution"
 date: 2026-01-01
 date-format: "MMMM D, YYYY [· Venue]"
+lang: en
 ---
 
 ## Outline {.roomy-2 .vc}
@@ -194,15 +195,17 @@ Speaker Name · email · website
 
 ::: {.notes}
 **Purpose**: close and open questions. (about 0.5 min)
+
+**Script**: "Thank you. I am happy to take questions."
 :::
 
 # Backup
 
-## Hoeffding's inequality: proof sketch
+## Hoeffding's inequality: proof sketch {.roomy-3 .vc}
 
 For $\lambda > 0$, Markov's inequality gives $\Pr(\bar X_n - \E\bar X_n \ge \varepsilon) \le e^{-\lambda\varepsilon}\,\E e^{\lambda(\bar X_n - \E\bar X_n)}$. Hoeffding's lemma bounds each factor by $e^{\lambda^2(b-a)^2/(8n^2)}$; choosing $\lambda = 4n\varepsilon/(b-a)^2$ gives the bound, and symmetry doubles it.
 
-## References
+## References {.roomy-2}
 
 ::: {style="font-size:0.64em; line-height:1.35;"}
 Abowd, J. M., Kramarz, F., & Margolis, D. N. (1999). High wage workers and high wage firms. *Econometrica*, 67(2), 251--333.

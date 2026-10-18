@@ -22,6 +22,7 @@ Each rule comes with its reason. These rules came from repeated review of one st
 | A teaser simulation (one that motivates the problem) shows only its result; its setting goes to the backup. | The teaser's job is to show the failure quickly. |
 | Personal history stays off the main slides of a job talk; a timeline can sit in the backup. | Interviews and the CV cover it; the talk is for the research. |
 | Tables highlight only the numbers you will say aloud and the compared pair (bold plus a highlight class); rows are never colored by category. Details in tables-and-figures.md. | One or two highlights guide the eye; whole-row coloring turns into decoration. |
+| Tables draw three rules — above the header, below the header, below the last row — and no boxes or vertical lines. Details in tables-and-figures.md. | The rules mark where the header and the data end; boxes add lines the reader has to ignore. |
 | Braces name the meaning of a term in plain words; the notation table says how each quantity is obtained. Details in math-readability.md. | The audience needs what a term means while listening; its provenance can be read later. |
 | Simulation slides carry no letter tags (A, B, C) or badges; the setting slide restates the compared methods with citations. Details in evidence-slides.md. | Letters force the audience to remember a code; restating the methods lets a slide stand on its own. |
 | A research overview has one slide per study. | Two studies on one slide halve the time each gets and blur the map. |

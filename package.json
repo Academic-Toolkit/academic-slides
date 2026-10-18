@@ -1,0 +1,12 @@
+{
+  "name": "academic-slides-dev",
+  "private": true,
+  "description": "Development checks for the academic-slides plugin; not shipped with the plugin.",
+  "scripts": {
+    "test": "node --test 'tests/*.test.mjs'",
+    "test:render": "bash tests/render-templates.sh"
+  },
+  "devDependencies": {
+    "playwright": "1.59.1"
+  }
+}

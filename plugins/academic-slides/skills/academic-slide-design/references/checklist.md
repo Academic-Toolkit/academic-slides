@@ -16,6 +16,7 @@
 ## Layout
 
 - [ ] `check-layout.mjs` passes: nothing under the footer, nothing past the right edge, every title on one line.
+- [ ] Every table has its three rules (above the header, below the header, below the last row) and no boxes or vertical lines.
 - [ ] `check-density.mjs` passes: at most 35 words and 3 bullets per main-body slide; with a beamer mirror, all main-body titles match.
 - [ ] `check-fill.mjs` reviewed: sparse slides use `roomy` (at most 1.18 times) and `vc`, or gained a figure.
 - [ ] Screenshots reviewed: no label on a curve, no sentence broken inside a narrow column, highlighted numbers are the ones spoken.
