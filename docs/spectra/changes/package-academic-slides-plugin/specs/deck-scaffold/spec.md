@@ -6,7 +6,7 @@ Give an agent a ready-to-copy starting point for a Quarto revealjs deck and a mi
 
 ### Requirement: Quarto template renders and passes the checks
 
-`slide-deck-scaffold/templates/quarto/` SHALL contain `_theme/deck.scss`, the only stylesheet, and four template folders, `research-talk`, `short-talk`, `results-report`, and `lecture`, each holding `_quarto.yml` and `talk.qmd` and no copy of `deck.scss` (issue #8). Every main-body slide of every template SHALL carry speaker notes in the purpose/script/cue format. `research-talk/talk.qmd` SHALL demonstrate an outline, a research-result slide, a theorem slide, a bridge slide, a simulation setting slide with side-by-side tables, a result table with highlighted key numbers, a discussion slide, and a backup section. `short-talk` SHALL demonstrate a 10–15 minute talk: the question, one approach slide, two result slides, a conclusion, and a backup. `results-report` SHALL demonstrate a Traditional Chinese results report built on tables with no mathematics: the question, the data and rating method, a main result table, an agreement table, limitations, next steps, and a backup. `lecture` SHALL demonstrate a Traditional Chinese lecture: an outline, learning objectives, a definition, a worked example, an in-class question, a recap, and a backup. `research-talk` and `short-talk` SHALL declare `lang: en`; `results-report` and `lecture` SHALL declare `lang: zh-TW`.
+`slide-deck-scaffold/templates/quarto/` SHALL contain `_theme/deck.scss`, the only stylesheet, and four template folders, `research-talk`, `short-talk`, `results-report`, and `lecture`, each holding `_quarto.yml` and `talk.qmd` and no copy of `deck.scss` (issue #8). Every main-body slide of every template SHALL carry speaker notes with a purpose and a script (a cue is optional). `research-talk/talk.qmd` SHALL demonstrate an outline, a research-result slide, a theorem slide, a bridge slide, a simulation setting slide with side-by-side tables, a result table with highlighted key numbers, a discussion slide, and a backup section. `short-talk` SHALL demonstrate a 10–15 minute talk: the question, one approach slide, two result slides, a conclusion, and a backup. `results-report` SHALL demonstrate a Traditional Chinese results report built on tables with no mathematics: the question, the data and rating method, a main result table, an agreement table, limitations, next steps, and a backup. `lecture` SHALL demonstrate a Traditional Chinese lecture: an outline, learning objectives, a definition, a worked example, an in-class question, a recap, and a backup. `research-talk` and `short-talk` SHALL declare `lang: en`; `results-report` and `lecture` SHALL declare `lang: zh-TW`.
 
 #### Scenario: Template renders cleanly
 
@@ -80,12 +80,17 @@ When looking up a template name, the scaffold SHALL use `templates/<name>/` of t
 
 ### Requirement: Scaffold writes only into an empty folder
 
-The scaffold SHALL refuse with status 1 when `--out` names a non-empty folder or a file, and SHALL write nothing with `--dry-run`, which prints the same resolution report. The written `_quarto.yml` SHALL list its theme as `[default, _theme/deck.scss]` followed by `theme/personal.scss` and `theme/project.scss` for the layers that have a `theme.scss`, which are copied there.
+The scaffold SHALL refuse with status 1 when `--out` names a non-empty folder or a file, and SHALL write nothing with `--dry-run`, which prints the same resolution report. The written `_quarto.yml` SHALL list its theme as `[default, _theme/deck.scss]` followed by `theme/personal.scss` and `theme/project.scss` for the layers that have a `theme.scss`, which are copied there. A template file on a path the scaffold writes itself (one of those overlay paths, or anything under `_theme`) SHALL be skipped with a warning before anything is written, so such a collision never leaves a partly written deck.
 
 #### Scenario: Existing deck is not overwritten
 
 - **WHEN** `--out` names a folder that already contains `talk.qmd`
 - **THEN** the script exits with status 1, names the folder, and leaves its contents unchanged
+
+#### Scenario: Template copied from a finished deck
+
+- **WHEN** a personal template contains `theme/personal.scss` (copied from a deck scaffolded earlier) and the personal layer has a `theme.scss`
+- **THEN** the dry run and the real run both print a warning naming `theme/personal.scss`, the real run exits with status 0, and the deck's `theme/personal.scss` is the personal layer's `theme.scss`
 
 #### Scenario: Dry run writes nothing
 
@@ -94,12 +99,12 @@ The scaffold SHALL refuse with status 1 when `--out` names a non-empty folder or
 
 ### Requirement: Settings layers cannot leak local files or run code without consent
 
-The project layer is discovered by walking up from the deck folder, so it can come from a repository the user did not write; trust is decided by where a file comes from, not by scanning its content, because no content scan can list every way a Quarto document runs code. The scaffold SHALL therefore refuse with status 1, before writing anything: when a `local.json` or `theme.scss` read from a settings layer, or a template's `talk.qmd` or `_quarto.yml`, is a symbolic link; when a template folder resolves outside its layer's `templates/` folder; when the project settings folder belongs to another user, or, where the system cannot report who owns it, when the project layer is used at all without `--trust-project`; when a settings value contains `<`, `{`, `[`, `]`, or a backtick (Quarto reads these values as markdown, so they cannot carry HTML, links or images that fetch a remote address, Quarto shortcodes such as `{{< env … >}}`, attribute spans, or inline code); and when the deck would use the project layer's template or `theme.scss` without `--trust-project`. With `--trust-project`, each project-layer file used is printed as a warning. The project layer's `local.json` needs no flag. Personal and official templates need no flag.
+The project layer is discovered by walking up from the deck folder, so it can come from a repository the user did not write; trust is decided by where a file comes from, not by scanning its content, because no content scan can list every way a Quarto document runs code. The scaffold SHALL therefore refuse with status 1, before writing anything: when a `local.json` or `theme.scss` read from a settings layer, or a template's `talk.qmd` or `_quarto.yml`, is a symbolic link; when a template folder resolves outside its layer's `templates/` folder; when the project settings folder belongs to another user, or, where the system cannot report who owns it, when the project layer is used at all without `--trust-project`; when a settings value contains `<`, `{`, `[`, `]`, `&`, a backslash, a backtick, or a control character (Quarto reads these values as markdown, so they cannot carry HTML, links or images that fetch a remote address, Quarto shortcodes such as `{{< env … >}}`, attribute spans, or inline code; `&` and the backslash are refused because Pandoc decodes character references and backslash escapes after the check, which would rebuild any refused character); and when the deck would use the project layer's template or `theme.scss` without `--trust-project`. That refusal SHALL tell the reader to show the named files to the user and to pass `--trust-project` only with the user's approval. With `--trust-project`, each project-layer file used is printed as a warning. The project layer's `local.json` needs no flag. Personal and official templates need no flag.
 
 #### Scenario: Project template needs consent
 
 - **WHEN** the project layer has `templates/research-talk/` (with or without a `pre-render` hook) and the scaffold runs without `--trust-project`
-- **THEN** it names that folder, tells the user to read it and pass `--trust-project`, exits with status 1, and the deck folder is not created; with `--trust-project` the deck is written
+- **THEN** it names that folder, tells the reader to ask the user before passing `--trust-project`, exits with status 1, and the deck folder is not created; with `--trust-project` the deck is written
 
 #### Scenario: Linked talk.qmd
 
@@ -109,4 +114,9 @@ The project layer is discovered by walking up from the deck folder, so it can co
 #### Scenario: Shortcode in a setting
 
 - **WHEN** a project `local.json` sets `footer` to `"{{< env GITHUB_TOKEN >}}"`
+- **THEN** the scaffold names the file and the field, exits with status 1, and nothing is written
+
+#### Scenario: Character reference in a setting
+
+- **WHEN** a project `local.json` sets `author` to a shortcode spelled with HTML character references for its braces and angle brackets
 - **THEN** the scaffold names the file and the field, exits with status 1, and nothing is written

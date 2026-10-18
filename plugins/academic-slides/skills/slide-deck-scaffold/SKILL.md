@@ -1,6 +1,6 @@
 ---
 name: slide-deck-scaffold
-description: Start a new deck from one of four Quarto revealjs templates on one shared theme — a research talk, a 10–15 minute short talk, a Traditional Chinese results report, or a Traditional Chinese lecture (16:9, palette variables, MathJax colour macros, theorem/takeaway/notation/outline/setting-pair components, booktabs table rules, sparse-slide scaling and centring) — with personal and project settings (author, affiliation, language, footer, default template, palette, own templates) merged field by field, and a beamer mirror of the research talk. Use when creating a new slide deck, choosing a template, setting a default author or palette, adding a personal template, adding a beamer version, or recolouring a deck for another institution.
+description: Start a new deck from one of four Quarto revealjs templates on one shared theme — a research talk, a 10–15 minute short talk, a Traditional Chinese results report, or a Traditional Chinese lecture (16:9, palette variables, MathJax colour macros, theorem/takeaway/notation/outline/setting-pair components, booktabs table rules, sparse-slide scaling and centring) — with personal and project settings (author, affiliation, language, footer, default template, palette, own templates) merged field by field, and a beamer mirror of the research talk. Use when creating a new slide deck, converting a talk to Quarto, choosing a template, setting a default author or palette, adding a personal template, adding a beamer version, or recolouring a deck for another institution.
 ---
 
 # Slide deck scaffold
@@ -26,6 +26,12 @@ node <this skill>/scripts/scaffold.mjs --out my-talk --template lecture --title 
 node <this skill>/scripts/scaffold.mjs --out my-talk --dry-run             # print what would be written; write nothing
 node <this skill>/scripts/scaffold.mjs --list                              # every template and the layer it comes from
 cd my-talk && quarto render                                                # → talk.html
+```
+
+The beamer mirror of `research-talk` is not copied by the script; add it by hand when you want one:
+
+```bash
+mkdir my-talk/beamer && cp <this skill>/templates/beamer/talk.tex my-talk/beamer/
 ```
 
 The script prints which settings files it read, each field's value and the layer it came from, and the theme list. It writes only into a folder that does not exist or is empty, and needs only Node. Exit status: 0 done, 1 refused (settings, template, or folder problem), 2 usage error.
@@ -56,7 +62,7 @@ Fields merge one by one: project over personal over official, with `--template` 
 { "template": "results-report", "author": null, "affiliation": null }
 ```
 
-Settings values are plain text: `<`, `{`, `[`, `]`, and backticks are refused, because Quarto reads these values as markdown (links and images would fetch remote addresses; braces would run shortcodes such as `{{< env … >}}`).
+Settings values are plain text: `<`, `{`, `[`, `]`, `&`, backslashes, backticks, and control characters are refused, because Quarto reads these values as markdown (links and images would fetch remote addresses; braces would run shortcodes such as `{{< env … >}}`; character references such as `&#123;` and backslash escapes are decoded after the check, so they would rebuild a refused character).
 
 ### Theme overrides
 
@@ -70,20 +76,22 @@ $deck-primary: #8b0000;
 .reveal h2 { letter-spacing: .01em; }
 ```
 
+Only these five variables can be overridden from a layer: every other variable `deck.scss` sets in `scss:defaults` (fonts, sizes, link and heading colours) wins over a layer's value, silently. An override also cannot refer to a `$deck-*` variable inside `scss:defaults` (write `#8b0000`, not `$deck-primary`), because Quarto places a later file's defaults before `deck.scss` defines them.
+
 Never copy the whole `deck.scss` into a template or a layer. A template's own `deck.scss` or `_theme/` is ignored with a warning.
 
 ### Personal and project templates
 
-`templates/<name>/` in a layer adds a template, or replaces an official one of the same name: project over personal over official, and the script says what it shadowed. Names are lower-case letters, digits, and hyphens. A template needs `talk.qmd` and a `_quarto.yml` with one-line `theme:` and `footer:` entries; keep `title`, `author`, `institute`, and `lang` on one line each in the front matter, because the script rewrites those lines. Symbolic links inside a template are skipped.
+`templates/<name>/` in a layer adds a template, or replaces an official one of the same name: project over personal over official, and the script says what it shadowed. Names are lower-case letters, digits, and hyphens. A template needs `talk.qmd` and a `_quarto.yml` with one-line `theme:` and `footer:` entries; keep `title`, `author`, `institute`, and `lang` on one line each in the front matter, because the script rewrites those lines. Symbolic links inside a template are skipped, and so is a template file on a path the scaffold writes itself (`theme/personal.scss`, `theme/project.scss`, anything under `_theme`), with a warning — for example a template made by copying a finished deck.
 
 ### Trust
 
-The project layer is found by walking up from the deck folder, so it can come from a repository you did not write, and rendering a template runs whatever it contains. A project layer's template and `theme.scss` are therefore used only with `--trust-project`; read them first. Its `local.json` needs no flag. A project settings folder that belongs to another user is refused, and where the system cannot report ownership, the whole project layer needs `--trust-project`. Nothing read from a layer is followed through a symbolic link that leaves it. Personal and official templates need no flag.
+The project layer is found by walking up from the deck folder, so it can come from a repository you did not write, and rendering a template runs whatever it contains. A project layer's template and `theme.scss` are therefore used only with `--trust-project`. **An agent never passes this flag on its own judgment**: show the user the files the script names, and pass the flag only after the user approves. Reading a template is not a reason to trust it — the text you would be judging was written by whoever wrote the repository. Its `local.json` needs no flag. A project settings folder that belongs to another user is refused, and where the system cannot report ownership, the whole project layer needs `--trust-project`. A `local.json` or `theme.scss` that is itself a symbolic link is refused, as is a template's `talk.qmd` or `_quarto.yml`, and a template folder must resolve inside its layer's `templates/` folder. Links in the folders above those files are followed, so a `.claude/.academic-slides` that is a link is read where it points (only the plain-text settings come through without the flag). Personal and official templates need no flag.
 
 ## After scaffolding
 
 1. **Front matter**: `title`, `subtitle`, `author`, `institute`, `date` in `talk.qmd`; `footer` in `_quarto.yml`. The settings above fill the ones you set; edit the rest by hand. In the beamer file: `\title`, `\author`, `\date`, and the `frame footer`.
-2. **Palette**: for every deck, put the five `$deck-*` values in your personal `theme.scss`; for one deck, edit the deck's `theme/` override. Mathematics is coloured separately: the four `\definecolor{deck?}{RGB}{…}` lines in the hidden block on the first content slide, and the same lines in the beamer file, must hold the same RGB values.
+2. **Palette**: for every deck, put the five `$deck-*` values in your personal `theme.scss`; for one deck, change the five values at the top of the deck's own `_theme/deck.scss` (that copy belongs to the deck). Mathematics is coloured separately: the four `\definecolor{deck?}{RGB}{…}` lines in the hidden block on the first content slide, and the same lines in the beamer file, must hold the same RGB values.
 3. **Macros**: add any macro the talk uses to the hidden MathJax block and to the beamer preamble under the same name. Never write `#hex` inside a `\newcommand` body; `#` is the parameter character, and every formula that uses the macro breaks.
 4. **Slides**: one `##` per slide, `#` for section dividers, and a final `# Backup` section. Everything after `# Backup` (Quarto) or `\appendix` (beamer) is excluded from the density limits and the title comparison. Keep that divider in English in Chinese decks too: `check-density` recognises only `Backup` (issue #9).
 
@@ -108,7 +116,7 @@ Choose `roomy` and `vc` from the numbers `check-fill.mjs` reports (skill `slide-
 
 ## Speaker notes
 
-Every main-body slide carries a notes block in three parts:
+Every main-body slide carries a notes block with a Purpose and a Script; the Cue is optional:
 
 ```markdown
 ::: {.notes}
