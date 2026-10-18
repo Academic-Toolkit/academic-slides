@@ -118,6 +118,7 @@ check-layout.mjs 在成大 talk.html 上的結果，必須和原 check-overflow.
 - 只寫進不存在或空的資料夾；`--dry-run` 印出同樣的解析結果但不寫任何檔案。
 - front matter 逐行改寫：範本的 `title`、`author`、`institute`、`lang` 必須各佔一行 `key: value`；值以 JSON 字串寫入（YAML 可讀）。`_quarto.yml` 必須有 `theme:` 與 `footer:` 各一行。
 - 範本名稱只接受 `^[a-z0-9][a-z0-9-]*$`，範本內的符號連結略過並警告。
+- 安全（依 commit 安全審查補上）：專案層是往上找到的，可能來自別人的 repo。從設定層讀的 `local.json`、`theme.scss`、範本資料夾與其 `talk.qmd`、`_quarto.yml` 一律不跟隨符號連結（範本資料夾的實際位置也必須在該層的 `templates/` 之內），否則以狀態 1 停止；設定值不得含 Quarto shortcode（`{{<`），免得 `{{< env … >}}` 把環境變數印進投影片。個人與專案範本、各層的 `theme.scss` 若有會讓 `quarto render` 執行程式或讀取其他檔案的設定（render hook、filter、extension、程式碼區塊、include／env／embed shortcode、Sass 載入），列出後拒絕，除非加 `--allow-code`。官方範本不掃描。
 
 ### D11. 表格三條線
 

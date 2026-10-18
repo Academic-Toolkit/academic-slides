@@ -334,3 +334,89 @@ test('CLI: --help exits 0 and a missing --out exits 2', () => {
   assert.match(help.out, /--out/);
   assert.equal(run([], s.home).code, 2);
 });
+
+// ---------- security: nothing read from a settings layer follows a link, runs code, or pulls in local data ----------
+
+test('CLI: a template whose talk.qmd is a symbolic link is refused and nothing is written', () => {
+  const s = sandbox();
+  const tpl = path.join(s.personal, 'templates', 'linked-file');
+  makeTemplate(tpl);
+  writeFileSync(path.join(s.base, 'secret.txt'), 'secret');
+  const real = path.join(tpl, 'talk.qmd');
+  writeFileSync(real + '.bak', readFileSync(real));
+  spawnSync('rm', [real]);
+  symlinkSync(path.join(s.base, 'secret.txt'), real);
+  const out = path.join(s.project, 'deck');
+  const r = run(['--out', out, '--template', 'linked-file'], s.home);
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /symbolic link/);
+  assert.equal(existsSync(out), false);
+});
+
+test('CLI: a template folder that is a symbolic link is refused', () => {
+  const s = sandbox();
+  makeTemplate(path.join(s.base, 'elsewhere'));
+  mkdirSync(path.join(s.personal, 'templates'), { recursive: true });
+  symlinkSync(path.join(s.base, 'elsewhere'), path.join(s.personal, 'templates', 'linked-dir'));
+  const r = run(['--out', path.join(s.project, 'deck'), '--template', 'linked-dir'], s.home);
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /symbolic link/);
+});
+
+test('CLI: a theme.scss or local.json that is a symbolic link is refused', () => {
+  for (const file of ['theme.scss', 'local.json']) {
+    const s = sandbox();
+    mkdirSync(s.personal, { recursive: true });
+    writeFileSync(path.join(s.base, 'target'), file === 'local.json' ? '{}' : '/* x */');
+    symlinkSync(path.join(s.base, 'target'), path.join(s.personal, file));
+    const out = path.join(s.project, 'deck');
+    const r = run(['--out', out], s.home);
+    assert.equal(r.code, 1, `${file}: ${r.out}`);
+    assert.match(r.out, /symbolic link/, file);
+    assert.equal(existsSync(out), false, file);
+  }
+});
+
+test('CLI: a non-official template that runs code at render time is refused unless --allow-code is given', () => {
+  const cases = {
+    'pre-render': { '_quarto.yml': 'project:\n  pre-render: ./steal.sh\nformat:\n  revealjs:\n    theme: [default, _theme/deck.scss]\n    footer: "x"\n' },
+    'filters': { '_quarto.yml': 'format:\n  revealjs:\n    theme: [default, _theme/deck.scss]\n    footer: "x"\nfilters:\n  - evil.lua\n' },
+    'code cell': { 'talk.qmd': '---\ntitle: "T"\n---\n\n```{python}\nimport os\n```\n' },
+    'include shortcode': { 'talk.qmd': '---\ntitle: "T"\n---\n\n{{< include /etc/hosts >}}\n' },
+    'env shortcode': { 'talk.qmd': '---\ntitle: "T"\n---\n\n{{< env HOME >}}\n' },
+    'extension': { '_extensions/x/_extension.yml': 'title: x\n' },
+  };
+  for (const [label, files] of Object.entries(cases)) {
+    const s = sandbox();
+    const tpl = path.join(s.project, '.claude', '.academic-slides', 'templates', 'research-talk');
+    makeTemplate(tpl);
+    for (const [name, content] of Object.entries(files)) {
+      mkdirSync(path.dirname(path.join(tpl, name)), { recursive: true });
+      writeFileSync(path.join(tpl, name), content);
+    }
+    const out = path.join(s.project, 'deck');
+    const r = run(['--out', out], s.home);
+    assert.equal(r.code, 1, `${label}: ${r.out}`);
+    assert.match(r.out, /--allow-code/, label);
+    assert.equal(existsSync(out), false, label);
+    assert.equal(run(['--out', out, '--allow-code'], s.home).code, 0, label);
+  }
+});
+
+test('CLI: a settings value containing a Quarto shortcode is refused', () => {
+  const s = sandbox();
+  writeJson(path.join(s.project, '.claude', '.academic-slides', 'local.json'), { footer: '{{< env GITHUB_TOKEN >}}' });
+  const out = path.join(s.project, 'deck');
+  const r = run(['--out', out], s.home);
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /footer/);
+  assert.match(r.out, /shortcode/);
+  assert.equal(existsSync(out), false);
+});
+
+test('CLI: official templates need no --allow-code', () => {
+  const s = sandbox();
+  for (const t of readdirSync(path.join(SKILL, 'templates/quarto')).filter((n) => !n.startsWith('_'))) {
+    assert.equal(run(['--out', path.join(s.project, t), '--template', t], s.home).code, 0, t);
+  }
+});
