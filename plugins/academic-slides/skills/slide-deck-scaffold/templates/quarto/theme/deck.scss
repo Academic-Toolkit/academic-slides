@@ -31,6 +31,8 @@ $presentation-h2-font-size: 1.35em;
 /* Footer stays readable above slide content, with an opaque backing */
 .reveal .footer, .reveal .slide-number { z-index: 20; }
 .reveal .footer { background: rgba(255, 255, 255, .92); padding: .1em .4em; border-radius: .3em; }
+/* In the PDF the slide number sits inside its page, under the fixed footer, so a backing would cover it */
+html.print-pdf .reveal .footer { background: none; }
 /* Breathing room so boxes never reach the footer band */
 .reveal .slides > section, .reveal .slides > section > section { padding-bottom: 1.1em; }
 
@@ -81,7 +83,10 @@ $presentation-h2-font-size: 1.35em;
 .reveal .slides section.roomy-2 li, .reveal .slides section.roomy-3 li { margin-bottom: .45em; }
 
 /* Centre the body of a sparse slide between title and footer; the title stays put */
-.reveal .slides section.vc.present, .reveal.print-pdf .slides section.vc { display: flex !important; flex-direction: column; height: 100%; padding-bottom: 64px; box-sizing: border-box; }
+.reveal .slides section.vc.present { display: flex !important; flex-direction: column; height: 100%; padding-bottom: 64px; box-sizing: border-box; }
+/* The PDF print view zeroes every section's padding with !important and makes each page taller than
+   the slide (slide plus margin), so height: 100% and the reserve above would not hold there */
+html.print-pdf .reveal .slides section.vc { display: flex !important; flex-direction: column; height: var(--slide-height, 720px) !important; padding-bottom: 64px !important; box-sizing: border-box; }
 .reveal .slides section.vc > h2 + * { margin-top: auto; }
 .reveal .slides section.vc::after { content: ""; margin-bottom: auto; }
 
