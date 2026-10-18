@@ -62,7 +62,7 @@ Fields merge one by one: project over personal over official, with `--template` 
 { "template": "results-report", "author": null, "affiliation": null }
 ```
 
-Settings values are plain text: `<`, `{`, `[`, `]`, `&`, backslashes, backticks, and control characters are refused, because Quarto reads these values as markdown (links and images would fetch remote addresses; braces would run shortcodes such as `{{< env … >}}`; character references such as `&#123;` and backslash escapes are decoded after the check, so they would rebuild a refused character).
+Settings values are plain text: `<`, `{`, `[`, `]`, `&`, backslashes, backticks, and control characters (U+0000–U+001F, U+007F) are refused, and `lang` must be a language tag such as `en` or `zh-TW` (Quarto looks it up as a file name), because Quarto reads these values as markdown (links and images would fetch remote addresses; braces would run shortcodes such as `{{< env … >}}`; character references such as `&#123;` and backslash escapes are decoded after the check, so they would rebuild a refused character).
 
 ### Theme overrides
 
@@ -82,7 +82,7 @@ Never copy the whole `deck.scss` into a template or a layer. A template's own `d
 
 ### Personal and project templates
 
-`templates/<name>/` in a layer adds a template, or replaces an official one of the same name: project over personal over official, and the script says what it shadowed. Names are lower-case letters, digits, and hyphens. A template needs `talk.qmd` and a `_quarto.yml` with one-line `theme:` and `footer:` entries; keep `title`, `author`, `institute`, and `lang` on one line each in the front matter, because the script rewrites those lines. Symbolic links inside a template are skipped, and so is a template file on a path the scaffold writes itself (`theme/personal.scss`, `theme/project.scss`, anything under `_theme`), with a warning — for example a template made by copying a finished deck.
+`templates/<name>/` in a layer adds a template, or replaces an official one of the same name: project over personal over official, and the script says what it shadowed. Names are lower-case letters, digits, and hyphens. A template needs `talk.qmd` and a `_quarto.yml` with one-line `theme:` and `footer:` entries; keep `title`, `author`, `institute`, and `lang` on one line each in the front matter, because the script rewrites those lines. Symbolic links inside a template are skipped, and so is a template file on a path the scaffold writes itself (`theme/personal.scss`, `theme/project.scss`, anything under `_theme`) or on a case variant of one (`Theme/Personal.scss` is the same file on a macOS disk), with a warning — for example a template made by copying a finished deck.
 
 ### Trust
 
@@ -91,7 +91,7 @@ The project layer is found by walking up from the deck folder, so it can come fr
 ## After scaffolding
 
 1. **Front matter**: `title`, `subtitle`, `author`, `institute`, `date` in `talk.qmd`; `footer` in `_quarto.yml`. The settings above fill the ones you set; edit the rest by hand. In the beamer file: `\title`, `\author`, `\date`, and the `frame footer`.
-2. **Palette**: for every deck, put the five `$deck-*` values in your personal `theme.scss`; for one deck, change the five values at the top of the deck's own `_theme/deck.scss` (that copy belongs to the deck). Mathematics is coloured separately: the four `\definecolor{deck?}{RGB}{…}` lines in the hidden block on the first content slide, and the same lines in the beamer file, must hold the same RGB values.
+2. **Palette**: for every deck, put the five `$deck-*` values in your personal `theme.scss`; for one deck, edit the deck's `theme/personal.scss` (or `theme/project.scss`) when it has one, because a layer override wins over `deck.scss`; otherwise change the five values at the top of the deck's own `_theme/deck.scss` (that copy belongs to the deck). Mathematics is coloured separately: the four `\definecolor{deck?}{RGB}{…}` lines in the hidden block on the first content slide, and the same lines in the beamer file, must hold the same RGB values.
 3. **Macros**: add any macro the talk uses to the hidden MathJax block and to the beamer preamble under the same name. Never write `#hex` inside a `\newcommand` body; `#` is the parameter character, and every formula that uses the macro breaks.
 4. **Slides**: one `##` per slide, `#` for section dividers, and a final `# Backup` section. Everything after `# Backup` (Quarto) or `\appendix` (beamer) is excluded from the density limits and the title comparison. Keep that divider in English in Chinese decks too: `check-density` recognises only `Backup` (issue #9).
 

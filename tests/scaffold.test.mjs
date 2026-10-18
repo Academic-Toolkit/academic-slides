@@ -655,3 +655,72 @@ test('official templates: every main-body slide has notes with a purpose and a s
   }
   assert.deepEqual(problems, []);
 });
+
+// ---------- verify round 2 of #8: case variants on a case-insensitive disk, lang shape, untested branches ----------
+
+test('CLI: case variants of the generated paths are skipped too, so a case-insensitive disk is never half-written', () => {
+  const s = sandbox();
+  writeJson(path.join(s.personal, 'theme.scss'), '/*-- scss:defaults --*/\n$deck-primary: #8b0000;\n');
+  makeTemplate(path.join(s.personal, 'templates', 'cased'), { extra: { 'Theme/Personal.scss': '/* x */\n', '_Theme/Deck.scss': '/* y */\n', 'notes.txt': 'kept' } });
+  const out = path.join(s.project, 'deck');
+  const dry = run(['--out', out, '--template', 'cased', '--dry-run'], s.home);
+  assert.equal(dry.code, 0, dry.out);
+  assert.match(dry.out, /^warning: .*Theme\/Personal\.scss/m);
+  assert.match(dry.out, /^warning: .*_Theme/m);
+  const r = run(['--out', out, '--template', 'cased'], s.home);
+  assert.equal(r.code, 0, r.out);
+  assert.match(readFileSync(path.join(out, 'theme', 'personal.scss'), 'utf8'), /8b0000/);
+  assert.equal(readFileSync(path.join(out, '_theme', 'deck.scss'), 'utf8'), readFileSync(OFFICIAL_THEME, 'utf8'));
+  assert.equal(readFileSync(path.join(out, 'notes.txt'), 'utf8'), 'kept');
+});
+
+test('CLI: a template folder sitting where a generated file goes is skipped with a warning', () => {
+  const s = sandbox();
+  writeJson(path.join(s.personal, 'theme.scss'), '/*-- scss:rules --*/\n');
+  makeTemplate(path.join(s.personal, 'templates', 'dir-clash'), { extra: { 'theme/personal.scss/inner.txt': 'x' } });
+  const out = path.join(s.project, 'deck');
+  const r = run(['--out', out, '--template', 'dir-clash'], s.home);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /^warning: .*theme\/personal\.scss\/inner\.txt/m);
+  assert.ok(existsSync(path.join(out, 'theme', 'personal.scss')));
+});
+
+test('CLI: lang must look like a language tag', () => {
+  for (const bad of ['../../../../etc/hostname', 'zh_TW', 'en US', 'x']) {
+    const s = sandbox();
+    writeJson(path.join(s.project, '.claude', '.academic-slides', 'local.json'), { lang: bad });
+    const out = path.join(s.project, 'deck');
+    const r = run(['--out', out], s.home);
+    assert.equal(r.code, 1, `${bad}: ${r.out}`);
+    assert.match(r.out, /lang/, bad);
+    assert.equal(existsSync(out), false, bad);
+  }
+  for (const good of ['en', 'zh-TW', 'zh-Hant-TW', 'ja']) {
+    const s = sandbox();
+    writeJson(path.join(s.personal, 'local.json'), { lang: good });
+    assert.equal(run(['--out', path.join(s.project, 'deck')], s.home).code, 0, good);
+  }
+});
+
+test('CLI: with --trust-project a project template and a project theme.scss each get their own warning', () => {
+  const s = sandbox();
+  const layer = path.join(s.project, '.claude', '.academic-slides');
+  makeTemplate(path.join(layer, 'templates', 'research-talk'));
+  writeJson(path.join(layer, 'theme.scss'), '/*-- scss:rules --*/\n');
+  const r = run(['--out', path.join(s.project, 'deck'), '--trust-project'], s.home);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /^warning: using from the project layer \(--trust-project\): .*templates\/research-talk$/m);
+  assert.match(r.out, /^warning: using from the project layer \(--trust-project\): .*\.academic-slides\/theme\.scss$/m);
+});
+
+test('CLI: a template talk.qmd without front matter is refused, naming the file', () => {
+  const s = sandbox();
+  const tpl = path.join(s.personal, 'templates', 'no-front');
+  makeTemplate(tpl);
+  writeFileSync(path.join(tpl, 'talk.qmd'), '## Slide\n\nBody\n');
+  const out = path.join(s.project, 'deck');
+  const r = run(['--out', out, '--template', 'no-front'], s.home);
+  assert.equal(r.code, 1, r.out);
+  assert.ok(r.out.includes(path.join(tpl, 'talk.qmd')), r.out);
+  assert.equal(existsSync(out), false);
+});

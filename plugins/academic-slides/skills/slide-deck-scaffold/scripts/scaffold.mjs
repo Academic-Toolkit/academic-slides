@@ -35,9 +35,12 @@ local.json fields (string, or null to remove): ${FIELDS.join(', ')}
               user and pass this flag only with the user's approval; an agent never decides alone.
 A settings file (local.json, theme.scss) or a template's talk.qmd or _quarto.yml that is itself a
 symbolic link is refused, and a template folder must resolve inside its layer's templates/ folder;
-links in the folders above a layer are followed. Settings values are plain text: no <, {, [, ], &,
-backslash, backtick, or control character. A project settings folder must belong to you (where
-ownership cannot be checked, the whole project layer needs --trust-project).
+links in the folders above those files are followed, including a layer folder or a templates/ folder
+that is itself a link. Settings values are plain text: no <, {, [, ], &, backslash, backtick, or
+control character (U+0000-U+001F, U+007F); lang must be a language tag such as en or zh-TW. A
+template file on a path the scaffold writes itself, or on a case variant of one, is skipped with a
+warning. A project settings folder must belong to you (where ownership cannot be checked, the whole
+project layer needs --trust-project).
 Exit status: 0 done, 1 refused (settings, template, or folder problem), 2 usage error.`;
 
 export class ScaffoldError extends Error {}
@@ -47,6 +50,10 @@ const isFile = (p) => existsSync(p) && statSync(p).isFile();
 const show = (v) => JSON.stringify(v);
 const isLink = (p) => lstatSync(p, { throwIfNoEntry: false })?.isSymbolicLink() ?? false;
 const inside = (child, parent) => child === parent || child.startsWith(parent + path.sep);
+// How a file system that ignores case and Unicode form sees a path (the macOS default): two names with
+// the same key are the same file there, so collision checks compare keys, not raw names (#8 verify).
+const pathKey = (p) => p.normalize('NFC').toLowerCase();
+const LANG = /^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$/;
 
 // A file read from a settings layer is never followed through a symbolic link: a cloned project could
 // otherwise point talk.qmd or theme.scss at a private file and have it copied into the new deck.
@@ -100,6 +107,10 @@ export function readSettings(dir) {
     // backslash escapes after this check has run, so they would rebuild any refused character (#8).
     if (typeof value === 'string' && /[<{`[\]&\\\u0000-\u001f\u007f]/.test(value)) {
       throw new ScaffoldError(`${file}: field ${show(key)} contains <, {, [, ], &, a backslash, a backtick, or a control character; settings values are plain text (no HTML, character references, links, images, Quarto shortcodes, or code)`);
+    }
+    // Quarto looks lang up as a file name (_language-<lang>.yml), so it must be a language tag, not a path
+    if (key === 'lang' && typeof value === 'string' && !LANG.test(value)) {
+      throw new ScaffoldError(`${file}: field "lang" must be a language tag such as en or zh-TW, not ${show(value)}`);
     }
     settings[key] = value;
   }
@@ -205,9 +216,9 @@ function templateFiles(dir, warnings, rel = '') {
     if (st.isSymbolicLink()) {
       warnings.push(`skipped symbolic link ${relPath} in the template`);
     } else if (st.isDirectory()) {
-      if (rel === '' && entry === '_theme') warnings.push(`ignored the template's own _theme/; the shared theme is used`);
+      if (rel === '' && pathKey(entry) === '_theme') warnings.push(`ignored the template's own ${entry}/; the shared theme is used`);
       else files.push(...templateFiles(dir, warnings, relPath));
-    } else if (entry === 'deck.scss') {
+    } else if (pathKey(entry) === 'deck.scss') {
       warnings.push(`ignored the template's own ${relPath}; the shared _theme/deck.scss is used`);
     } else if (st.isFile()) {
       files.push(relPath);
@@ -275,14 +286,22 @@ export function planDeck({ out, home, template, title, trustProject = false }) {
   const tpl = resolveTemplate(name, { projectDir: project, personalDir: personal, officialDir: OFFICIAL_DIR });
   const warnings = layers.flatMap((l) => l.warnings);
   const themeFiles = overlays(layers);
-  // Paths the scaffold writes itself. A template file on one of them (or on a folder above one) would
-  // stop the write half-way, so it is skipped before anything is written (#8 verify).
-  const generated = [path.join('_theme', 'deck.scss'), ...themeFiles.map((f) => f.rel)];
-  const clashes = (rel) => generated.some((g) => g === rel || g.startsWith(rel + path.sep) || rel.startsWith(g + path.sep));
+  // Paths the scaffold writes itself. A template file on one of them, on a folder above one, or on a case
+  // or Unicode variant of one would stop the write half-way, so it is skipped before anything is written,
+  // and so is a second file whose name differs from an earlier one only in case (#8 verify).
+  const generated = [path.join('_theme', 'deck.scss'), ...themeFiles.map((f) => f.rel)].map(pathKey);
+  const clashes = (k) => generated.some((g) => g === k || g.startsWith(k + path.sep) || k.startsWith(g + path.sep));
   const copies = [];
+  const taken = new Set();
   for (const rel of templateFiles(tpl.dir, warnings)) {
-    if (clashes(rel)) warnings.push(`ignored the template's own ${rel}; the scaffold writes that path itself`);
-    else copies.push({ src: path.join(tpl.dir, rel), rel });
+    const k = pathKey(rel);
+    if (k === 'talk.qmd' || k === '_quarto.yml') {   // rewritten from the template's own copy below
+      if (rel !== k) warnings.push(`ignored the template's own ${rel}; the scaffold writes ${k} itself`);
+      continue;
+    }
+    if (clashes(k)) warnings.push(`ignored the template's own ${rel}; the scaffold writes that path itself`);
+    else if (taken.has(k)) warnings.push(`ignored the template's own ${rel}; another file differs from it only in case`);
+    else { taken.add(k); copies.push({ src: path.join(tpl.dir, rel), rel }); }
   }
   const untrusted = untrustedProjectFiles(tpl, themeFiles, project);
   if (untrusted.length && !trustProject) {
@@ -297,7 +316,7 @@ export function planDeck({ out, home, template, title, trustProject = false }) {
   }, qmdFile);
   const yml = rewriteQuartoYml(readFileSync(ymlFile, 'utf8'), { theme, footer: fields.footer?.value }, ymlFile);
   const files = [
-    ...copies.filter((c) => c.rel !== 'talk.qmd' && c.rel !== '_quarto.yml'),
+    ...copies,
     { src: OFFICIAL_THEME, rel: path.join('_theme', 'deck.scss') },
     ...themeFiles,
     { content: qmd, rel: 'talk.qmd' },
