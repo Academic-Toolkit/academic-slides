@@ -58,6 +58,16 @@ export async function serve(root) {
   return { server, port: server.address().port };
 }
 
+// Open the print view: export-pdf.mjs prints it and check-layout.mjs measures it, both through this
+// function, so the layout that is checked is the layout that is printed. Each PDF page is the slide
+// plus the deck's revealjs margin, the same proportions as the screen view.
+export async function openPrintView(page, url) {
+  await page.goto(`${url}?print-pdf`, { waitUntil: 'networkidle' });
+  await page.evaluate(async () => { if (window.MathJax && window.MathJax.startup) await window.MathJax.startup.promise; });
+  await page.waitForFunction(() => window.Reveal && window.Reveal.isReady());
+  await page.waitForTimeout(1500);
+}
+
 // Load the deck, wait for MathJax and Reveal, and freeze transitions so geometry is final.
 export async function openDeck(page, url) {
   await page.goto(url, { waitUntil: 'networkidle' });

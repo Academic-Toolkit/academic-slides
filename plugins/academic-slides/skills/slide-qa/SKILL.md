@@ -12,19 +12,21 @@ Scripted checks for a revealjs deck rendered by Quarto. They catch what a review
 - Node 18 or later and Playwright with Chromium: `npm i -D playwright && npx playwright install chromium`. The scripts import Playwright dynamically and print this command if it is missing.
 - A rendered deck (`quarto render`). Every script serves the deck folder over local http, because revealjs does not run from `file://`.
 
-All scripts live in `scripts/` next to this file. Every script prints its usage with `--help`. Exit status is 0 when the check passes, 1 when it finds a problem, and 2 when the HTML is missing.
+All scripts live in `scripts/` next to this file. Every script prints its usage with `--help`. Exit status is 0 when the check passes, 1 when it finds a problem, and 2 when the HTML is missing. `check-layout.mjs` also exits with 3 when it could not finish, for example when the print view shows no slide pages; treat 3 as "not checked", never as a pass.
 
 ## The checks
 
 | Script | What it finds | Key options |
 |---|---|---|
-| `check-layout.mjs` | 1. pixels in the band just above the footer (content cut); 2. visible elements ending below the footer's top edge (content hidden behind an opaque footer); 3. math, images, or tables extending past their column or the slide; 4. slide titles wrapping to two or more lines | `--html`, `--width 1280`, `--height 720`, `--footer '.reveal .footer'`, `--out`, `--shots` |
+| `check-layout.mjs` | 1. pixels in the band just above the footer (content cut); 2. visible elements ending below the footer's top edge (content hidden behind an opaque footer); 3. math, images, or tables extending past their column or the slide; 4. slide titles wrapping to two or more lines. Checks 2–4 run on screen and again on every page of the PDF print view | `--html`, `--width 1280`, `--height 720`, `--footer '.reveal .footer'`, `--out`, `--shots` |
 | `check-fill.mjs` | content slides whose body reaches less than the threshold of the space between title and footer, with a suggested class | `--html`, `--threshold 0.70` |
 | `check-density.mjs` | more than N body words or bullets on a main-body slide; with `--tex`, the same for the beamer mirror plus an in-order title comparison | `--qmd`, `--tex`, `--words 35`, `--bullets 3`, `--skip-classes`, `--skip-macros` |
 | `check-mathjax.mjs` | MathJax parse errors and undefined macros (MathJax 3 shows these as red text, not as error nodes) | `--html` |
-| `export-pdf.mjs` | writes the PDF through revealjs print mode, one page per slide | `--html`, `--out` |
+| `export-pdf.mjs` | writes the PDF through revealjs print mode, one page per slide; each page is the slide plus the deck's revealjs margin (1056×594 pt for a 1280×720 slide) | `--html`, `--out` |
 
 Why both a pixel check and a DOM check: an opaque footer hides overflowing content from the pixel band, so only the DOM check sees it; a pixel check alone misses it.
+
+Why a second pass in the print view: the PDF is laid out differently from the screen. Revealjs's print stylesheet sets every slide's padding to 0, the slide is not scaled, and the footer is placed on the paper rather than in the browser window. A slide that is clean on screen can therefore run into the footer in the PDF. `check-layout.mjs` opens the same print view that `export-pdf.mjs` prints, so a deck it passes prints with no content running into the footer, past the right edge, or onto a second title line. It does not check other overlaps (for example one figure over another), and it does not check the slide number.
 
 What `check-density.mjs` counts: English body words and bullet lines on each main-body slide. It does not count speaker notes, hidden blocks, source lines, side notes, mathematics, tables, images, or markup. The main body ends at a level-1 section whose title starts with "Backup" (Quarto) or at `\appendix` (beamer).
 
@@ -39,13 +41,15 @@ node scripts/check-fill.mjs                     # 5. half-empty slides (advice, 
 node scripts/export-pdf.mjs                     # 6. offline PDF; page count = slide count
 ```
 
-Then look at the screenshots from step 2: `qa/<deck>-NN.png` for every slide, and `qa/<deck>-NN-flagged.png` for flagged slides. Add `qa/` to the project's `.gitignore`. Check label collisions in figures, awkward line breaks inside narrow columns, and whether highlighted numbers are the ones the speaker talks about.
+Then look at the screenshots from step 2: `qa/<deck>-NN.png` for every slide, `qa/<deck>-NN-flagged.png` for flagged slides, and `qa/<deck>-print-NN-flagged.png` for flagged PDF pages. Screen slides are numbered from 0 (`#NN`), PDF pages from 1 (`page NN`, the page number in the PDF, counting the extra pages of a slide taller than the paper and of separate notes pages). Pixel figures differ between the two because the screen view is scaled to fit its margin. Add `qa/` to the project's `.gitignore`. Check label collisions in figures, awkward line breaks inside narrow columns, and whether highlighted numbers are the ones the speaker talks about.
 
 For each failure, see [references/fix-table.md](references/fix-table.md). It lists the usual cause and the fix that keeps the deck consistent with the rules in the `academic-slide-design` skill.
 
 ## Limits
 
 - The checks assume a 16:9 revealjs deck with a footer. On a deck without a footer, `check-layout.mjs` uses the bottom 56 px as the footer line.
+- The print pass assumes a `position: fixed` footer, as Quarto renders `footer:`; a custom `--footer` laid out another way is not supported there.
 - `check-fill.mjs` measures geometry only. A low fill on a closing slide such as "Thank you" is expected.
 - Title comparison normalizes case, punctuation, dashes, `\emph`, and inline math. A deliberate wording difference between the two decks will still be reported.
 - If a newer Quarto release changes the revealjs DOM, update the selectors at the top of each script.
+- A deck keeps its own copy of `theme/deck.scss`. A deck made from the template before the print fix for `.vc` slides and the footer (issue #5) can still overlap the footer in the PDF; copy the two `html.print-pdf` rules from the template's `deck.scss` into it.

@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // Print a rendered revealjs deck to PDF through print mode (?print-pdf), one page per slide.
 // The PDF is the offline fallback: MathJax in the HTML needs a network connection.
+// check-layout.mjs measures this same print view, so a deck it passes prints with nothing running into
+// the footer, past the right edge, or onto a second title line.
 import path from 'path';
-import { args, playwright, deckPath, serve } from './_lib.mjs';
+import { args, playwright, deckPath, serve, openPrintView } from './_lib.mjs';
 
 const { get } = args(`Usage: node export-pdf.mjs [--html talk.html] [--out talk.pdf] [--width 1280] [--height 720]
 Exit status: 0 PDF written, 1 export failed, 2 HTML not found.`);
@@ -16,10 +18,7 @@ const { server, port } = await serve(root);
 const browser = await chromium.launch();
 try {
   const page = await browser.newPage({ viewport: { width: WIDTH, height: HEIGHT } });
-  await page.goto(`http://127.0.0.1:${port}/${encodeURIComponent(name)}?print-pdf`, { waitUntil: 'networkidle' });
-  await page.evaluate(async () => { if (window.MathJax && window.MathJax.startup) await window.MathJax.startup.promise; });
-  await page.waitForFunction(() => window.Reveal && window.Reveal.isReady());
-  await page.waitForTimeout(1500);
+  await openPrintView(page, `http://127.0.0.1:${port}/${encodeURIComponent(name)}`);
   const slides = await page.evaluate(() => window.Reveal.getTotalSlides());
   await page.pdf({ path: OUT, width: `${WIDTH}px`, height: `${HEIGHT}px`, printBackground: true, preferCSSPageSize: true });
   console.log(`✓ wrote ${OUT} (${slides} slides)`);
