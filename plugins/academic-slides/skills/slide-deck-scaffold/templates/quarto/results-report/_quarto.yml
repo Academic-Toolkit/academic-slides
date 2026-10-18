@@ -1,0 +1,20 @@
+# Quarto revealjs project for one results report. Render with `quarto render`; the output is talk.html.
+project:
+  title: "成果報告"
+  render:
+    - "talk.qmd"
+
+format:
+  revealjs:
+    theme: [default, _theme/deck.scss]
+    width: 1280
+    height: 720
+    slide-number: c/t
+    menu: true
+    progress: true
+    hash: true
+    center: false
+    transition: fade
+    background-transition: fade
+    footer: "報告場合 · 日期"
+    html-math-method: mathjax
