@@ -8,12 +8,17 @@ Provide scripted checks that catch the layout and density problems a human revie
 
 `check-layout.mjs` SHALL step through every slide of a revealjs HTML file and flag a slide when non-background pixels reach the band just above the footer, when any visible element ends more than 2 px below the footer's top edge, when a math block, image, or table extends more than 2 px past its column or the slide, or when the slide title wraps to more than one line. It SHALL accept `--html`, `--width`, `--height`, `--footer`, `--out`, and `--shots`.
 
-`check-layout.mjs` SHALL also open the print view that `export-pdf.mjs` prints, with the viewport set to the printed page size and print media emulated, and apply the footer, right-edge, and title checks to every PDF page. It SHALL save each flagged page as `<deck>-print-NN-flagged.png`, where NN is the PDF page number, and exit with status 1 when either pass flags. Both scripts SHALL open the print view through the same helper in `_lib.mjs`.
+`check-layout.mjs` SHALL also open the print view that `export-pdf.mjs` prints, with the viewport set to the printed page size and print media emulated, and apply the footer, right-edge, and title checks to every PDF page. It SHALL save each flagged page as `<deck>-print-NN-flagged.png`, where NN is the page number in the PDF, counted in document order so that a slide taller than the paper and a separate notes page each add their own pages, and exit with status 1 when either pass flags. When the print view yields no slide pages, or the check cannot finish, it SHALL print the reason, never the ✓ line, and exit with status 3; screen results already collected SHALL still be printed. Both scripts SHALL open the print view through the same helper in `_lib.mjs`.
 
 #### Scenario: Overlap only in the PDF
 
 - **WHEN** a `.vc` slide is clean on screen but its last line ends below the footer's top edge in the print view (issue #5)
 - **THEN** the script lists that slide by PDF page number with the number of pixels below the footer top, saves `<deck>-print-NN-flagged.png`, and exits with status 1
+
+#### Scenario: Print view not measured
+
+- **WHEN** the print view of a deck yields no `.pdf-page` with a slide (for example after a revealjs change to the print-mode DOM)
+- **THEN** the script reports that the PDF print view could not be checked, does not print the ✓ line, and exits with status 3
 
 #### Scenario: Wide equation flagged
 

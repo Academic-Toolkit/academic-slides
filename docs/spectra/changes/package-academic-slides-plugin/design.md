@@ -52,7 +52,7 @@ academic-slides/
 ### D3. 檢查腳本只用 Node，全部參數化
 
 - 共用參數：`--html <path>`（預設 ./talk.html）、`--width 1280 --height 720`、`--footer '.reveal .footer'`、`--out <dir>`。
-- check-layout.mjs：合併原 check-overflow.mjs 的四項檢查：頁尾像素帶、DOM 底緣、右緣溢出、標題換行。另有 `--shots` 逐頁截圖。
+- check-layout.mjs：合併原 check-overflow.mjs 的四項檢查：頁尾像素帶、DOM 底緣、右緣溢出、標題換行。另有 `--shots` 逐頁截圖。issue #5 起再對 export-pdf 印的列印視圖逐頁做後三項 DOM 檢查，列印視圖量不到投影片頁時以狀態 3 結束。
 - check-fill.mjs：由 scratchpad 的 fill.cjs 正式化，列出填滿度低於 `--threshold`（預設 0.70）的頁，並依 D5 建議 roomy 等級或 .vc。
 - check-density.mjs：移植 density-check.py，邏輯逐條對應。參數為 `--qmd <path>`、選用的 `--tex <path>`、`--words 35`、`--bullets 3`、`--skip-classes notes,hidden,source,sidenote`。
 - check-mathjax.mjs：計算 mjx-merror 與 mjx-container。
