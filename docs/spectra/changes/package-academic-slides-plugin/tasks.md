@@ -30,3 +30,10 @@
 - [x] 6.3 [Req: Local server answers only requests addressed to itself] _lib.mjs 的 serve() 檢查 Host header，非 127.0.0.1:<port> 或 localhost:<port> 時回 403（issue #3）；驗證：以 curl 帶 `Host: example.com:<port>` 請求回 403，帶 `Host: 127.0.0.1:<port>` 回 200；範本上四支腳本照常通過。
 - [x] 6.4 [Req: Screenshots stay with the deck] [Req: Deck file names are URL-encoded] [Req: Local server answers only requests addressed to itself] [after: 6.1, 6.2, 6.3] 推送分支 fix/slide-qa-issues-1-3 並開 PR，內文以 Fixes #1、Fixes #2、Fixes #3 連結 issue，並寫明 #1、#2 兩個待決選項的決定；驗證：`gh pr view` 顯示 PR 為 open，且連結了三個 issue。
 
+## 7. GitHub issue #5：PDF 疊字（2026-10-18）
+
+- [x] 7.1 [Req: Layout check] check-layout.mjs 在螢幕檢查後加一輪 PDF 列印檢查：經 _lib.mjs 的 openPrintView 開啟 export-pdf 印的同一個列印視圖，viewport 設為 @page 大小並模擬 print media，逐頁套用頁尾、右緣、標題三項 DOM 檢查，被標記的頁存為 <deck>-print-NN-flagged.png；驗證：用 issue #5 的中性重現例子（舊主題）跑，第 2 頁被標記、以狀態 1 結束；範本照常以狀態 0 結束。
+- [x] 7.2 [Req: Quarto template renders and passes the checks] theme/deck.scss 的 `.vc` 拆成螢幕與列印兩條規則，列印規則（`html.print-pdf`）以 `!important` 固定 `var(--slide-height, 720px)` 與 64 px 頁尾保留；列印時拿掉頁尾白底，免得蓋住頁碼（issue #5；根因是 revealjs 列印樣式的 `padding: 0 !important`，加上頁面比投影片高出 margin）；驗證：重現例子用新範本 render 後 check-layout 以狀態 0 結束，PDF 第 2 頁最後一行在頁尾之上，頁碼看得見。
+- [x] 7.3 [Req: MathJax and PDF export] export-pdf.mjs 改用 openPrintView，與 check-layout 量測同一個列印視圖；PDF 本身不變（決定保留 revealjs 的 margin，而非紙張等於畫布：本範本的留白來自 margin，margin=0 會讓標題貼齊紙張左緣）；驗證：範本 15 頁、重現例子 2 頁，頁數等於投影片數，頁面 1056×594 pt。
+- [ ] 7.4 [Req: Layout check] [Req: MathJax and PDF export] [after: 7.1, 7.2, 7.3] 同步 --help、slide-qa/SKILL.md、fix-table.md 與 README，推送分支 idd/5-export-pdf-content-that-passes-check-lay 並開 PR，內文以 Refs #5 連結（不用 Fixes，issue 於 merge 後由 /idd-close 關閉）；驗證：`gh pr view` 顯示 PR 為 open。
+

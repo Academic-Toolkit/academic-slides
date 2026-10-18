@@ -13,6 +13,11 @@ Give an agent a ready-to-copy starting point for a Quarto revealjs deck and a mi
 - **WHEN** the template folder is copied to a temporary directory and `quarto render` runs there
 - **THEN** `talk.html` is produced, and check-layout, check-density, and check-mathjax all exit with status 0 on it
 
+#### Scenario: Full centred slide in the PDF
+
+- **WHEN** a `{.vc}` slide whose body nearly fills the slide is exported with `export-pdf.mjs`
+- **THEN** its last line stays above the footer on the PDF page as it does on screen, and the slide number is visible, because `theme/deck.scss` pins the `.vc` height and footer reserve and drops the footer backing under `html.print-pdf` (issue #5)
+
 ### Requirement: Palette is a single set of variables
 
 `theme/deck.scss` SHALL define the palette as `$deck-primary`, `$deck-accent`, `$deck-green`, `$deck-purple`, and `$deck-ink` at the top, and every component rule SHALL reference these variables rather than literal colors.
