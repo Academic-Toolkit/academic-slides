@@ -1,10 +1,11 @@
 /*-- scss:defaults --*/
-/* ===== Palette: change these five lines to recolour the whole deck ===== */
-$deck-primary: #1f4e79;   /* titles, theorem bars, outline numbers, table headers  */
-$deck-accent:  #c0504d;   /* takeaway boxes, subtitle, failures to highlight         */
-$deck-green:   #2e7d5b;   /* probability / "holds at every t" / the method you propose */
-$deck-purple:  #7b4f9d;   /* constants and derived quantities                         */
-$deck-ink:     #1c2b33;   /* body text                                                */
+/* ===== Palette: change these five lines to recolour the whole deck =====
+   Each is !default, so a personal or project theme.scss listed after this file can override it. */
+$deck-primary: #1f4e79 !default; /* titles, theorem bars, outline numbers, table headers  */
+$deck-accent:  #c0504d !default; /* takeaway boxes, subtitle, failures to highlight         */
+$deck-green:   #2e7d5b !default; /* probability / "holds at every t" / the method you propose */
+$deck-purple:  #7b4f9d !default; /* constants and derived quantities                         */
+$deck-ink:     #1c2b33 !default; /* body text                                                */
 
 $body-bg: #ffffff;
 $body-color: $deck-ink;
@@ -36,10 +37,13 @@ html.print-pdf .reveal .footer { background: none; }
 /* Breathing room so boxes never reach the footer band (on screen; the print view sets section padding to 0) */
 .reveal .slides > section, .reveal .slides > section > section { padding-bottom: 1.1em; }
 
-/* Tables: booktabs-like */
+/* Tables: booktabs three rules (above the header, below the header, below the last row), like the
+   beamer \toprule, \midrule, \bottomrule; rows between keep a light separator */
 .reveal table { font-size: .85em; }
 .reveal table th { border-top: 2px solid $deck-ink; border-bottom: 1.5px solid $deck-ink; color: $deck-primary; }
 .reveal table td { border-bottom: 1px solid #d8dee2; }
+/* reveal removes the last row's border; this restores it as the bottom rule */
+.reveal table tbody tr:last-child td, .reveal table tbody tr:last-child th { border-bottom: 2px solid $deck-ink; }
 .reveal ul, .reveal ol { line-height: 1.45; }
 
 /* Definition / assumption / theorem block */

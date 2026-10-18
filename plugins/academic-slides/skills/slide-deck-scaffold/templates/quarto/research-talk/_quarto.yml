@@ -6,7 +6,7 @@ project:
 
 format:
   revealjs:
-    theme: [default, theme/deck.scss]
+    theme: [default, _theme/deck.scss]
     width: 1280
     height: 720
     slide-number: c/t
