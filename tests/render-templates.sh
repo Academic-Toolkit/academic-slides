@@ -47,6 +47,7 @@ for TPL in $(find "$TEMPLATES_DIR/quarto" -mindepth 1 -maxdepth 1 -type d ! -nam
   if grep -q '→ roomy-' <<<"$FILL"; then fail "check-fill lists sparse slides with no roomy or vc class"; grep '→ roomy-' <<<"$FILL" | sed 's/^/      /'
   else echo "  ✓ check-fill: no sparse slide without roomy or vc"; fi
   check "table rules" node "$PROBE" --html talk.html --table-rule
+  check "centred {.vc} slides" node "$PROBE" --html talk.html --vc-centred
 done
 
 echo "== personal theme override"

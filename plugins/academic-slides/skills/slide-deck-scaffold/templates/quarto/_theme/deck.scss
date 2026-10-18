@@ -92,6 +92,12 @@ html.print-pdf .reveal .footer { background: none; }
    the slide (slide plus margin), so height: 100% and the reserve above would not hold there */
 html.print-pdf .reveal .slides section.vc { display: flex !important; flex-direction: column; height: var(--slide-height, 720px) !important; padding-bottom: 64px !important; box-sizing: border-box; }
 .reveal .slides section.vc > h2 + * { margin-top: auto; }
+/* A hidden block (the MathJax macros) right after the title would take that auto margin and leave
+   the visible body under the title; give it to the first element after the hidden block instead */
+.reveal .slides section.vc > h2 + .hidden + * { margin-top: auto; }
+/* reveal gives tables margin: auto for horizontal centring; on a .vc slide the auto bottom margin would
+   take a third of the free space and push a lone table up */
+.reveal .slides section.vc > table { margin-bottom: 0; }
 .reveal .slides section.vc::after { content: ""; margin-bottom: auto; }
 
 /* Two side-by-side tables (design | methods compared) with equal rows and a clear gap.

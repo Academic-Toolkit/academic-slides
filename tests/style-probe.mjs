@@ -3,10 +3,12 @@
 //   --title-color <rgb(...)>  every slide title must have this color
 //   --table-rule              the first table with two or more body rows must end with a 2px rule in the
 //                             body text color, while an earlier body row keeps a 1px separator
+//   --vc-centred              on every {.vc} slide the body sits between title and footer: the gap above
+//                             it is at least half the gap below it (a body stuck under the title fails)
 // Exits 0 when every requested check holds, 1 otherwise, 2 on bad arguments.
 import { args, deckPath, playwright, serve } from '../plugins/academic-slides/skills/slide-qa/scripts/_lib.mjs';
 
-const { get, has } = args('Usage: node style-probe.mjs --html talk.html [--title-color "rgb(r, g, b)"] [--table-rule]');
+const { get, has } = args('Usage: node style-probe.mjs --html talk.html [--title-color "rgb(r, g, b)"] [--table-rule] [--vc-centred]');
 const html = get('html');
 if (!html) { console.error('--html is required'); process.exit(2); }
 const { root, name } = deckPath(html);
@@ -42,6 +44,33 @@ try {
       failures++;
       console.log(`✗ table rules: last row ${t.lastWidth} ${t.lastColor} (want 2px ${s.ink}), first row ${t.firstWidth} (want 1px)`);
     } else console.log(`✓ table ends with a 2px rule in ${s.ink}; earlier rows keep 1px`);
+  }
+  if (has('vc-centred')) {
+    const indices = await page.evaluate(() => window.Reveal.getSlides()
+      .filter((sl) => sl.classList.contains('vc')).map((sl) => window.Reveal.getIndices(sl)));
+    const stuck = [];
+    for (const idx of indices) {
+      await page.evaluate(({ h, v }) => window.Reveal.slide(h, v ?? 0), idx);
+      await page.waitForTimeout(400);
+      const g = await page.evaluate(() => {
+        const sl = window.Reveal.getCurrentSlide();
+        const kids = [...sl.children].filter((el) => {
+          const cs = getComputedStyle(el);
+          return el.tagName !== 'H2' && cs.display !== 'none' && el.getBoundingClientRect().height > 0 && !el.matches('aside, .notes');
+        });
+        if (!kids.length) return null;
+        const h2 = sl.querySelector('h2');
+        const footer = document.querySelector('.reveal .footer');
+        const top = Math.min(...kids.map((k) => k.getBoundingClientRect().top));
+        const bottom = Math.max(...kids.map((k) => k.getBoundingClientRect().bottom));
+        const above = top - (h2 ? h2.getBoundingClientRect().bottom : sl.getBoundingClientRect().top);
+        const below = (footer ? footer.getBoundingClientRect().top : window.innerHeight) - bottom;
+        return { title: h2 ? h2.textContent.trim() : '(no title)', above, below };
+      });
+      if (g && g.below > 60 && g.above < g.below / 2) stuck.push(`${g.title} (above ${Math.round(g.above)} px, below ${Math.round(g.below)} px)`);
+    }
+    if (stuck.length) { failures++; console.log(`✗ {.vc} slides not centred: ${stuck.join('; ')}`); }
+    else console.log(`✓ ${indices.length} {.vc} slides are centred`);
   }
 } finally {
   await browser.close();

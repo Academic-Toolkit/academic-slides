@@ -18,6 +18,11 @@ Give an agent a ready-to-copy starting point for a Quarto revealjs deck and a mi
 - **WHEN** a `{.vc}` slide whose body nearly fills the slide is exported with `export-pdf.mjs`
 - **THEN** its last line stays above the footer on the PDF page as it does on screen, and the slide number is visible, because `_theme/deck.scss` pins the `.vc` height and footer reserve and drops the footer backing under `html.print-pdf` (issue #5)
 
+#### Scenario: Centred slide that starts with hidden macros or holds a lone table
+
+- **WHEN** a `{.vc}` slide begins with the hidden MathJax macro block, or its only body element is a table, and the deck is rendered
+- **THEN** the space above the body is at least half the space below it, because `_theme/deck.scss` gives the auto top margin to the first element after a hidden block and removes the auto bottom margin reveal sets on tables (found in issue #8)
+
 ### Requirement: Palette is a single set of variables
 
 `_theme/deck.scss` SHALL define the palette as `$deck-primary`, `$deck-accent`, `$deck-green`, `$deck-purple`, and `$deck-ink` at the top, each with `!default`, and every component rule SHALL reference these variables rather than literal colors.
