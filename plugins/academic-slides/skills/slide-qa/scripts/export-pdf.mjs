@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Print a rendered revealjs deck to PDF through print mode (?print-pdf), one page per slide.
 // The PDF is the offline fallback: MathJax in the HTML needs a network connection.
-// check-layout.mjs measures this same print view, so a deck it passes prints without overlaps.
+// check-layout.mjs measures this same print view, so a deck it passes prints with nothing running into
+// the footer, past the right edge, or onto a second title line.
 import path from 'path';
 import { args, playwright, deckPath, serve, openPrintView } from './_lib.mjs';
 

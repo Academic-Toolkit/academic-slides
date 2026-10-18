@@ -23,5 +23,5 @@
 ## Delivery
 
 - [ ] Speaker notes on every main-body slide; minutes add up to the slot minus a buffer.
-- [ ] PDF exported (`export-pdf.mjs`) as the offline fallback; its page count equals the slide count.
+- [ ] PDF exported (`export-pdf.mjs`) as the offline fallback; its page count equals the slide count, and `check-layout.mjs` passed its print-view pass so no slide runs into the footer in the PDF.
 - [ ] One timed rehearsal.

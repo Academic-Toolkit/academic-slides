@@ -33,7 +33,7 @@ $presentation-h2-font-size: 1.35em;
 .reveal .footer { background: rgba(255, 255, 255, .92); padding: .1em .4em; border-radius: .3em; }
 /* In the PDF the slide number sits inside its page, under the fixed footer, so a backing would cover it */
 html.print-pdf .reveal .footer { background: none; }
-/* Breathing room so boxes never reach the footer band */
+/* Breathing room so boxes never reach the footer band (on screen; the print view sets section padding to 0) */
 .reveal .slides > section, .reveal .slides > section > section { padding-bottom: 1.1em; }
 
 /* Tables: booktabs-like */
