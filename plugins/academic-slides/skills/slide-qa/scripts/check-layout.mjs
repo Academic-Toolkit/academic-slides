@@ -5,15 +5,20 @@
 //   3. a math block, image, or table ends more than 2 px past its column or the slide (right-edge spill),
 //   4. the slide title wraps to more than one line.
 // Pixel and DOM checks are both needed: an opaque footer hides content from the pixel band.
+// Checks 2-4 run twice: on screen, slide by slide, and in the print view that export-pdf.mjs prints.
+// The print view is a different layout (revealjs's print stylesheet, an unscaled slide, the footer
+// placed on the paper), so a slide that is clean on screen can still run into the footer in the PDF.
 import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';
-import { args, playwright, deckPath, serve, openDeck } from './_lib.mjs';
+import { args, playwright, deckPath, serve, openDeck, openPrintView } from './_lib.mjs';
 
 const { get, has } = args(`Usage: node check-layout.mjs [--html talk.html] [--width 1280] [--height 720]
                              [--footer '.reveal .footer'] [--out <deck folder>/qa] [--shots]
   --out    screenshot folder (default: qa/ next to the deck HTML)
   --shots  save one screenshot per slide as <deck>-NN.png; flagged slides are always saved as <deck>-NN-flagged.png
-Exit status: 0 no problems, 1 at least one flagged slide, 2 HTML not found.`);
+Checks every slide on screen at --width x --height, then every page of the print view that export-pdf.mjs
+prints; flagged PDF pages are saved as <deck>-print-NN-flagged.png (NN = PDF page number).
+Exit status: 0 no problems, 1 at least one flagged slide or PDF page, 2 HTML not found.`);
 const WIDTH = Number(get('width', 1280));
 const HEIGHT = Number(get('height', 720));
 const FOOTER = get('footer', '.reveal .footer');
@@ -26,42 +31,58 @@ const OUT = path.resolve(get('out', path.join(root, 'qa')));
 const X0 = 110;
 const BAND_W = WIDTH - X0 - 150;
 
+// Runs in the page: geometry of one slide against the footer's top edge. originTop is the y of the
+// printed page's top edge in the print view, and 0 on screen.
+function measureSlide(slide, footerTop, originTop) {
+  let maxBottom = 0;
+  for (const el of slide.querySelectorAll('*')) {
+    if (el.closest('aside.notes') || el.offsetParent === null) continue;
+    const r = el.getBoundingClientRect();
+    if (r.height > 0 && r.width > 0) maxBottom = Math.max(maxBottom, r.bottom - originTop);
+  }
+  let maxRightOver = 0;
+  for (const el of slide.querySelectorAll('mjx-container, img, table')) {
+    if (el.closest('aside.notes') || el.offsetParent === null) continue;
+    const inner = el.tagName === 'MJX-CONTAINER' ? (el.querySelector('mjx-math') || el) : el;
+    const box = (el.closest('.column') || slide).getBoundingClientRect();
+    maxRightOver = Math.max(maxRightOver, inner.getBoundingClientRect().right - box.right);
+  }
+  const h = slide.querySelector('h2');
+  return {
+    title: ((slide.querySelector('h1,h2') || {}).textContent || '(untitled)').trim(),
+    footerTop: Math.round(footerTop),
+    domOver: Math.round(maxBottom - footerTop),
+    rightOver: Math.round(maxRightOver),
+    titleLines: h ? Math.round(h.getBoundingClientRect().height / parseFloat(getComputedStyle(h).lineHeight)) : 1,
+  };
+}
+const MEASURE = `window.__slideQaMeasure = ${measureSlide.toString()};`;
+
+function reasons(o) {
+  const why = [];
+  if (o.pixels > 200) why.push(`${o.pixels} px in the footer band`);
+  if (o.domOver > 2) why.push(`content ${o.domOver} px below the footer top`);
+  if (o.rightOver > 2) why.push(`${o.rightOver} px past the right edge`);
+  if (o.titleLines > 1) why.push(`title on ${o.titleLines} lines`);
+  return why.join('; ');
+}
+
 const chromium = await playwright();
 const { server, port } = await serve(root);
 await mkdir(OUT, { recursive: true });
 const browser = await chromium.launch();
+const url = `http://127.0.0.1:${port}/${encodeURIComponent(name)}`;
 const page = await browser.newPage({ viewport: { width: WIDTH, height: HEIGHT } });
-await openDeck(page, `http://127.0.0.1:${port}/${encodeURIComponent(name)}`);
+await openDeck(page, url);
+await page.addScriptTag({ content: MEASURE });
 const offenders = [];
 
 for (let i = 0; i < 500; i++) {
   await page.waitForTimeout(150);
   const info = await page.evaluate((footerSel) => {
-    const slide = window.Reveal.getCurrentSlide();
     const footer = document.querySelector(footerSel);
     const footerTop = footer ? footer.getBoundingClientRect().top : window.innerHeight - 56;
-    let maxBottom = 0;
-    for (const el of slide.querySelectorAll('*')) {
-      if (el.closest('aside.notes') || el.offsetParent === null) continue;
-      const r = el.getBoundingClientRect();
-      if (r.height > 0 && r.width > 0) maxBottom = Math.max(maxBottom, r.bottom);
-    }
-    let maxRightOver = 0;
-    for (const el of slide.querySelectorAll('mjx-container, img, table')) {
-      if (el.closest('aside.notes') || el.offsetParent === null) continue;
-      const inner = el.tagName === 'MJX-CONTAINER' ? (el.querySelector('mjx-math') || el) : el;
-      const box = (el.closest('.column') || slide).getBoundingClientRect();
-      maxRightOver = Math.max(maxRightOver, inner.getBoundingClientRect().right - box.right);
-    }
-    const h = slide.querySelector('h2');
-    return {
-      title: ((slide.querySelector('h1,h2') || {}).textContent || '(untitled)').trim(),
-      footerTop: Math.round(footerTop),
-      domOver: Math.round(maxBottom - footerTop),
-      rightOver: Math.round(maxRightOver),
-      titleLines: h ? Math.round(h.getBoundingClientRect().height / parseFloat(getComputedStyle(h).lineHeight)) : 1,
-      last: window.Reveal.isLastSlide(),
-    };
+    return { ...window.__slideQaMeasure(window.Reveal.getCurrentSlide(), footerTop, 0), last: window.Reveal.isLastSlide() };
   }, FOOTER);
 
   // band = 8 px above the footer; reference = same rows at the far left, so a footer backing cancels out
@@ -94,19 +115,53 @@ for (let i = 0; i < 500; i++) {
   await page.evaluate(() => window.Reveal.next());
 }
 
+// Print view, page by page. The viewport is set to the @page size and print media is emulated, so the
+// fixed footer sits where it lands on every printed page. DOM checks only: on paper there is no band to
+// sample between slides, and checks 2-4 are what differ from the screen.
+const printPage = await browser.newPage({ viewport: { width: WIDTH, height: HEIGHT } });
+await openPrintView(printPage, url);
+const paper = await printPage.evaluate(() => {
+  for (const sheet of document.styleSheets) {
+    let rules;
+    try { rules = sheet.cssRules; } catch { continue; }
+    for (const r of rules) {
+      const m = /^@page\s*\{[^}]*size:\s*([\d.]+)px\s+([\d.]+)px/.exec(r.cssText);
+      if (m) return { width: Math.round(Number(m[1])), height: Math.round(Number(m[2])) };
+    }
+  }
+  return null;
+}) || { width: WIDTH, height: HEIGHT };
+await printPage.setViewportSize(paper);
+await printPage.emulateMedia({ media: 'print' });
+await printPage.addScriptTag({ content: MEASURE });
+await printPage.waitForTimeout(300);
+const printed = await printPage.evaluate((footerSel) => {
+  const footer = document.querySelector(footerSel);
+  const footerTop = footer ? footer.getBoundingClientRect().top : window.innerHeight - 56;
+  return [...document.querySelectorAll('.reveal .slides .pdf-page')].map((pdfPage) => {
+    const slide = pdfPage.querySelector(':scope > section');
+    return slide ? window.__slideQaMeasure(slide, footerTop, pdfPage.getBoundingClientRect().top) : null;
+  });
+}, FOOTER);
+const printOffenders = [];
+for (const [i, info] of printed.entries()) {
+  if (!info || !(info.domOver > 2 || info.rightOver > 2 || info.titleLines > 1)) continue;
+  const file = path.join(OUT, `${deck}-print-${String(i + 1).padStart(2, '0')}-flagged.png`);
+  await printPage.locator('.reveal .slides .pdf-page').nth(i).screenshot({ path: file });
+  printOffenders.push({ page: i + 1, ...info, file });
+}
+
 await browser.close();
 server.close();
 
 if (offenders.length) {
   console.log(`✗ ${offenders.length} slide(s) with layout problems at ${WIDTH}x${HEIGHT}:\n`);
-  for (const o of offenders) {
-    const why = [];
-    if (o.pixels > 200) why.push(`${o.pixels} px in the footer band`);
-    if (o.domOver > 2) why.push(`content ${o.domOver} px below the footer top`);
-    if (o.rightOver > 2) why.push(`${o.rightOver} px past the right edge`);
-    if (o.titleLines > 1) why.push(`title on ${o.titleLines} lines`);
-    console.log(`  #${o.index}  ${o.title}\n      ${why.join('; ')}  →  ${o.file}`);
-  }
-  process.exit(1);
+  for (const o of offenders) console.log(`  #${o.index}  ${o.title}\n      ${reasons(o)}  →  ${o.file}`);
 }
-console.log(`✓ no layout problems at ${WIDTH}x${HEIGHT}`);
+if (printOffenders.length) {
+  if (offenders.length) console.log('');
+  console.log(`✗ ${printOffenders.length} PDF page(s) with layout problems in the print view (${paper.width}x${paper.height} page):\n`);
+  for (const o of printOffenders) console.log(`  page ${o.page}  ${o.title}\n      ${reasons(o)}  →  ${o.file}`);
+}
+if (offenders.length || printOffenders.length) process.exit(1);
+console.log(`✓ no layout problems at ${WIDTH}x${HEIGHT} or in the PDF print view`);
