@@ -445,3 +445,29 @@ test('CLI: official templates need no flag', () => {
     assert.equal(run(['--out', path.join(s.project, t), '--template', t], s.home).code, 0, t);
   }
 });
+
+test('CLI: settings values with markdown links or images are refused', () => {
+  for (const bad of ['![x](http://example.com/p.png)', '[click](javascript:alert(1))', 'Name [note]']) {
+    const s = sandbox();
+    writeJson(path.join(s.project, '.claude', '.academic-slides', 'local.json'), { footer: bad });
+    const out = path.join(s.project, 'deck');
+    const r = run(['--out', out], s.home);
+    assert.equal(r.code, 1, `${bad}: ${r.out}`);
+    assert.match(r.out, /footer/, bad);
+    assert.equal(existsSync(out), false, bad);
+  }
+});
+
+test('planDeck: when folder ownership cannot be checked, the project layer needs --trust-project', () => {
+  const s = sandbox();
+  writeJson(path.join(s.project, '.claude', '.academic-slides', 'local.json'), { footer: 'Seminar' });
+  const out = path.join(s.project, 'deck');
+  const original = process.getuid;
+  process.getuid = undefined;
+  try {
+    assert.throws(() => lib.planDeck({ out, home: s.home }), /--trust-project/);
+    assert.doesNotThrow(() => lib.planDeck({ out, home: s.home, trustProject: true }));
+  } finally {
+    process.getuid = original;
+  }
+});

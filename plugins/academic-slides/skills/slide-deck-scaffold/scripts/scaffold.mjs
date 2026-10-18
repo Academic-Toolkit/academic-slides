@@ -33,7 +33,8 @@ local.json fields (string, or null to remove): ${FIELDS.join(', ')}
               up from the deck folder, so it may come from a repository you did not write, and
               rendering its template runs whatever the template contains. Read it first.
 Nothing read from a settings layer may be a symbolic link that leaves it; settings values are plain
-text (no <, {, or backtick); a project settings folder must belong to you.
+text (no <, {, [, ], or backtick); a project settings folder must belong to you (where ownership
+cannot be checked, the whole project layer needs --trust-project).
 Exit status: 0 done, 1 refused (settings, template, or folder problem), 2 usage error.`;
 
 export class ScaffoldError extends Error {}
@@ -90,8 +91,10 @@ export function readSettings(dir) {
       continue;
     }
     if (value !== null && typeof value !== 'string') throw new ScaffoldError(`${file}: field ${show(key)} must be a string or null`);
-    if (typeof value === 'string' && /[<{`]/.test(value)) {
-      throw new ScaffoldError(`${file}: field ${show(key)} contains <, {, or a backtick; settings values are plain text (no HTML, Quarto shortcodes, or code)`);
+    // Quarto reads these values as markdown: brackets would allow links and images (which fetch a
+    // remote address when the deck is opened), <, {, and backticks HTML, shortcodes, spans, and code.
+    if (typeof value === 'string' && /[<{`[\]]/.test(value)) {
+      throw new ScaffoldError(`${file}: field ${show(key)} contains <, {, [, ], or a backtick; settings values are plain text (no HTML, links, images, Quarto shortcodes, or code)`);
     }
     settings[key] = value;
   }
@@ -214,11 +217,21 @@ function checkOut(out) {
   if (readdirSync(out).length) throw new ScaffoldError(`${out} is not empty; choose a new folder (existing decks are never overwritten)`);
 }
 
-function settingsLayers(home, out) {
+// true when the folder belongs to the current user, false when it does not, null when this system
+// cannot tell (no POSIX user ids); unknown is treated as untrusted, never as yours.
+function ownedByUser(dir) {
+  return typeof process.getuid === 'function' ? statSync(dir).uid === process.getuid() : null;
+}
+
+function settingsLayers(home, out, trustProject) {
   const personal = personalDir(home);
   const project = findProjectDir(out, home);
-  if (project && typeof process.getuid === 'function' && statSync(project).uid !== process.getuid()) {
-    throw new ScaffoldError(`${project} belongs to another user; a project settings folder must be yours`);
+  if (project) {
+    const owned = ownedByUser(project);
+    if (owned === false) throw new ScaffoldError(`${project} belongs to another user; a project settings folder must be yours`);
+    if (owned === null && !trustProject) {
+      throw new ScaffoldError(`cannot check who owns ${project} on this system; read it, then pass --trust-project to use the project layer`);
+    }
   }
   const layers = [{ layer: 'personal', dir: personal, ...readSettings(personal) }];
   if (project) layers.push({ layer: 'project', dir: project, ...readSettings(project) });
@@ -248,7 +261,7 @@ function untrustedProjectFiles(tpl, themeFiles, project) {
 export function planDeck({ out, home, template, title, trustProject = false }) {
   const resolvedOut = path.resolve(out);
   checkOut(resolvedOut);
-  const { personal, project, layers } = settingsLayers(home, resolvedOut);
+  const { personal, project, layers } = settingsLayers(home, resolvedOut, trustProject);
   const cli = {};
   if (template !== undefined) cli.template = template;
   const fields = mergeSettings([...layers, { layer: 'command line', settings: cli }]);
