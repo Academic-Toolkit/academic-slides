@@ -31,10 +31,13 @@ local.json fields (string, or null to remove): ${FIELDS.join(', ')}
   --list      list templates with their layer; shadowed ones are marked
   --trust-project  use a template or theme.scss from the project layer. That layer is found by walking
               up from the deck folder, so it may come from a repository you did not write, and
-              rendering its template runs whatever the template contains. Read it first.
-Nothing read from a settings layer may be a symbolic link that leaves it; settings values are plain
-text (no <, {, [, ], or backtick); a project settings folder must belong to you (where ownership
-cannot be checked, the whole project layer needs --trust-project).
+              rendering its template runs whatever the template contains. Show those files to the
+              user and pass this flag only with the user's approval; an agent never decides alone.
+A settings file (local.json, theme.scss) or a template's talk.qmd or _quarto.yml that is itself a
+symbolic link is refused, and a template folder must resolve inside its layer's templates/ folder;
+links in the folders above a layer are followed. Settings values are plain text: no <, {, [, ], &,
+backslash, backtick, or control character. A project settings folder must belong to you (where
+ownership cannot be checked, the whole project layer needs --trust-project).
 Exit status: 0 done, 1 refused (settings, template, or folder problem), 2 usage error.`;
 
 export class ScaffoldError extends Error {}
@@ -93,8 +96,10 @@ export function readSettings(dir) {
     if (value !== null && typeof value !== 'string') throw new ScaffoldError(`${file}: field ${show(key)} must be a string or null`);
     // Quarto reads these values as markdown: brackets would allow links and images (which fetch a
     // remote address when the deck is opened), <, {, and backticks HTML, shortcodes, spans, and code.
-    if (typeof value === 'string' && /[<{`[\]]/.test(value)) {
-      throw new ScaffoldError(`${file}: field ${show(key)} contains <, {, [, ], or a backtick; settings values are plain text (no HTML, links, images, Quarto shortcodes, or code)`);
+    // & and the backslash are refused too: Pandoc decodes character references (&#123; is "{") and
+    // backslash escapes after this check has run, so they would rebuild any refused character (#8).
+    if (typeof value === 'string' && /[<{`[\]&\\\u0000-\u001f\u007f]/.test(value)) {
+      throw new ScaffoldError(`${file}: field ${show(key)} contains <, {, [, ], &, a backslash, a backtick, or a control character; settings values are plain text (no HTML, character references, links, images, Quarto shortcodes, or code)`);
     }
     settings[key] = value;
   }
@@ -158,14 +163,14 @@ function continues(next) {
 }
 
 // Replace, remove (null), or add single-line `key: value` fields in the front matter.
-export function rewriteFrontMatter(text, edits) {
+export function rewriteFrontMatter(text, edits, where = 'talk.qmd') {
   const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
-  if (!m) throw new ScaffoldError('talk.qmd has no front matter block at the top');
+  if (!m) throw new ScaffoldError(`${where} has no front matter block at the top`);
   const lines = m[1].split(/\r?\n/);
   for (const [key, value] of Object.entries(edits)) {
     if (value === undefined) continue;
     const i = lines.findIndex((l) => l.startsWith(`${key}:`));
-    if (i >= 0 && continues(lines[i + 1])) throw new ScaffoldError(`talk.qmd: front-matter field ${show(key)} must be on one line`);
+    if (i >= 0 && continues(lines[i + 1])) throw new ScaffoldError(`${where}: front-matter field ${show(key)} must be on one line`);
     if (value === null) {
       if (i >= 0) lines.splice(i, 1);
     } else if (i >= 0) {
@@ -177,11 +182,11 @@ export function rewriteFrontMatter(text, edits) {
   return `---\n${lines.join('\n')}\n---\n${text.slice(m[0].length)}`;
 }
 
-export function rewriteQuartoYml(text, { theme, footer }) {
+export function rewriteQuartoYml(text, { theme, footer }, where = '_quarto.yml') {
   const themeLine = /^([ \t]*)theme:[ \t]*(\S.*)?$/m;
   const t = text.match(themeLine);
-  if (!t) throw new ScaffoldError('_quarto.yml has no theme: line');
-  if (!t[2]) throw new ScaffoldError('_quarto.yml: theme must be a one-line list such as [default, _theme/deck.scss]');
+  if (!t) throw new ScaffoldError(`${where} has no theme: line`);
+  if (!t[2]) throw new ScaffoldError(`${where}: theme must be a one-line list such as [default, _theme/deck.scss]`);
   let out = text.replace(themeLine, (_, indent) => `${indent}theme: [${theme.join(', ')}]`);
   if (footer === undefined) return out;
   const footerLine = /^([ \t]*)footer:.*$/m;
@@ -230,7 +235,7 @@ function settingsLayers(home, out, trustProject) {
     const owned = ownedByUser(project);
     if (owned === false) throw new ScaffoldError(`${project} belongs to another user; a project settings folder must be yours`);
     if (owned === null && !trustProject) {
-      throw new ScaffoldError(`cannot check who owns ${project} on this system; read it, then pass --trust-project to use the project layer`);
+      throw new ScaffoldError(`cannot check who owns ${project} on this system; ask the user before passing --trust-project to use the project layer`);
     }
   }
   const layers = [{ layer: 'personal', dir: personal, ...readSettings(personal) }];
@@ -269,18 +274,28 @@ export function planDeck({ out, home, template, title, trustProject = false }) {
   const name = fields.template?.value ?? DEFAULT_TEMPLATE;
   const tpl = resolveTemplate(name, { projectDir: project, personalDir: personal, officialDir: OFFICIAL_DIR });
   const warnings = layers.flatMap((l) => l.warnings);
-  const copies = templateFiles(tpl.dir, warnings).map((rel) => ({ src: path.join(tpl.dir, rel), rel }));
   const themeFiles = overlays(layers);
+  // Paths the scaffold writes itself. A template file on one of them (or on a folder above one) would
+  // stop the write half-way, so it is skipped before anything is written (#8 verify).
+  const generated = [path.join('_theme', 'deck.scss'), ...themeFiles.map((f) => f.rel)];
+  const clashes = (rel) => generated.some((g) => g === rel || g.startsWith(rel + path.sep) || rel.startsWith(g + path.sep));
+  const copies = [];
+  for (const rel of templateFiles(tpl.dir, warnings)) {
+    if (clashes(rel)) warnings.push(`ignored the template's own ${rel}; the scaffold writes that path itself`);
+    else copies.push({ src: path.join(tpl.dir, rel), rel });
+  }
   const untrusted = untrustedProjectFiles(tpl, themeFiles, project);
   if (untrusted.length && !trustProject) {
-    throw new ScaffoldError(`these come from the project layer, found by walking up from the deck folder:\n  ${untrusted.join('\n  ')}\nRendering a template runs whatever it contains. Read them, then pass --trust-project to use them.`);
+    throw new ScaffoldError(`these come from the project layer, found by walking up from the deck folder:\n  ${untrusted.join('\n  ')}\nRendering a template runs whatever it contains. Show these files to the user and ask the user whether to use them; pass --trust-project only with the user's approval.`);
   }
   warnings.push(...untrusted.map((f) => `using from the project layer (--trust-project): ${f}`));
   const theme = ['default', '_theme/deck.scss', ...themeFiles.map((f) => f.rel.split(path.sep).join('/'))];
-  const qmd = rewriteFrontMatter(readFileSync(path.join(tpl.dir, 'talk.qmd'), 'utf8'), {
+  const qmdFile = path.join(tpl.dir, 'talk.qmd');
+  const ymlFile = path.join(tpl.dir, '_quarto.yml');
+  const qmd = rewriteFrontMatter(readFileSync(qmdFile, 'utf8'), {
     title: fields.title?.value, author: fields.author?.value, institute: fields.affiliation?.value, lang: fields.lang?.value,
-  });
-  const yml = rewriteQuartoYml(readFileSync(path.join(tpl.dir, '_quarto.yml'), 'utf8'), { theme, footer: fields.footer?.value });
+  }, qmdFile);
+  const yml = rewriteQuartoYml(readFileSync(ymlFile, 'utf8'), { theme, footer: fields.footer?.value }, ymlFile);
   const files = [
     ...copies.filter((c) => c.rel !== 'talk.qmd' && c.rel !== '_quarto.yml'),
     { src: OFFICIAL_THEME, rel: path.join('_theme', 'deck.scss') },

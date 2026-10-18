@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Render every official template through scaffold.mjs and run the slide-qa checks on it (issue #8).
 # Needs quarto on PATH and `npm install` at the repository root (Playwright). Run: npm run test:render
-# Each deck is built with HOME pointed at an empty temporary folder, so personal settings never leak in.
+# Each deck is built inside its own temporary HOME, with HOME pointed there: the personal layer is empty, and the
+# walk up for a project layer stops at that HOME, so no settings folder above the temporary area can leak in.
 set -uo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 SKILLS="$ROOT/plugins/academic-slides/skills"
@@ -34,7 +35,7 @@ check() { # check <label> <command...>, run inside $DECK
 
 for TPL in $(find "$TEMPLATES_DIR/quarto" -mindepth 1 -maxdepth 1 -type d ! -name '_*' -exec basename {} \; | sort); do
   echo "== $TPL"
-  DECK="$WORK/decks/$TPL"
+  DECK="$WORK/home-$TPL/decks/$TPL"   # under its HOME: the project-layer walk stops there
   build "$WORK/home-$TPL" "$DECK" --template "$TPL" || continue
   check "check-layout (screen and PDF print view)" node "$QA/check-layout.mjs" --out "$WORK/qa-$TPL"
   check "check-mathjax" node "$QA/check-mathjax.mjs"
@@ -43,8 +44,10 @@ for TPL in $(find "$TEMPLATES_DIR/quarto" -mindepth 1 -maxdepth 1 -type d ! -nam
   else
     check "check-density" node "$QA/check-density.mjs" --qmd talk.qmd
   fi
-  FILL=$(cd "$DECK" && node "$QA/check-fill.mjs" 2>&1)
-  if grep -q '→ roomy-' <<<"$FILL"; then fail "check-fill lists sparse slides with no roomy or vc class"; grep '→ roomy-' <<<"$FILL" | sed 's/^/      /'
+  FILL=$(cd "$DECK" && node "$QA/check-fill.mjs" 2>&1); FILL_RC=$?
+  # check-fill exits 0 whenever it printed its report; anything else means it did not run, which is a failure
+  if [ "$FILL_RC" -ne 0 ]; then fail "check-fill exited $FILL_RC"; echo "$FILL" | sed 's/^/      /' | head -20
+  elif grep -q '→ roomy-' <<<"$FILL"; then fail "check-fill lists sparse slides with no roomy or vc class"; grep '→ roomy-' <<<"$FILL" | sed 's/^/      /'
   else echo "  ✓ check-fill: no sparse slide without roomy or vc"; fi
   check "table rules" node "$PROBE" --html talk.html --table-rule
   check "centred {.vc} slides" node "$PROBE" --html talk.html --vc-centred
@@ -54,7 +57,7 @@ echo "== personal theme override"
 OHOME="$WORK/home-override"
 mkdir -p "$OHOME/.claude/.academic-slides"
 printf '/*-- scss:defaults --*/\n$deck-primary: #8b0000;\n' >"$OHOME/.claude/.academic-slides/theme.scss"
-DECK="$WORK/decks/override"
+DECK="$OHOME/decks/override"
 if build "$OHOME" "$DECK"; then
   check "slide titles take the personal palette" node "$PROBE" --html talk.html --title-color 'rgb(139, 0, 0)'
   cmp -s "$DECK/_theme/deck.scss" "$TEMPLATES_DIR/quarto/_theme/deck.scss" && echo "  ✓ _theme/deck.scss is the plugin's copy" || fail "_theme/deck.scss differs from the plugin's"

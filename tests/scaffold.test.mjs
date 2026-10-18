@@ -237,7 +237,8 @@ test('CLI: a personal template shadows the official one, its deck.scss is ignore
   assert.equal(r.code, 0, r.out);
   assert.match(r.out, /personal/);
   assert.match(r.out, /shadow/i);
-  assert.match(r.out, /deck\.scss/);
+  // the warning line itself, not the Theme line (which always names _theme/deck.scss)
+  assert.match(r.out, /^warning: ignored the template's own theme\/deck\.scss/m);
   assert.equal(readFileSync(path.join(out, '_theme', 'deck.scss'), 'utf8'), readFileSync(OFFICIAL_THEME, 'utf8'));
   assert.equal(existsSync(path.join(out, 'theme', 'deck.scss')), false);
   assert.equal(readFileSync(path.join(out, 'img', 'logo.txt'), 'utf8'), 'logo');
@@ -307,7 +308,8 @@ test('CLI: symbolic links inside a template are skipped with a warning', () => {
   const out = path.join(s.project, 'deck');
   const r = run(['--out', out, '--template', 'linked'], s.home);
   assert.equal(r.code, 0, r.out);
-  assert.match(r.out, /link/);
+  // the warning line, not the template name "linked" on the Template line
+  assert.match(r.out, /^warning: skipped symbolic link hosts in the template/m);
   assert.equal(existsSync(path.join(out, 'hosts')), false);
 });
 
@@ -470,4 +472,186 @@ test('planDeck: when folder ownership cannot be checked, the project layer needs
   } finally {
     process.getuid = original;
   }
+});
+
+// ---------- verify round 1 of #8: blocking finding, collisions, and clauses that had no test ----------
+
+test('CLI: settings values with character references, backslashes, or control characters are refused', () => {
+  // Pandoc decodes character references, so "&#123;" in a value becomes "{" after the filter has run
+  const cases = [
+    ['author', '&#123;&#123;&lt; meta lang &gt;&#125;&#125;'],
+    ['affiliation', '&lbrace;&lbrace;&lt; meta lang &gt;&rbrace;&rbrace;'],
+    ['footer', 'Venue \\ Date'],
+    ['author', 'Name\u0007'],
+    ['footer', 'two\nlines'],
+  ];
+  for (const [field, bad] of cases) {
+    const s = sandbox();
+    writeJson(path.join(s.project, '.claude', '.academic-slides', 'local.json'), { [field]: bad });
+    const out = path.join(s.project, 'deck');
+    const r = run(['--out', out], s.home);
+    assert.equal(r.code, 1, `${JSON.stringify(bad)}: ${r.out}`);
+    assert.match(r.out, new RegExp(field), JSON.stringify(bad));
+    assert.equal(existsSync(out), false, JSON.stringify(bad));
+  }
+});
+
+test('CLI: ordinary punctuation in settings values is still accepted', () => {
+  const s = sandbox();
+  writeJson(path.join(s.personal, 'local.json'), { author: "A. O'Neil-Smith, PhD", affiliation: 'Dept. of X (Y) · Z/W', footer: 'Talk · 2026-10-19 · 50% draft' });
+  assert.equal(run(['--out', path.join(s.project, 'deck')], s.home).code, 0);
+});
+
+test('CLI: a template file on a path the scaffold writes itself is skipped with a warning, never half-written', () => {
+  const s = sandbox();
+  writeJson(path.join(s.personal, 'theme.scss'), '/*-- scss:defaults --*/\n$deck-primary: #8b0000;\n');
+  // a personal template made by copying a deck that was scaffolded with a personal theme
+  makeTemplate(path.join(s.personal, 'templates', 'from-deck'), { extra: { 'theme/personal.scss': '/* stale copy */\n', 'notes.txt': 'kept' } });
+  const out = path.join(s.project, 'deck');
+  const dry = run(['--out', out, '--template', 'from-deck', '--dry-run'], s.home);
+  assert.equal(dry.code, 0, dry.out);
+  assert.match(dry.out, /^warning: .*theme\/personal\.scss/m);
+  const r = run(['--out', out, '--template', 'from-deck'], s.home);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /^warning: .*theme\/personal\.scss/m);
+  assert.match(readFileSync(path.join(out, 'theme', 'personal.scss'), 'utf8'), /8b0000/);
+  assert.equal(readFileSync(path.join(out, 'notes.txt'), 'utf8'), 'kept');
+});
+
+test('CLI: a template file named _theme at the top is skipped with a warning', () => {
+  const s = sandbox();
+  makeTemplate(path.join(s.personal, 'templates', 'odd'), { extra: { _theme: 'not a folder' } });
+  const out = path.join(s.project, 'deck');
+  const r = run(['--out', out, '--template', 'odd'], s.home);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /^warning: .*_theme/m);
+  assert.equal(readFileSync(path.join(out, '_theme', 'deck.scss'), 'utf8'), readFileSync(OFFICIAL_THEME, 'utf8'));
+});
+
+test('CLI: a template _quarto.yml without a theme line is refused, naming the template folder', () => {
+  const s = sandbox();
+  const tpl = path.join(s.personal, 'templates', 'no-theme');
+  makeTemplate(tpl, { theme: false });
+  const out = path.join(s.project, 'deck');
+  const r = run(['--out', out, '--template', 'no-theme'], s.home);
+  assert.equal(r.code, 1, r.out);
+  assert.ok(r.out.includes(tpl), r.out);
+  assert.equal(existsSync(out), false);
+});
+
+test('CLI: the project-layer refusal tells the agent to ask the user, not to decide alone', () => {
+  const s = sandbox();
+  makeTemplate(path.join(s.project, '.claude', '.academic-slides', 'templates', 'research-talk'));
+  const r = run(['--out', path.join(s.project, 'deck')], s.home);
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /ask the user/i);
+});
+
+test('CLI: --template on the command line overrides a template set in every layer', () => {
+  const s = sandbox();
+  writeJson(path.join(s.personal, 'local.json'), { template: 'results-report' });
+  writeJson(path.join(s.project, '.claude', '.academic-slides', 'local.json'), { template: 'short-talk' });
+  const out = path.join(s.project, 'deck');
+  const r = run(['--out', out, '--template', 'lecture'], s.home);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /template\s+"lecture"\s+from command line/);
+  assert.equal(readFileSync(path.join(out, 'talk.qmd'), 'utf8'),
+    lib.rewriteFrontMatter(readFileSync(path.join(SKILL, 'templates/quarto/lecture/talk.qmd'), 'utf8'), {}));
+});
+
+test('CLI: lang goes into the talk.qmd front matter and footer into _quarto.yml', () => {
+  const s = sandbox();
+  writeJson(path.join(s.personal, 'local.json'), { lang: 'zh-TW', footer: 'Seminar · 2026' });
+  const out = path.join(s.project, 'deck');
+  assert.equal(run(['--out', out], s.home).code, 0);
+  assert.match(frontMatter(readFileSync(path.join(out, 'talk.qmd'), 'utf8')), /^lang: "zh-TW"$/m);
+  assert.match(readFileSync(path.join(out, '_quarto.yml'), 'utf8'), /^\s+footer: "Seminar · 2026"$/m);
+});
+
+test('CLI: an unknown settings field is reported as a warning and the deck is still written', () => {
+  const s = sandbox();
+  writeJson(path.join(s.personal, 'local.json'), { colour: 'red' });
+  const out = path.join(s.project, 'deck');
+  const r = run(['--out', out], s.home);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /^warning: .*unknown field "colour"/m);
+  assert.ok(existsSync(path.join(out, 'talk.qmd')));
+});
+
+test("CLI: a template's own _theme/ folder is not copied; the shared theme is", () => {
+  const s = sandbox();
+  makeTemplate(path.join(s.personal, 'templates', 'own-theme'), { extra: { '_theme/extra.scss': '/* mine */\n' } });
+  const out = path.join(s.project, 'deck');
+  const r = run(['--out', out, '--template', 'own-theme'], s.home);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /^warning: ignored the template's own _theme\//m);
+  assert.equal(existsSync(path.join(out, '_theme', 'extra.scss')), false);
+  assert.equal(readFileSync(path.join(out, '_theme', 'deck.scss'), 'utf8'), readFileSync(OFFICIAL_THEME, 'utf8'));
+});
+
+test('CLI: a template whose _quarto.yml is a symbolic link is refused and nothing is written', () => {
+  const s = sandbox();
+  const tpl = path.join(s.personal, 'templates', 'linked-yml');
+  makeTemplate(tpl);
+  writeFileSync(path.join(s.base, 'other.yml'), readFileSync(path.join(tpl, '_quarto.yml')));
+  spawnSync('rm', [path.join(tpl, '_quarto.yml')]);
+  symlinkSync(path.join(s.base, 'other.yml'), path.join(tpl, '_quarto.yml'));
+  const out = path.join(s.project, 'deck');
+  const r = run(['--out', out, '--template', 'linked-yml'], s.home);
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /symbolic link/);
+  assert.equal(existsSync(out), false);
+});
+
+test('CLI: with --trust-project each project-layer file used is printed as a warning', () => {
+  const s = sandbox();
+  makeTemplate(path.join(s.project, '.claude', '.academic-slides', 'templates', 'research-talk'));
+  const r = run(['--out', path.join(s.project, 'deck'), '--trust-project'], s.home);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /^warning: using from the project layer \(--trust-project\): .*templates\/research-talk$/m);
+});
+
+test('rewriteFrontMatter refuses a field that continues on the next line', () => {
+  assert.throws(() => lib.rewriteFrontMatter('---\nauthor:\n  - A\n  - B\n---\n', { author: 'X' }), /one line/);
+});
+
+test('rewriteQuartoYml refuses a theme written as a block list', () => {
+  assert.throws(() => lib.rewriteQuartoYml('format:\n  revealjs:\n    theme:\n      - default\n', { theme: ['default'] }), /one-line list/);
+});
+
+test('writeDeck checks the folder again and refuses if something appeared after planning', () => {
+  const s = sandbox();
+  const out = path.join(s.project, 'deck');
+  const plan = lib.planDeck({ out, home: s.home });
+  mkdirSync(out);
+  writeFileSync(path.join(out, 'arrived.txt'), 'x');
+  assert.throws(() => lib.writeDeck(plan), /not empty/);
+  assert.deepEqual(readdirSync(out), ['arrived.txt']);
+});
+
+test('planDeck: a project settings folder owned by another user is refused even with --trust-project', () => {
+  const s = sandbox();
+  writeJson(path.join(s.project, '.claude', '.academic-slides', 'local.json'), { footer: 'Seminar' });
+  const out = path.join(s.project, 'deck');
+  const original = process.getuid;
+  const mine = process.getuid();
+  process.getuid = () => mine + 4242;
+  try {
+    assert.throws(() => lib.planDeck({ out, home: s.home, trustProject: true }), /another user/);
+  } finally {
+    process.getuid = original;
+  }
+});
+
+test('official templates: every main-body slide has notes with a purpose and a script', () => {
+  const problems = [];
+  for (const t of readdirSync(path.join(SKILL, 'templates/quarto')).filter((n) => !n.startsWith('_'))) {
+    const body = readFileSync(path.join(SKILL, 'templates/quarto', t, 'talk.qmd'), 'utf8').split(/^# Backup\s*$/m)[0];
+    for (const slide of body.split(/^(?=## )/m).filter((x) => x.startsWith('## '))) {
+      const title = slide.split('\n')[0];
+      const notes = slide.match(/::: \{\.notes\}([\s\S]*?)\n:::/)?.[1] ?? '';
+      if (!/\*\*(Purpose|目的)\*\*/.test(notes) || !/\*\*(Script|講)\*\*/.test(notes)) problems.push(`${t}: ${title}`);
+    }
+  }
+  assert.deepEqual(problems, []);
 });
