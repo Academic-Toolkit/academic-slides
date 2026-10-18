@@ -21,6 +21,7 @@ The skill SHALL state these rules with a one-line reason each:
 - bullets rather than numbered lists, except the outline's section numbers, and the outline lists section titles only;
 - no grey footnotes on discussion slides;
 - tables highlight only key numbers and the compared pair;
+- tables draw three rules — above the header, below the header, and below the last row — and never box rows or columns;
 - braces name the meaning of a term in plain words, and the notation table says how each quantity is obtained;
 - simulation slides carry no letter tags and their setting slides restate the compared methods with citations;
 - one slide per study in a research overview, with personal history kept off the slides;

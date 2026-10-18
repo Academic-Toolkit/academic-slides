@@ -44,3 +44,13 @@
 - 新增：~/Documents/academic-slides 整個 repo（plugins/academic-slides/skills/ 下三個 skill、templates、scripts、README）。
 - 參考但不修改：job_finding/ncku-talk-quarto/theme/ncku.scss、scripts/check-overflow.mjs、scripts/density-check.py、scripts/export-pdf.mjs、~/.claude/skills/academic-slide-design/SKILL.md。
 - 外部：GitHub 組織 PsychQuant 新增 private repo academic-slides。
+
+## 後續變更：issue #8（2026-10-18）
+
+- 範本改成四種：research-talk（原本的範本）、short-talk、results-report、lecture，共用唯一一份 `templates/quarto/_theme/deck.scss`；範本只放內容骨架（`_quarto.yml`、`talk.qmd`），不帶自己的 `deck.scss`。beamer 鏡像只對應 research-talk。
+- 新增 `slide-deck-scaffold/scripts/scaffold.mjs`：依官方、個人（`~/.claude/.academic-slides/`）、專案（往上找最近的 `.claude/.academic-slides/`）三層設定逐欄合併，建立新投影片資料夾。
+- 表格補上最後一列下方的粗線，與 beamer 的 `\bottomrule` 一致；設計規則寫明三條線。
+- repo 根目錄加 `templates` 連結，指向 plugin 內的範本資料夾。
+- 版本升為 0.2.0（範本資料夾結構改變，README 的快速上手改用 scaffold 腳本）。
+- 不在這次範圍：已建立的投影片更新主題（#10）、check-density 計算中文字數（#9）。
+- 受影響的 capability：`deck-scaffold`、`slide-design-guidance`、`plugin-packaging`。
