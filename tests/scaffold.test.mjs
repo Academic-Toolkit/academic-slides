@@ -248,7 +248,7 @@ test('CLI: personal and project theme.scss become theme overlays listed after th
   writeJson(path.join(s.personal, 'theme.scss'), '/*-- scss:defaults --*/\n$deck-primary: #8b0000;\n');
   writeJson(path.join(s.project, '.claude', '.academic-slides', 'theme.scss'), '/*-- scss:rules --*/\n');
   const out = path.join(s.project, 'deck');
-  const r = run(['--out', out], s.home);
+  const r = run(['--out', out, '--trust-project'], s.home);
   assert.equal(r.code, 0, r.out);
   assert.match(readFileSync(path.join(out, '_quarto.yml'), 'utf8'), /theme: \[default, _theme\/deck\.scss, theme\/personal\.scss, theme\/project\.scss\]/);
   assert.match(readFileSync(path.join(out, 'theme', 'personal.scss'), 'utf8'), /8b0000/);
@@ -377,29 +377,54 @@ test('CLI: a theme.scss or local.json that is a symbolic link is refused', () =>
   }
 });
 
-test('CLI: a non-official template that runs code at render time is refused unless --allow-code is given', () => {
-  const cases = {
-    'pre-render': { '_quarto.yml': 'project:\n  pre-render: ./steal.sh\nformat:\n  revealjs:\n    theme: [default, _theme/deck.scss]\n    footer: "x"\n' },
-    'filters': { '_quarto.yml': 'format:\n  revealjs:\n    theme: [default, _theme/deck.scss]\n    footer: "x"\nfilters:\n  - evil.lua\n' },
-    'code cell': { 'talk.qmd': '---\ntitle: "T"\n---\n\n```{python}\nimport os\n```\n' },
-    'include shortcode': { 'talk.qmd': '---\ntitle: "T"\n---\n\n{{< include /etc/hosts >}}\n' },
-    'env shortcode': { 'talk.qmd': '---\ntitle: "T"\n---\n\n{{< env HOME >}}\n' },
-    'extension': { '_extensions/x/_extension.yml': 'title: x\n' },
-  };
-  for (const [label, files] of Object.entries(cases)) {
+test('CLI: a project-layer template is used only with --trust-project, whatever it contains', () => {
+  for (const extra of [{}, { '_quarto.yml': 'project:\n  pre-render: ./steal.sh\nformat:\n  revealjs:\n    theme: [default, _theme/deck.scss]\n    footer: "x"\n' }]) {
     const s = sandbox();
     const tpl = path.join(s.project, '.claude', '.academic-slides', 'templates', 'research-talk');
     makeTemplate(tpl);
-    for (const [name, content] of Object.entries(files)) {
-      mkdirSync(path.dirname(path.join(tpl, name)), { recursive: true });
-      writeFileSync(path.join(tpl, name), content);
-    }
+    for (const [name, content] of Object.entries(extra)) writeFileSync(path.join(tpl, name), content);
     const out = path.join(s.project, 'deck');
     const r = run(['--out', out], s.home);
-    assert.equal(r.code, 1, `${label}: ${r.out}`);
-    assert.match(r.out, /--allow-code/, label);
-    assert.equal(existsSync(out), false, label);
-    assert.equal(run(['--out', out, '--allow-code'], s.home).code, 0, label);
+    assert.equal(r.code, 1, r.out);
+    assert.match(r.out, /--trust-project/);
+    assert.match(r.out, /templates\/research-talk/);
+    assert.equal(existsSync(out), false);
+    assert.equal(run(['--out', out, '--trust-project'], s.home).code, 0);
+  }
+});
+
+test('CLI: a project-layer theme.scss is used only with --trust-project', () => {
+  const s = sandbox();
+  writeJson(path.join(s.project, '.claude', '.academic-slides', 'theme.scss'), '@import "/etc/hosts";\n');
+  const out = path.join(s.project, 'deck');
+  const r = run(['--out', out], s.home);
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /theme\.scss/);
+  assert.match(r.out, /--trust-project/);
+  assert.equal(existsSync(out), false);
+});
+
+test('CLI: personal templates are the user\'s own and need no flag', () => {
+  const s = sandbox();
+  makeTemplate(path.join(s.personal, 'templates', 'mine'), { extra: { 'run.lua': '-- a filter\n' } });
+  assert.equal(run(['--out', path.join(s.project, 'deck'), '--template', 'mine'], s.home).code, 0);
+});
+
+test('CLI: project local.json settings need no flag', () => {
+  const s = sandbox();
+  writeJson(path.join(s.project, '.claude', '.academic-slides', 'local.json'), { author: null, footer: 'Seminar · 2026' });
+  assert.equal(run(['--out', path.join(s.project, 'deck')], s.home).code, 0);
+});
+
+test('CLI: settings values with HTML, braces, or backticks are refused', () => {
+  for (const bad of ['<script>alert(1)</script>', 'name {.hl-key}', '`{r} Sys.getenv()`']) {
+    const s = sandbox();
+    writeJson(path.join(s.personal, 'local.json'), { author: bad });
+    const out = path.join(s.project, 'deck');
+    const r = run(['--out', out], s.home);
+    assert.equal(r.code, 1, `${bad}: ${r.out}`);
+    assert.match(r.out, /author/, bad);
+    assert.equal(existsSync(out), false, bad);
   }
 });
 
@@ -410,11 +435,11 @@ test('CLI: a settings value containing a Quarto shortcode is refused', () => {
   const r = run(['--out', out], s.home);
   assert.equal(r.code, 1, r.out);
   assert.match(r.out, /footer/);
-  assert.match(r.out, /shortcode/);
+  assert.match(r.out, /plain text/);
   assert.equal(existsSync(out), false);
 });
 
-test('CLI: official templates need no --allow-code', () => {
+test('CLI: official templates need no flag', () => {
   const s = sandbox();
   for (const t of readdirSync(path.join(SKILL, 'templates/quarto')).filter((n) => !n.startsWith('_'))) {
     assert.equal(run(['--out', path.join(s.project, t), '--template', t], s.home).code, 0, t);

@@ -29,11 +29,11 @@ local.json fields (string, or null to remove): ${FIELDS.join(', ')}
   --title     title written into talk.qmd
   --dry-run   print the resolution, write nothing
   --list      list templates with their layer; shadowed ones are marked
-  --allow-code  accept a personal or project template (or theme.scss) that makes quarto render run
-              code or read other files: render hooks, filters, extensions, code cells, include/env
-              shortcodes, Sass @import/@use/url(). Without it such a template is refused.
-Nothing read from a settings layer may be a symbolic link that leaves it, and settings values may
-not contain Quarto shortcodes.
+  --trust-project  use a template or theme.scss from the project layer. That layer is found by walking
+              up from the deck folder, so it may come from a repository you did not write, and
+              rendering its template runs whatever the template contains. Read it first.
+Nothing read from a settings layer may be a symbolic link that leaves it; settings values are plain
+text (no <, {, or backtick); a project settings folder must belong to you.
 Exit status: 0 done, 1 refused (settings, template, or folder problem), 2 usage error.`;
 
 export class ScaffoldError extends Error {}
@@ -90,8 +90,8 @@ export function readSettings(dir) {
       continue;
     }
     if (value !== null && typeof value !== 'string') throw new ScaffoldError(`${file}: field ${show(key)} must be a string or null`);
-    if (typeof value === 'string' && value.includes('{{<')) {
-      throw new ScaffoldError(`${file}: field ${show(key)} contains a Quarto shortcode ({{< … >}}); settings values are plain text`);
+    if (typeof value === 'string' && /[<{`]/.test(value)) {
+      throw new ScaffoldError(`${file}: field ${show(key)} contains <, {, or a backtick; settings values are plain text (no HTML, Quarto shortcodes, or code)`);
     }
     settings[key] = value;
   }
@@ -139,7 +139,6 @@ export function resolveTemplate(name, dirs) {
     throw new ScaffoldError(`no template named ${show(name)}; available: ${names.join(', ') || '(none)'}`);
   }
   const [chosen, ...rest] = found;
-  refuseLink(chosen.dir, 'a template folder');
   const layerRoot = layerDirs(dirs).find((d) => d.layer === chosen.layer).root;
   if (!inside(realpathSync(chosen.dir), realpathSync(layerRoot))) {
     throw new ScaffoldError(`template folder ${chosen.dir} resolves outside ${layerRoot} through a symbolic link`);
@@ -218,6 +217,9 @@ function checkOut(out) {
 function settingsLayers(home, out) {
   const personal = personalDir(home);
   const project = findProjectDir(out, home);
+  if (project && typeof process.getuid === 'function' && statSync(project).uid !== process.getuid()) {
+    throw new ScaffoldError(`${project} belongs to another user; a project settings folder must be yours`);
+  }
   const layers = [{ layer: 'personal', dir: personal, ...readSettings(personal) }];
   if (project) layers.push({ layer: 'project', dir: project, ...readSettings(project) });
   return { personal, project, layers };
@@ -234,46 +236,16 @@ function overlays(layers) {
   return found;
 }
 
-// Quarto options that run code at render time or pull other files into the deck.
-const HOOK_KEYS = ['pre-render', 'post-render', 'filters', 'shortcodes', 'engine', 'jupyter', 'knitr', 'revealjs-plugins',
-  'include-in-header', 'include-before-body', 'include-after-body', 'metadata-files', 'resources', 'template-partials'];
-const HOOK_KEY_LINE = new RegExp(`^\\s*(${HOOK_KEYS.join('|')}):`, 'm');
-const CODE_CELL = /^\s*`{3,}\s*\{\s*([A-Za-z][\w-]*)/gm;
-const DIAGRAM_CELLS = new Set(['mermaid', 'dot']);
-const INLINE_CODE = /`\{(r|python|julia|ojs)\}/;
-const DATA_SHORTCODE = /\{\{<\s*(include|env|embed)\b/;
-const SASS_LOAD = /@(import|use|forward)\s+["'](?!sass:)|url\(/;
-
-function textHooks(rel, text) {
-  const found = [];
-  const key = text.match(HOOK_KEY_LINE);
-  if (key) found.push(`${rel}: ${key[1]}`);
-  for (const m of text.matchAll(CODE_CELL)) if (!DIAGRAM_CELLS.has(m[1].toLowerCase())) { found.push(`${rel}: a {${m[1]}} code cell`); break; }
-  if (INLINE_CODE.test(text)) found.push(`${rel}: inline code`);
-  const sc = text.match(DATA_SHORTCODE);
-  if (sc) found.push(`${rel}: the ${sc[1]} shortcode`);
-  return found;
-}
-
-// Everything in a personal or project template (and in any theme.scss) that would make `quarto render`
-// run code or read files from outside the deck. Official templates are not scanned.
-export function codeHooks(tpl, copies, themeFiles) {
-  const found = [];
-  if (tpl.layer !== 'official') {
-    for (const { src, rel } of copies) {
-      if (rel.split(path.sep).includes('_extensions')) { found.push(`${rel}: a Quarto extension`); continue; }
-      if (/\.lua$/i.test(rel)) { found.push(`${rel}: a Lua filter`); continue; }
-      if (/\.(qmd|md|ya?ml)$/i.test(rel)) found.push(...textHooks(rel, readFileSync(src, 'utf8')));
-    }
-  }
-  for (const { src } of themeFiles) {
-    if (SASS_LOAD.test(readFileSync(src, 'utf8'))) found.push(`${src}: Sass @import/@use/url() loads another file or address`);
-  }
-  return found;
+// The project layer may come from a repository the user did not write: its template and theme.scss
+// are used only with --trust-project. Judged by where a file comes from, not by scanning its content;
+// a content scan cannot list every way a Quarto document can run code.
+function untrustedProjectFiles(tpl, themeFiles, project) {
+  const files = themeFiles.filter((f) => project && f.src === path.join(project, 'theme.scss')).map((f) => f.src);
+  return tpl.layer === 'project' ? [tpl.dir, ...files] : files;
 }
 
 // Everything the deck will contain, computed without writing anything.
-export function planDeck({ out, home, template, title, allowCode = false }) {
+export function planDeck({ out, home, template, title, trustProject = false }) {
   const resolvedOut = path.resolve(out);
   checkOut(resolvedOut);
   const { personal, project, layers } = settingsLayers(home, resolvedOut);
@@ -286,11 +258,11 @@ export function planDeck({ out, home, template, title, allowCode = false }) {
   const warnings = layers.flatMap((l) => l.warnings);
   const copies = templateFiles(tpl.dir, warnings).map((rel) => ({ src: path.join(tpl.dir, rel), rel }));
   const themeFiles = overlays(layers);
-  const hooks = codeHooks(tpl, copies, themeFiles);
-  if (hooks.length && !allowCode) {
-    throw new ScaffoldError(`the ${tpl.layer} template ${tpl.dir} (or a theme.scss) would run code or read other files when rendered:\n  ${hooks.join('\n  ')}\nRead it, then pass --allow-code if you trust it.`);
+  const untrusted = untrustedProjectFiles(tpl, themeFiles, project);
+  if (untrusted.length && !trustProject) {
+    throw new ScaffoldError(`these come from the project layer, found by walking up from the deck folder:\n  ${untrusted.join('\n  ')}\nRendering a template runs whatever it contains. Read them, then pass --trust-project to use them.`);
   }
-  warnings.push(...hooks.map((h) => `allowed by --allow-code: ${h}`));
+  warnings.push(...untrusted.map((f) => `using from the project layer (--trust-project): ${f}`));
   const theme = ['default', '_theme/deck.scss', ...themeFiles.map((f) => f.rel.split(path.sep).join('/'))];
   const qmd = rewriteFrontMatter(readFileSync(path.join(tpl.dir, 'talk.qmd'), 'utf8'), {
     title: fields.title?.value, author: fields.author?.value, institute: fields.affiliation?.value, lang: fields.lang?.value,
@@ -342,7 +314,7 @@ function parseArgs(argv) {
     if (a === '--help' || a === '-h') opts.help = true;
     else if (a === '--dry-run') opts.dryRun = true;
     else if (a === '--list') opts.list = true;
-    else if (a === '--allow-code') opts.allowCode = true;
+    else if (a === '--trust-project') opts.trustProject = true;
     else if (valued[a]) {
       if (i + 1 >= argv.length) throw new UsageError(`${a} needs a value`);
       opts[valued[a]] = argv[++i];
@@ -374,7 +346,7 @@ export function main(argv, home = os.homedir()) {
   try {
     if (opts.list) { printList(opts, home); return 0; }
     if (!opts.out) { console.error(`--out is required\n\n${HELP}`); return 2; }
-    const plan = planDeck({ out: opts.out, home, template: opts.template, title: opts.title, allowCode: opts.allowCode });
+    const plan = planDeck({ out: opts.out, home, template: opts.template, title: opts.title, trustProject: opts.trustProject });
     console.log(report(plan));
     if (opts.dryRun) {
       console.log(`Dry run: nothing written (${plan.files.length} files would go to ${plan.out})`);

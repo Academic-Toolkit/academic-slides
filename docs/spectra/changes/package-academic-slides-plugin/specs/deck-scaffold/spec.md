@@ -89,12 +89,12 @@ The scaffold SHALL refuse with status 1 when `--out` names a non-empty folder or
 
 ### Requirement: Settings layers cannot leak local files or run code without consent
 
-Because the project layer is discovered by walking up from the deck folder, it can come from a repository the user did not write. The scaffold SHALL therefore refuse with status 1, before writing anything, when a `local.json`, `theme.scss`, template folder, or template `talk.qmd` or `_quarto.yml` read from a settings layer is a symbolic link, or when a template folder resolves outside its layer's `templates/` folder. It SHALL refuse a settings value that contains a Quarto shortcode (`{{<`). For a personal or project template, and for any layer's `theme.scss`, it SHALL list every feature that makes `quarto render` run code or read other files — the options `pre-render`, `post-render`, `filters`, `shortcodes`, `engine`, `jupyter`, `knitr`, `revealjs-plugins`, `include-in-header`, `include-before-body`, `include-after-body`, `metadata-files`, `resources`, and `template-partials`; executable code cells and inline code; the `include`, `env`, and `embed` shortcodes; `_extensions/` and `.lua` files; and Sass `@import`, `@use`, or `@forward` of anything but a `sass:` module, or `url(` — and refuse unless `--allow-code` is given, in which case each feature is printed as a warning. Official templates are not scanned.
+The project layer is discovered by walking up from the deck folder, so it can come from a repository the user did not write; trust is decided by where a file comes from, not by scanning its content, because no content scan can list every way a Quarto document runs code. The scaffold SHALL therefore refuse with status 1, before writing anything: when a `local.json` or `theme.scss` read from a settings layer, or a template's `talk.qmd` or `_quarto.yml`, is a symbolic link; when a template folder resolves outside its layer's `templates/` folder; when the project settings folder belongs to another user; when a settings value contains `<`, `{`, or a backtick (settings values are plain text, so they cannot carry HTML, Quarto shortcodes such as `{{< env … >}}`, attribute spans, or inline code); and when the deck would use the project layer's template or `theme.scss` without `--trust-project`. With `--trust-project`, each project-layer file used is printed as a warning. The project layer's `local.json` needs no flag. Personal and official templates need no flag.
 
-#### Scenario: Project template with a render hook
+#### Scenario: Project template needs consent
 
-- **WHEN** the project layer's `templates/research-talk/_quarto.yml` declares `pre-render: ./steal.sh` and the scaffold runs without `--allow-code`
-- **THEN** it names the template folder and `pre-render`, tells the user to pass `--allow-code` after reading the template, exits with status 1, and the deck folder is not created; with `--allow-code` the deck is written
+- **WHEN** the project layer has `templates/research-talk/` (with or without a `pre-render` hook) and the scaffold runs without `--trust-project`
+- **THEN** it names that folder, tells the user to read it and pass `--trust-project`, exits with status 1, and the deck folder is not created; with `--trust-project` the deck is written
 
 #### Scenario: Linked talk.qmd
 
