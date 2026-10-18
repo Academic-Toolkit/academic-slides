@@ -18,13 +18,15 @@ All scripts live in `scripts/` next to this file. Every script prints its usage 
 
 | Script | What it finds | Key options |
 |---|---|---|
-| `check-layout.mjs` | 1. pixels in the band just above the footer (content cut); 2. visible elements ending below the footer's top edge (content hidden behind an opaque footer); 3. math, images, or tables extending past their column or the slide; 4. slide titles wrapping to two or more lines | `--html`, `--width 1280`, `--height 720`, `--footer '.reveal .footer'`, `--out`, `--shots` |
+| `check-layout.mjs` | 1. pixels in the band just above the footer (content cut); 2. visible elements ending below the footer's top edge (content hidden behind an opaque footer); 3. math, images, or tables extending past their column or the slide; 4. slide titles wrapping to two or more lines. Checks 2–4 run on screen and again on every page of the PDF print view | `--html`, `--width 1280`, `--height 720`, `--footer '.reveal .footer'`, `--out`, `--shots` |
 | `check-fill.mjs` | content slides whose body reaches less than the threshold of the space between title and footer, with a suggested class | `--html`, `--threshold 0.70` |
 | `check-density.mjs` | more than N body words or bullets on a main-body slide; with `--tex`, the same for the beamer mirror plus an in-order title comparison | `--qmd`, `--tex`, `--words 35`, `--bullets 3`, `--skip-classes`, `--skip-macros` |
 | `check-mathjax.mjs` | MathJax parse errors and undefined macros (MathJax 3 shows these as red text, not as error nodes) | `--html` |
-| `export-pdf.mjs` | writes the PDF through revealjs print mode, one page per slide | `--html`, `--out` |
+| `export-pdf.mjs` | writes the PDF through revealjs print mode, one page per slide; each page is the slide plus the deck's revealjs margin (1056×594 pt for a 1280×720 slide) | `--html`, `--out` |
 
 Why both a pixel check and a DOM check: an opaque footer hides overflowing content from the pixel band, so only the DOM check sees it; a pixel check alone misses it.
+
+Why a second pass in the print view: the PDF is laid out differently from the screen. Revealjs's print stylesheet sets every slide's padding to 0, the slide is not scaled, and the footer is placed on the paper rather than in the browser window. A slide that is clean on screen can therefore run into the footer in the PDF. `check-layout.mjs` opens the same print view that `export-pdf.mjs` prints, so a deck it passes prints without overlaps.
 
 What `check-density.mjs` counts: English body words and bullet lines on each main-body slide. It does not count speaker notes, hidden blocks, source lines, side notes, mathematics, tables, images, or markup. The main body ends at a level-1 section whose title starts with "Backup" (Quarto) or at `\appendix` (beamer).
 
@@ -39,7 +41,7 @@ node scripts/check-fill.mjs                     # 5. half-empty slides (advice, 
 node scripts/export-pdf.mjs                     # 6. offline PDF; page count = slide count
 ```
 
-Then look at the screenshots from step 2: `qa/<deck>-NN.png` for every slide, and `qa/<deck>-NN-flagged.png` for flagged slides. Add `qa/` to the project's `.gitignore`. Check label collisions in figures, awkward line breaks inside narrow columns, and whether highlighted numbers are the ones the speaker talks about.
+Then look at the screenshots from step 2: `qa/<deck>-NN.png` for every slide, `qa/<deck>-NN-flagged.png` for flagged slides, and `qa/<deck>-print-NN-flagged.png` for flagged PDF pages (NN is the PDF page number). Add `qa/` to the project's `.gitignore`. Check label collisions in figures, awkward line breaks inside narrow columns, and whether highlighted numbers are the ones the speaker talks about.
 
 For each failure, see [references/fix-table.md](references/fix-table.md). It lists the usual cause and the fix that keeps the deck consistent with the rules in the `academic-slide-design` skill.
 
@@ -49,3 +51,4 @@ For each failure, see [references/fix-table.md](references/fix-table.md). It lis
 - `check-fill.mjs` measures geometry only. A low fill on a closing slide such as "Thank you" is expected.
 - Title comparison normalizes case, punctuation, dashes, `\emph`, and inline math. A deliberate wording difference between the two decks will still be reported.
 - If a newer Quarto release changes the revealjs DOM, update the selectors at the top of each script.
+- A deck keeps its own copy of `theme/deck.scss`. A deck made from the template before the print fix for `.vc` slides and the footer (issue #5) can still overlap the footer in the PDF; copy the two `html.print-pdf` rules from the template's `deck.scss` into it.

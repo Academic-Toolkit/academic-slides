@@ -6,7 +6,7 @@ A Claude Code plugin for research-talk and lecture slides that a seminar audienc
 |---|---|
 | `academic-slide-design` | Principles: what a result slide must show, readable mathematics with colored braces, layout and typography rules (each with its reason), table highlighting, simulation and evidence slides, speaker notes, and a pre-delivery checklist. |
 | `slide-deck-scaffold` | A ready-to-copy Quarto revealjs template (16:9, palette variables, theorem/takeaway/notation/outline/setting-pair components, sparse-slide scaling and centring) and a beamer mirror with the same palette, macros, and slide titles. |
-| `slide-qa` | Node + Playwright checks: content cut or hidden by the footer, equations or tables past the right edge, titles on two lines, sparse slides, words and bullets per slide, MathJax errors (including undefined macros), Quarto–beamer title correspondence, and PDF export. |
+| `slide-qa` | Node + Playwright checks: content cut or hidden by the footer (on screen and in the PDF print view), equations or tables past the right edge, titles on two lines, sparse slides, words and bullets per slide, MathJax errors (including undefined macros), Quarto–beamer title correspondence, and PDF export. |
 
 ## Install
 
