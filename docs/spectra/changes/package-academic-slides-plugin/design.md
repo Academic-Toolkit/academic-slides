@@ -129,11 +129,33 @@ booktabs 的三條線：表頭上方 2px、表頭下方 1.5px、最後一列下�
 - repo 根目錄放 `templates` 符號連結，指向 `plugins/academic-slides/skills/slide-deck-scaffold/templates`。安裝 plugin 時只複製 `plugins/academic-slides/`，所以連結不影響使用者；README 仍寫出真正的路徑，給不支援符號連結的環境。
 - 測試放在 repo 根目錄 `tests/`（不隨 plugin 發布）：`node --test tests/` 跑 scaffold 的單元與命令列測試；`tests/render-templates.sh` 用 Quarto 與 Playwright 實際 render 四個範本並跑檢查。Playwright 以根目錄 `package.json` 的 devDependency 安裝，`node_modules/` 不進 git。
 
+### D13. 主題的預設值全部可以由設定層覆寫（issue #14）
+
+- Quarto 把主題清單各檔的 `scss:defaults` 依「後面的檔先」串接，所以設定層的 `theme/personal.scss`、`theme/project.scss` 先於 `_theme/deck.scss` 編譯。後到的一般賦值會蓋掉先到的值，`!default` 則讓位給先到的值。#8 只給五個色票加 `!default`，其餘八個預設值（`$body-bg`、`$body-color`、`$link-color`、`$presentation-heading-color`、`$font-family-sans-serif`、`$presentation-font-size-root`、`$presentation-heading-font-weight`、`$presentation-h2-font-size`）因此一律蓋掉設定層的值，而且沒有任何警告。實測（Quarto 1.10.19）：個人層設 `"Times New Roman", serif` 與 `30px`，編譯後的 CSS 仍是 Avenir Next 與 28px。
+- 決定：`deck.scss` 在 `scss:defaults` 設的每一個變數都加 `!default`。設定層本來就是用來覆寫的，沒有哪一個值需要鎖住；只開放字型會讓字級與顏色留著同樣的靜默失效。
+- 設定層的 `scss:defaults` 仍不能引用 `$deck-*`：那段會在 `deck.scss` 定義色票之前編譯，這是 Quarto 的排列方式，主題裡改不了。兩點讓它不再造成問題：`deck.scss` 的衍生值（內文、連結、標題顏色）本來就由色票算出，設定層只改 `$deck-primary`，它們會跟著變；`scss:rules` 在所有檔的 defaults 之後編譯，設定層可以在那裡使用 `$deck-*`。SKILL 寫明這兩點。
+
+### D14. 公式顏色由樣式表決定（issue #14）
+
+- 原本三個有數學的範本（research-talk、short-talk、lecture）在隱藏區塊裡用 `\definecolor{deckB}{RGB}{31,78,121}` 等四行定義顏色，`\cB` 到 `\cP` 引用這些名稱，等於色票的第二份副本，設定層碰不到。
+- 決定：`\cB`、`\cO`、`\cG`、`\cP` 改為 `\class{deck-b}{#1}` 等四個 class（MathJax 的 `html` 擴充，Quarto 載入的 MathJax 會自動載入），`deck.scss` 的 `scss:rules` 給 `.deck-b`、`.deck-o`、`.deck-g`、`.deck-p` 四個色票顏色。色票因此只有一個來源。實測：個人層設 `$deck-primary: #8b0000` 時，`\cB{x}` 渲染為 `rgb(139, 0, 0)`，沒有 `mjx-merror`。
+- beamer 鏡像沒有樣式表，保留 `\definecolor`，數值與官方色票相同；設定層的色票到不了 beamer，另由 issue #21 追蹤。
+- 不採用：scaffold 讀設定層的 SCSS、改寫 `\definecolor` 的 RGB。那會留下兩份色票，而 SCSS 的值不一定是十六進位字面值（可以是函式或顏色名稱）。
+
+### D15. 只有一張表格的 `.vc` 頁才拿掉表格的下邊距（issue #14）
+
+- #8 的 `section.vc > table { margin-bottom: 0 }` 套用在 `.vc` 頁每一張直屬的表格上；spec 的情境只涵蓋「表格是唯一的內文元素」。#8 verify 第 1 輪指出，「導言、表格、出處」的頁上，表格失去下邊距，空白移到表格上方，出處貼著表格。
+- 決定：選擇器只在表格是標題（與可選的隱藏巨集區塊）之後唯一可見的內文元素時成立；講者備註不算內文。其他 `.vc` 頁的表格保留 reveal 的邊距。以 render 測試的固定頁面驗證：導言、表格、出處的頁上出處與表格之間有間距，`--vc-centred` 照常通過。
+
+### D16. Implementation Contract 描述實際的 render 檢查（issue #14）
+
+#8 之後範本資料夾沒有自己的主題（`_theme/` 在上一層，由 scaffold 複製），把範本資料夾複製一份就地 render 已不成立。`tests/render-templates.sh` 的做法是先用 scaffold 從每個範本建立投影片，再 render 那份投影片。契約改寫成這個流程，範本資料夾不改成可以原地 render。
+
 ## Implementation Contract
 
 **Behavior：**
 - `claude plugin validate --strict plugins/academic-slides` 與 `claude plugin validate --strict .`（marketplace）都通過。
-- 在範本資料夾複本中執行 `quarto render`，產生 talk.html；check-layout、check-density、check-mathjax 都以狀態 0 結束；以 XeLaTeX 編譯 beamer 範本，0 error、0 overfull，check-density 印出「N/N titles match」。
+- 用 `scaffold.mjs` 從每個範本建立投影片、在該資料夾執行 `quarto render`（`tests/render-templates.sh`，D16），產生 talk.html；check-layout、check-density、check-mathjax 都以狀態 0 結束；以 XeLaTeX 編譯 beamer 範本，0 error、0 overfull，check-density 印出「N/N titles match」。
 - 在成大投影片上，check-density.mjs 的輸出與 density-check.py 逐行相同（D6）。
 - repo 內 grep 不到 NCKU、ncku、成大、econblue 等專案字串（README 的「來源」說明除外）。
 

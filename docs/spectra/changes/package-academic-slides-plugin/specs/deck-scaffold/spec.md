@@ -20,12 +20,17 @@ Give an agent a ready-to-copy starting point for a Quarto revealjs deck and a mi
 
 #### Scenario: Centred slide that starts with hidden macros or holds a lone table
 
-- **WHEN** a `{.vc}` slide begins with the hidden MathJax macro block, or its only body element is a table, and the deck is rendered
-- **THEN** the space above the body is at least half the space below it, because `_theme/deck.scss` gives the auto top margin to the first element after a hidden block and removes the auto bottom margin reveal sets on tables (found in issue #8)
+- **WHEN** a `{.vc}` slide begins with the hidden MathJax macro block, or its only visible body element is a table, and the deck is rendered
+- **THEN** the space above the body is at least half the space below it, because `_theme/deck.scss` gives the auto top margin to the first element after a hidden block and, only for a table that is the slide's only visible body element (speaker notes do not count), removes the auto bottom margin reveal sets on tables (found in issue #8, narrowed in issue #14)
+
+#### Scenario: A table between a lead and a source line keeps its margin
+
+- **WHEN** a `{.vc}` slide holds a lead paragraph, a table, and a source line, and the deck is rendered
+- **THEN** the table keeps the bottom margin reveal gives it, so the source line does not touch the table (issue #14)
 
 ### Requirement: Palette is a single set of variables
 
-`_theme/deck.scss` SHALL define the palette as `$deck-primary`, `$deck-accent`, `$deck-green`, `$deck-purple`, and `$deck-ink` at the top, each with `!default`, and every component rule SHALL reference these variables rather than literal colors.
+`_theme/deck.scss` SHALL define the palette as `$deck-primary`, `$deck-accent`, `$deck-green`, `$deck-purple`, and `$deck-ink` at the top, each with `!default`, and every component rule SHALL reference these variables rather than literal colors. Every other variable it sets in `scss:defaults` (background, body, link and heading colours, font family, root and heading sizes, heading weight) SHALL also carry `!default`, so a settings layer's `theme.scss` can override any of them (issue #14).
 
 #### Scenario: Recolor by editing five lines
 
@@ -36,6 +41,20 @@ Give an agent a ready-to-copy starting point for a Quarto revealjs deck and a mi
 
 - **WHEN** `~/.claude/.academic-slides/theme.scss` sets `$deck-primary: #8b0000;` in its `scss:defaults` section and a deck scaffolded afterwards is rendered
 - **THEN** the slide titles of that deck render in `rgb(139, 0, 0)`, while `_theme/deck.scss` in the deck is a byte-for-byte copy of the plugin's
+
+#### Scenario: Fonts and sizes from a personal theme
+
+- **WHEN** `~/.claude/.academic-slides/theme.scss` sets `$font-family-sans-serif: "Times New Roman", serif;` and `$presentation-font-size-root: 30px;` in its `scss:defaults` section and a deck scaffolded afterwards is rendered
+- **THEN** the computed font family of the slides begins with `"Times New Roman"` and the computed font size of `.reveal` is `30px`
+
+### Requirement: Mathematics colours follow the palette
+
+The colour macros `\cB`, `\cO`, `\cG`, and `\cP` in every Quarto template that defines them SHALL wrap their argument in the CSS classes `deck-b`, `deck-o`, `deck-g`, and `deck-p` (MathJax `\class`), and `_theme/deck.scss` SHALL colour those classes with `$deck-primary`, `$deck-accent`, `$deck-green`, and `$deck-purple`. The Quarto templates SHALL NOT define the palette a second time with `\definecolor`; the beamer mirror keeps its `\definecolor` lines with the official palette's RGB values (issue #14).
+
+#### Scenario: A formula takes the personal palette
+
+- **WHEN** `~/.claude/.academic-slides/theme.scss` sets `$deck-primary: #8b0000;` and a deck scaffolded afterwards from `research-talk` is rendered
+- **THEN** a term written `\cB{…}` renders in `rgb(139, 0, 0)` and check-mathjax reports no errors
 
 ### Requirement: Tables draw three rules
 
