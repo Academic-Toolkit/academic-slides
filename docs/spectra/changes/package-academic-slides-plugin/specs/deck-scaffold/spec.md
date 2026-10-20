@@ -21,12 +21,12 @@ Give an agent a ready-to-copy starting point for a Quarto revealjs deck and a mi
 #### Scenario: Centred slide that starts with hidden macros or holds a lone table
 
 - **WHEN** a `{.vc}` slide begins with the hidden MathJax macro block, or its only visible body element is a table, and the deck is rendered
-- **THEN** the space above the body is at least half the space below it, because `_theme/deck.scss` gives the auto top margin to the first element after a hidden block and, only for a table that is the slide's only visible body element (speaker notes do not count), removes the auto bottom margin reveal sets on tables (found in issue #8, narrowed in issue #14)
+- **THEN** the space above the body is at least half the space below it, because `_theme/deck.scss` gives the auto top margin to the first element after the title or a hidden block, and replaces the auto top and bottom margins reveal sets on tables with a fixed vertical margin on `{.vc}` slides (found in issue #8, revised in issue #14)
 
-#### Scenario: A table between a lead and a source line keeps its margin
+#### Scenario: A table between a lead and a source line stays with them
 
 - **WHEN** a `{.vc}` slide holds a lead paragraph, a table, and a source line, and the deck is rendered
-- **THEN** the table keeps the bottom margin reveal gives it, so the source line does not touch the table (issue #14)
+- **THEN** the lead, table, and source line form one centred block: the source line sits 12 to 40 px below the table, neither touching it nor drifting off (issue #14)
 
 ### Requirement: Palette is a single set of variables
 

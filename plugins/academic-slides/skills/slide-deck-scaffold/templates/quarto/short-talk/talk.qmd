@@ -12,14 +12,10 @@ lang: en
 
 ::: {.hidden}
 $$
-\definecolor{deckB}{RGB}{31,78,121}
-\definecolor{deckO}{RGB}{192,80,77}
-\definecolor{deckG}{RGB}{46,125,91}
-\definecolor{deckP}{RGB}{123,79,157}
-\newcommand{\cB}[1]{{\color{deckB}{#1}}}
-\newcommand{\cO}[1]{{\color{deckO}{#1}}}
-\newcommand{\cG}[1]{{\color{deckG}{#1}}}
-\newcommand{\cP}[1]{{\color{deckP}{#1}}}
+\newcommand{\cB}[1]{\class{deck-b}{#1}}
+\newcommand{\cO}[1]{\class{deck-o}{#1}}
+\newcommand{\cG}[1]{\class{deck-g}{#1}}
+\newcommand{\cP}[1]{\class{deck-p}{#1}}
 $$
 :::
 

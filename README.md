@@ -57,7 +57,7 @@ The templates live in `plugins/academic-slides/skills/slide-deck-scaffold/templa
 
 `scaffold.mjs` merges three layers field by field — project over personal over official:
 
-- **personal**: `~/.claude/.academic-slides/` with `local.json` (`template`, `lang`, `author`, `affiliation`, `footer`), `theme.scss` (palette overrides), and `templates/<name>/` (your own templates);
+- **personal**: `~/.claude/.academic-slides/` with `local.json` (`template`, `lang`, `author`, `affiliation`, `footer`), `theme.scss` (theme overrides: palette, fonts, sizes, and your own components; every `scss:defaults` value of the official theme can be overridden), and `templates/<name>/` (your own templates);
 - **project**: the nearest `.claude/.academic-slides/` above the deck folder, for one project's exceptions (`"author": null` removes the author line). Its template and `theme.scss` are used only with `--trust-project`, because that folder may come from a repository you did not write.
 
 Details, including what a personal template must contain, are in `slide-deck-scaffold/SKILL.md`.

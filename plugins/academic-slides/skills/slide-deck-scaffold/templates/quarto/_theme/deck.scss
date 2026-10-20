@@ -1,21 +1,23 @@
 /*-- scss:defaults --*/
 /* ===== Palette: change these five lines to recolour the whole deck =====
-   Each is !default, so a personal or project theme.scss listed after this file can override it. */
+   Every value in this section is !default, so a personal or project theme.scss listed after this file can
+   override any of them: Quarto compiles a later file's defaults first, and !default yields to them (issue #14).
+   A layer cannot refer to $deck-* in its own scss:defaults (they are not defined yet there); its scss:rules can. */
 $deck-primary: #1f4e79 !default; /* titles, theorem bars, outline numbers, table headers  */
 $deck-accent:  #c0504d !default; /* takeaway boxes, subtitle, failures to highlight         */
 $deck-green:   #2e7d5b !default; /* probability / "holds at every t" / the method you propose */
 $deck-purple:  #7b4f9d !default; /* constants and derived quantities                         */
 $deck-ink:     #1c2b33 !default; /* body text                                                */
 
-$body-bg: #ffffff;
-$body-color: $deck-ink;
-$link-color: $deck-primary;
-$presentation-heading-color: $deck-primary;
+$body-bg: #ffffff !default;
+$body-color: $deck-ink !default;
+$link-color: $deck-primary !default;
+$presentation-heading-color: $deck-primary !default;
 
-$font-family-sans-serif: "Avenir Next", "Helvetica Neue", "PingFang TC", "Noto Sans TC", sans-serif;
-$presentation-font-size-root: 28px;
-$presentation-heading-font-weight: 650;
-$presentation-h2-font-size: 1.35em;
+$font-family-sans-serif: "Avenir Next", "Helvetica Neue", "PingFang TC", "Noto Sans TC", sans-serif !default;
+$presentation-font-size-root: 28px !default;
+$presentation-heading-font-weight: 650 !default;
+$presentation-h2-font-size: 1.35em !default;
 
 /*-- scss:rules --*/
 /* Title slide */
@@ -95,9 +97,14 @@ html.print-pdf .reveal .slides section.vc { display: flex !important; flex-direc
 /* A hidden block (the MathJax macros) right after the title would take that auto margin and leave
    the visible body under the title; give it to the first element after the hidden block instead */
 .reveal .slides section.vc > h2 + .hidden + * { margin-top: auto; }
-/* reveal gives tables margin: auto for horizontal centring; on a .vc slide the auto bottom margin would
-   take a third of the free space and push a lone table up */
-.reveal .slides section.vc > table { margin-bottom: 0; }
+/* reveal gives tables margin: auto for horizontal centring; on a .vc slide its auto top and bottom margins
+   would also take shares of the free space: a lone table sits high, and on a lead, table, source slide the
+   space moves above the table while the source line touches it (issue #14). Tables on a .vc slide get a fixed
+   vertical margin instead (left and right stay auto); a table right after the title or the hidden macro block
+   keeps the auto top margin that centres the body, so lead, table, and source line form one centred block. */
+.reveal .slides section.vc > table { margin-top: .5em; margin-bottom: .5em; }
+.reveal .slides section.vc > h2 + table,
+.reveal .slides section.vc > h2 + .hidden + table { margin-top: auto; }
 .reveal .slides section.vc::after { content: ""; margin-bottom: auto; }
 
 /* Two side-by-side tables (design | methods compared) with equal rows and a clear gap.
@@ -106,6 +113,13 @@ html.print-pdf .reveal .slides section.vc { display: flex !important; flex-direc
 .reveal .columns.setting-pair > .column > table { width: 100%; font-size: .74em; margin: 0; box-sizing: border-box; }
 .setting-pair td, .setting-pair th { padding: .3em .5em; }
 .reveal .columns.setting-pair > .column + .column { margin-left: 2%; }
+
+/* Mathematics colours: \cB, \cO, \cG, \cP wrap a term in \class{deck-b|deck-o|deck-g|deck-p}{…} (MathJax),
+   so formulas take the palette from here, including a layer's palette (issue #14) */
+.reveal .deck-b { color: $deck-primary; }
+.reveal .deck-o { color: $deck-accent; }
+.reveal .deck-g { color: $deck-green; }
+.reveal .deck-p { color: $deck-purple; }
 
 /* Highlight only the numbers you discuss: the key value, the method you recommend, the failure */
 .hl-key  { color: $deck-primary; font-weight: 700; }

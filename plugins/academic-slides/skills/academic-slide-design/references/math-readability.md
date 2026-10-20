@@ -32,8 +32,8 @@ Typography lessons from Simon Mongey's quantitative macroeconomics lectures, plu
 ## Implementation
 
 - MathJax (Quarto):
-  - Define colors with `\definecolor{name}{RGB}{r,g,b}` inside the hidden macro block on the first content slide. Then define `\newcommand{\cB}[1]{{\color{name}{#1}}}`.
+  - Define the colour macros in the hidden macro block on the first content slide as CSS classes, `\newcommand{\cB}[1]{\class{deck-b}{#1}}`, and colour the classes in the theme (`.reveal .deck-b { color: $deck-primary; }`), so formulas follow the deck's palette.
   - Never write `#hex` inside `\newcommand`.
   - Define every operator you use, for example `\Var`, `\Cov`, `\argmax`. An undefined macro renders as red text.
-- beamer: use the same macro names, `\DeclareMathOperator` for operators, and the same RGB values.
+- beamer: use the same macro names, `\DeclareMathOperator` for operators, and `\definecolor{name}{RGB}{r,g,b}` with the palette's RGB values (beamer has no stylesheet).
 - Aligned derivations: align at `=`. Reveal a derivation one line at a time only when it is read in order; never reveal tables or figures piecemeal.

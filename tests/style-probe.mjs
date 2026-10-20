@@ -5,10 +5,16 @@
 //                             body text color, while an earlier body row keeps a 1px separator
 //   --vc-centred              on every {.vc} slide the body sits between title and footer: the gap above
 //                             it is at least half the gap below it (a body stuck under the title fails)
+//   --font-family <name>      the slides' computed font family must begin with this name (issue #14)
+//   --root-size <px>          the computed font size of .reveal must equal this value, e.g. 30px (issue #14)
+//   --math-color <rgb(...)>   the first \cB term (MathJax class deck-b) must render in this color, and no
+//                             formula may show a MathJax error (issue #14)
+//   --source-gap <min[-max]>  on every {.vc} slide, a .source line right after a table must sit at least
+//                             min px (not touching) and at most max px (not drifting off) below the table (issue #14)
 // Exits 0 when every requested check holds, 1 otherwise, 2 on bad arguments.
 import { args, deckPath, playwright, serve } from '../plugins/academic-slides/skills/slide-qa/scripts/_lib.mjs';
 
-const { get, has } = args('Usage: node style-probe.mjs --html talk.html [--title-color "rgb(r, g, b)"] [--table-rule] [--vc-centred]');
+const { get, has } = args('Usage: node style-probe.mjs --html talk.html [--title-color "rgb(r, g, b)"] [--table-rule] [--vc-centred] [--font-family NAME] [--root-size PX] [--math-color "rgb(r, g, b)"] [--source-gap MIN[-MAX]]');
 const html = get('html');
 if (!html) { console.error('--html is required'); process.exit(2); }
 const { root, name } = deckPath(html);
@@ -71,6 +77,53 @@ try {
     }
     if (stuck.length) { failures++; console.log(`✗ {.vc} slides not centred: ${stuck.join('; ')}`); }
     else console.log(`✓ ${indices.length} {.vc} slides are centred`);
+  }
+  const font = get('font-family');
+  if (font) {
+    const got = await page.evaluate(() => getComputedStyle(document.querySelector('.reveal .slides')).fontFamily);
+    const first = got.split(',')[0].trim().replace(/^["']|["']$/g, '');
+    if (first !== font) { failures++; console.log(`✗ font family: expected ${font} first, got ${got}`); }
+    else console.log(`✓ slides use ${font}`);
+  }
+  const size = get('root-size');
+  if (size) {
+    const got = await page.evaluate(() => getComputedStyle(document.querySelector('.reveal')).fontSize);
+    if (got !== size) { failures++; console.log(`✗ root font size: expected ${size}, got ${got}`); }
+    else console.log(`✓ root font size is ${size}`);
+  }
+  const math = get('math-color');
+  if (math) {
+    // MathJax typesets after Reveal is ready; wait for it before reading the formula
+    await page.waitForFunction(() => window.MathJax && window.MathJax.startup && window.MathJax.startup.promise, null, { timeout: 15000 }).catch(() => {});
+    await page.evaluate(() => window.MathJax?.startup?.promise);
+    const m = await page.evaluate(() => {
+      const el = document.querySelector('mjx-container .deck-b');
+      return { color: el && getComputedStyle(el).color, errors: document.querySelectorAll('mjx-merror').length };
+    });
+    if (!m.color) { failures++; console.log('✗ math color: no \\cB term (class deck-b) in any formula'); }
+    else if (m.color !== math || m.errors) { failures++; console.log(`✗ math color: \\cB renders ${m.color} (want ${math}); ${m.errors} MathJax errors`); }
+    else console.log(`✓ \\cB terms render in ${math}; no MathJax errors`);
+  }
+  const gap = get('source-gap');
+  if (gap) {
+    const [want, most] = gap.split('-').map(Number);
+    const indices = await page.evaluate(() => window.Reveal.getSlides()
+      .filter((sl) => sl.classList.contains('vc') && sl.querySelector(':scope > table + .source')).map((sl) => window.Reveal.getIndices(sl)));
+    const tight = [];
+    for (const idx of indices) {
+      await page.evaluate(({ h, v }) => window.Reveal.slide(h, v ?? 0), idx);
+      await page.waitForTimeout(400);
+      const g = await page.evaluate(() => {
+        const sl = window.Reveal.getCurrentSlide();
+        const src = sl.querySelector(':scope > table + .source');
+        const table = src.previousElementSibling;
+        return { title: sl.querySelector('h2')?.textContent.trim() ?? '(no title)', gap: src.getBoundingClientRect().top - table.getBoundingClientRect().bottom };
+      });
+      if (g.gap < want || (most && g.gap > most)) tight.push(`${g.title} (${g.gap.toFixed(1)} px)`);
+    }
+    if (!indices.length) { failures++; console.log('✗ source gap: no {.vc} slide with a table followed by a .source line'); }
+    else if (tight.length) { failures++; console.log(`✗ source line not right below the table (want ${want}${most ? `–${most}` : '+'} px): ${tight.join('; ')}`); }
+    else console.log(`✓ ${indices.length} {.vc} slides keep the source line ${want}${most ? `–${most}` : '+'} px below the table`);
   }
 } finally {
   await browser.close();

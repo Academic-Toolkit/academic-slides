@@ -40,6 +40,7 @@ for TPL in $(find "$TEMPLATES_DIR/quarto" -mindepth 1 -maxdepth 1 -type d ! -nam
   check "check-layout (screen and PDF print view)" node "$QA/check-layout.mjs" --out "$WORK/qa-$TPL"
   check "check-mathjax" node "$QA/check-mathjax.mjs"
   if [ "$TPL" = research-talk ]; then
+    check "formulas take the official palette" node "$PROBE" --html talk.html --math-color 'rgb(31, 78, 121)'
     check "check-density with the beamer title comparison" node "$QA/check-density.mjs" --qmd talk.qmd --tex "$TEMPLATES_DIR/beamer/talk.tex"
   else
     check "check-density" node "$QA/check-density.mjs" --qmd talk.qmd
@@ -51,15 +52,27 @@ for TPL in $(find "$TEMPLATES_DIR/quarto" -mindepth 1 -maxdepth 1 -type d ! -nam
   else echo "  ✓ check-fill: no sparse slide without roomy or vc"; fi
   check "table rules" node "$PROBE" --html talk.html --table-rule
   check "centred {.vc} slides" node "$PROBE" --html talk.html --vc-centred
+  # results-report has lead, table, source slides: the source line sits right below its table (issue #14)
+  [ "$TPL" = results-report ] && check "source lines sit right below their tables" node "$PROBE" --html talk.html --source-gap 12-40
 done
 
 echo "== personal theme override"
 OHOME="$WORK/home-override"
 mkdir -p "$OHOME/.claude/.academic-slides"
-printf '/*-- scss:defaults --*/\n$deck-primary: #8b0000;\n' >"$OHOME/.claude/.academic-slides/theme.scss"
+# Every scss:defaults value in deck.scss is !default, so a layer can set fonts and sizes as well as the palette,
+# and the colour macros take the palette through CSS classes (issue #14)
+cat >"$OHOME/.claude/.academic-slides/theme.scss" <<'SCSS'
+/*-- scss:defaults --*/
+$deck-primary: #8b0000;
+$font-family-sans-serif: "Times New Roman", serif;
+$presentation-font-size-root: 30px;
+SCSS
 DECK="$OHOME/decks/override"
-if build "$OHOME" "$DECK"; then
+if build "$OHOME" "$DECK" --template research-talk; then
   check "slide titles take the personal palette" node "$PROBE" --html talk.html --title-color 'rgb(139, 0, 0)'
+  check "slides take the personal font" node "$PROBE" --html talk.html --font-family 'Times New Roman'
+  check "slides take the personal root size" node "$PROBE" --html talk.html --root-size 30px
+  check "formulas take the personal palette" node "$PROBE" --html talk.html --math-color 'rgb(139, 0, 0)'
   cmp -s "$DECK/_theme/deck.scss" "$TEMPLATES_DIR/quarto/_theme/deck.scss" && echo "  ✓ _theme/deck.scss is the plugin's copy" || fail "_theme/deck.scss differs from the plugin's"
 fi
 

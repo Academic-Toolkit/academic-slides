@@ -66,17 +66,22 @@ Settings values are plain text: `<`, `{`, `[`, `]`, `&`, backslashes, backticks,
 
 ### Theme overrides
 
-A layer's `theme.scss` is copied into the deck as `theme/personal.scss` or `theme/project.scss` and listed after `_theme/deck.scss`. The five palette variables in `deck.scss` are `!default`, so an override only names what it changes:
+A layer's `theme.scss` is copied into the deck as `theme/personal.scss` or `theme/project.scss` and listed after `_theme/deck.scss`. Every variable `deck.scss` sets in `scss:defaults` is `!default` — the five palette colours, the background, body, link and heading colours, the font family, the root and heading sizes, and the heading weight — so an override only names what it changes:
 
 ```scss
 /*-- scss:defaults --*/
 $deck-primary: #8b0000;
+$font-family-sans-serif: "Noto Serif TC", serif;
+$presentation-font-size-root: 30px;
 
 /*-- scss:rules --*/
 .reveal h2 { letter-spacing: .01em; }
+.reveal .eyebrow { color: $deck-accent; }
 ```
 
-Only these five variables can be overridden from a layer: every other variable `deck.scss` sets in `scss:defaults` (fonts, sizes, link and heading colours) wins over a layer's value, silently. An override also cannot refer to a `$deck-*` variable inside `scss:defaults` (write `#8b0000`, not `$deck-primary`), because Quarto places a later file's defaults before `deck.scss` defines them.
+Inside `scss:defaults` an override cannot refer to a `$deck-*` variable (write `#8b0000`, not `$deck-primary`): Quarto compiles a later file's defaults before `deck.scss` defines them. It rarely needs to: the body, link and heading colours are derived from the palette in `deck.scss`, so changing `$deck-primary` moves them too. In `scss:rules`, which comes after every file's defaults, `$deck-*` can be used freely, as in the `.eyebrow` rule above. A deck's own components (classes the official theme does not have) belong in that `scss:rules` section, so the layer holds only what differs from the official theme.
+
+Mathematics takes the palette too: `\cB`, `\cO`, `\cG`, and `\cP` wrap a term in the classes `deck-b`, `deck-o`, `deck-g`, and `deck-p`, which `deck.scss` colours with `$deck-primary`, `$deck-accent`, `$deck-green`, and `$deck-purple` (issue #14). The beamer mirror has no stylesheet: a layer's palette does not reach it (issue #21), so recolour its four `\definecolor{deck?}{RGB}{…}` lines by hand.
 
 Never copy the whole `deck.scss` into a template or a layer. A template's own `deck.scss` or `_theme/` is ignored with a warning.
 
@@ -91,7 +96,7 @@ The project layer is found by walking up from the deck folder, so it can come fr
 ## After scaffolding
 
 1. **Front matter**: `title`, `subtitle`, `author`, `institute`, `date` in `talk.qmd`; `footer` in `_quarto.yml`. The settings above fill the ones you set; edit the rest by hand. In the beamer file: `\title`, `\author`, `\date`, and the `frame footer`.
-2. **Palette**: for every deck, put the five `$deck-*` values in your personal `theme.scss`; for one deck, edit the deck's `theme/personal.scss` (or `theme/project.scss`) when it has one, because a layer override wins over `deck.scss`; otherwise change the five values at the top of the deck's own `_theme/deck.scss` (that copy belongs to the deck). Mathematics is coloured separately: the four `\definecolor{deck?}{RGB}{…}` lines in the hidden block on the first content slide, and the same lines in the beamer file, must hold the same RGB values.
+2. **Palette**: for every deck, put the five `$deck-*` values in your personal `theme.scss`; for one deck, edit the deck's `theme/personal.scss` (or `theme/project.scss`) when it has one, because a layer override wins over `deck.scss`; otherwise change the five values at the top of the deck's own `_theme/deck.scss` (that copy belongs to the deck). Formulas follow the palette through the colour macros; only the beamer file needs its four `\definecolor{deck?}{RGB}{…}` lines changed to the same RGB values.
 3. **Macros**: add any macro the talk uses to the hidden MathJax block and to the beamer preamble under the same name. Never write `#hex` inside a `\newcommand` body; `#` is the parameter character, and every formula that uses the macro breaks.
 4. **Slides**: one `##` per slide, `#` for section dividers, and a final `# Backup` section. Everything after `# Backup` (Quarto) or `\appendix` (beamer) is excluded from the density limits and the title comparison. Keep that divider in English in Chinese decks too: `check-density` recognises only `Backup` (issue #9).
 
