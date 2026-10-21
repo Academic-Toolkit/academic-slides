@@ -209,6 +209,16 @@ test('handout: --portrait puts 3 rows × 2 columns on a portrait A4 page', { ski
   near(firstDark(r, { col: 25 }), 65.4, 0.3);
 });
 
+test('handout: --rows and --cols set a custom grid, bound here by the height', { skip }, () => {
+  const deck = fixture();
+  const out = path.join(fixtureDir, 'custom.pdf');
+  const { code, out: log } = runHandout(['--pdf', deck, '--out', out, '--portrait', '--rows', '4', '--cols', '1']);
+  assert.equal(code, 0, log);
+  assert.match(log, /4 rows × 1 column,/);
+  assert.match(log, /103\.6 × 58\.3 mm/);
+  assert.equal(pdfinfo(out).pages, 2);
+});
+
 test('handout: --no-frame leaves the slide edge unmarked', { skip }, () => {
   const deck = fixture();
   const out = path.join(fixtureDir, 'noframe.pdf');

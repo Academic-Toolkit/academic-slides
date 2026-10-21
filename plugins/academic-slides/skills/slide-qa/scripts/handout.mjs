@@ -105,5 +105,6 @@ for (let pass = 1; pass <= 2; pass++) {
 copyFileSync(path.join(work, 'handout.pdf'), OUT);
 rmSync(work, { recursive: true, force: true });
 const sheets = Math.ceil(pages / (rows * cols));
-console.log(`✓ wrote ${OUT} (${pages} slides on ${sheets} ${orientation} A4 page${sheets > 1 ? 's' : ''}, `
-  + `${rows} rows × ${cols} columns, each slide ${g.slideW.toFixed(1)} × ${g.slideH.toFixed(1)} mm)`);
+const count = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;
+console.log(`✓ wrote ${OUT} (${count(pages, 'slide')} on ${count(sheets, `${orientation} A4 page`)}, `
+  + `${count(rows, 'row')} × ${count(cols, 'column')}, each slide ${g.slideW.toFixed(1)} × ${g.slideH.toFixed(1)} mm)`);
