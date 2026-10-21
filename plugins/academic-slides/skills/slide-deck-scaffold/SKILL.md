@@ -18,6 +18,21 @@ description: Start a new deck from one of four Quarto revealjs templates on one 
 
 The demo content is neutral (textbook models, made-up placeholders such as `x.xx`). Replace it, and keep a pattern's structure only where the talk needs it. For the reasoning behind the patterns, see the `academic-slide-design` skill.
 
+## Step 0: task list
+
+Turn the steps below into a task list before starting. If the session provides `TaskCreate` and `TaskUpdate`, create one task per step, set it to in progress when you start it, and mark it completed as soon as it is done. If those tools are not available, write the same list in your reply and tick it off there. A step that failed or was skipped is never marked completed; it stays open and is reported. When the deck has no beamer mirror, leave that task out rather than marking it completed.
+
+```
+TaskCreate(subject="Choose the template", description="scaffold.mjs --list; --dry-run shows what would be written")
+TaskCreate(subject="Scaffold the deck", description="scaffold.mjs --out <folder>, exit 0; quarto render produces the .html")
+TaskCreate(subject="Front matter", description="After scaffolding, item 1: title, subtitle, author, institute, date, footer")
+TaskCreate(subject="Palette", description="After scaffolding, item 2: the five $deck-* values in the right layer")
+TaskCreate(subject="Macros", description="After scaffolding, item 3: every macro in the MathJax block and, with a mirror, the beamer preamble")
+TaskCreate(subject="Slide structure and timing", description="After scaffolding, item 4: one ## per slide, # Backup at the end; minutes fit the slot minus a buffer")
+TaskCreate(subject="Beamer mirror", description="only with a mirror: titles match in order, XeLaTeX twice, 0 errors and 0 overfull boxes")
+TaskCreate(subject="Run slide-qa", description="the slide-qa skill, with its own task list")
+```
+
 ## Start a deck
 
 ```bash
