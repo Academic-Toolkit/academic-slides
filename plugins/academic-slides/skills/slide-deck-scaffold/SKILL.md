@@ -66,17 +66,24 @@ Settings values are plain text: `<`, `{`, `[`, `]`, `&`, backslashes, backticks,
 
 ### Theme overrides
 
-A layer's `theme.scss` is copied into the deck as `theme/personal.scss` or `theme/project.scss` and listed after `_theme/deck.scss`. The five palette variables in `deck.scss` are `!default`, so an override only names what it changes:
+A layer's `theme.scss` is copied into the deck as `theme/personal.scss` or `theme/project.scss` and listed after `_theme/deck.scss`. Every variable `deck.scss` sets in `scss:defaults` is `!default` — the five palette colours, the background, body, link and heading colours, the font family, the root and heading sizes, and the heading weight — so an override only names what it changes. Write each value with `!default` too:
 
 ```scss
 /*-- scss:defaults --*/
-$deck-primary: #8b0000;
+$deck-primary: #8b0000 !default;
+$font-family-sans-serif: "Noto Serif TC", serif !default;
+$presentation-font-size-root: 30px !default;
 
 /*-- scss:rules --*/
 .reveal h2 { letter-spacing: .01em; }
+.reveal .eyebrow { color: $deck-accent; }
 ```
 
-Only these five variables can be overridden from a layer: every other variable `deck.scss` sets in `scss:defaults` (fonts, sizes, link and heading colours) wins over a layer's value, silently. An override also cannot refer to a `$deck-*` variable inside `scss:defaults` (write `#8b0000`, not `$deck-primary`), because Quarto places a later file's defaults before `deck.scss` defines them.
+Why `!default` in a layer: Quarto compiles the `scss:defaults` of the theme list in reverse, so `theme/project.scss` comes first, then `theme/personal.scss`, then `_theme/deck.scss`. With `!default` the first value set wins, which gives project over personal over official. With a plain assignment the last one wins, so a personal value would silently beat the project's (measured with Quarto 1.10.19, issue #14). `scss:rules` run the other way round, in list order, so a project rule already comes after a personal one and wins.
+
+Inside `scss:defaults` an override cannot refer to a `$deck-*` variable (write `#8b0000`, not `$deck-primary`): Quarto compiles a later file's defaults before `deck.scss` defines them. It rarely needs to: the body, link and heading colours are derived from the palette in `deck.scss`, so changing `$deck-primary` moves them too. In `scss:rules`, which comes after every file's defaults, `$deck-*` can be used freely, as in the `.eyebrow` rule above. A deck's own components (classes the official theme does not have) belong in that `scss:rules` section, so the layer holds only what differs from the official theme.
+
+Mathematics takes the palette too: `\cB`, `\cO`, `\cG`, and `\cP` wrap a term in the classes `deck-b`, `deck-o`, `deck-g`, and `deck-p`, which `deck.scss` colours with `$deck-primary`, `$deck-accent`, `$deck-green`, and `$deck-purple` (issue #14). The beamer mirror has no stylesheet: a layer's palette does not reach it (issue #21), so recolour its four `\definecolor{deck?}{RGB}{…}` lines by hand.
 
 Never copy the whole `deck.scss` into a template or a layer. A template's own `deck.scss` or `_theme/` is ignored with a warning.
 
@@ -91,9 +98,31 @@ The project layer is found by walking up from the deck folder, so it can come fr
 ## After scaffolding
 
 1. **Front matter**: `title`, `subtitle`, `author`, `institute`, `date` in `talk.qmd`; `footer` in `_quarto.yml`. The settings above fill the ones you set; edit the rest by hand. In the beamer file: `\title`, `\author`, `\date`, and the `frame footer`.
-2. **Palette**: for every deck, put the five `$deck-*` values in your personal `theme.scss`; for one deck, edit the deck's `theme/personal.scss` (or `theme/project.scss`) when it has one, because a layer override wins over `deck.scss`; otherwise change the five values at the top of the deck's own `_theme/deck.scss` (that copy belongs to the deck). Mathematics is coloured separately: the four `\definecolor{deck?}{RGB}{…}` lines in the hidden block on the first content slide, and the same lines in the beamer file, must hold the same RGB values.
+2. **Palette**: for every deck, put the five `$deck-*` values in your personal `theme.scss`; for one deck, edit the deck's `theme/personal.scss` (or `theme/project.scss`) when it has one, because a layer override wins over `deck.scss`; otherwise change the five values at the top of the deck's own `_theme/deck.scss` (that copy belongs to the deck). Formulas follow the palette through the colour macros; only the beamer file needs its four `\definecolor{deck?}{RGB}{…}` lines changed to the same RGB values.
 3. **Macros**: add any macro the talk uses to the hidden MathJax block and to the beamer preamble under the same name. Never write `#hex` inside a `\newcommand` body; `#` is the parameter character, and every formula that uses the macro breaks.
 4. **Slides**: one `##` per slide, `#` for section dividers, and a final `# Backup` section. Everything after `# Backup` (Quarto) or `\appendix` (beamer) is excluded from the density limits and the title comparison. Keep that divider in English in Chinese decks too: `check-density` recognises only `Backup` (issue #9).
+
+## Page, margins and cover
+
+On screen the slide is a page on a dark window. The page is the slide × (1 + `margin`), where `margin` is the revealjs setting in `_quarto.yml` (0.18 in every template): width and height grow by the same factor, so the page stays 16:9 and each side gets about 7.6 % of the page. The PDF page is the same size, so the screen and the PDF have the same margins. The content area is still 1280 by 720, so page heights and font sizes are measured as before (issue #23).
+
+- `_theme/frame.html`, copied by the scaffold like `deck.scss` and included with `include-after-body`, reads the margin and puts the footer, the slide number and the menu button in the page's bottom margin, aligned with the content area. Keep `menu: true`: the menu button opens the deck's slide list.
+- To change the margins, change `margin` in `_quarto.yml`; the page, the footer and the PDF follow it. revealjs's own default, 0.1, leaves about 4.5 %.
+- The window colour is `$deck-frame-bg` (default `#161616`), which a layer can set in `scss:defaults`; the page takes `$body-bg`.
+- A `{.vc}` slide centres its body between the title and the slide's bottom edge, keeping the same 1.1em at the bottom as every other slide; the footer no longer sits on the slide.
+- **Cover.** Quarto's title slide, built from `title`, `subtitle`, `author` and `date`, stays as it is. When the first slide must hold something the title slide cannot, such as a version line or a download button, write it yourself and put the page title in `pagetitle:` instead of `title:`, so that Quarto adds no title slide of its own:
+
+  ```markdown
+  ## Talk title {.cover}
+
+  [Series · Session]{.eyebrow}
+
+  [Speaker　Institution]{.sub}
+
+  [One sentence on the question this talk answers.]{.lead}
+  ```
+
+  The block is centred vertically and left aligned, the eyebrow line moves above the title, and the title size is `$deck-cover-title-size` (default 2.4em).
 
 ## Components (Quarto class → beamer counterpart)
 
@@ -144,4 +173,4 @@ Run the checks in the `slide-qa` skill: layout, MathJax, density with the title 
 
 ## A deck made earlier
 
-A deck keeps the copy of the theme it was created with: `_theme/deck.scss`, or `theme/deck.scss` in a deck made before version 0.2.0. A later fix to the plugin's theme (the PDF print rules from issue #5, the table bottom rule and `.vc` centring from issue #8) does not reach it; copy the rules from this skill's `templates/quarto/_theme/deck.scss`. Issue #10 tracks a command that does this.
+A deck keeps the copy of the theme it was created with: `_theme/deck.scss`, or `theme/deck.scss` in a deck made before version 0.2.0. A later fix to the plugin's theme (the PDF print rules from issue #5, the table bottom rule and `.vc` centring from issue #8, the overridable defaults, formula colour classes and `.vc` table margins from issue #14, the page, the cover and `_theme/frame.html` from issue #23) does not reach it. A deck made before 0.4.0 has no `_theme/frame.html` and no `margin` line; copying the new `deck.scss` alone draws a page while the footer stays against the window, so copy `frame.html` and add the `margin` and `include-after-body` lines from a template's `_quarto.yml` as well. A deck made before 0.3.0 keeps its `\definecolor` macros, which still work; if you copy the new `\class` macros into such a deck, copy the `.deck-b` … `.deck-p` rules from the theme too, or the formulas lose their colour without any error; copy the rules from this skill's `templates/quarto/_theme/deck.scss`. Issue #10 tracks a command that does this.

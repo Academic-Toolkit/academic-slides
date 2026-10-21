@@ -53,11 +53,11 @@ The templates live in `plugins/academic-slides/skills/slide-deck-scaffold/templa
 | `results-report` | Traditional Chinese | results in tables, no mathematics |
 | `lecture` | Traditional Chinese | a class: objectives, definition, worked example, in-class question, recap |
 
-`templates/quarto/_theme/deck.scss` is the only stylesheet; a template folder holds just `_quarto.yml` and `talk.qmd`.
+`templates/quarto/_theme/deck.scss` is the only stylesheet, and `_theme/frame.html` places the footer, slide number and menu button on the page (the slide is shown as a 16:9 page with margins on a dark window; `margin` in `_quarto.yml` sets the margins on screen and in the PDF); a template folder holds just `_quarto.yml` and `talk.qmd`.
 
 `scaffold.mjs` merges three layers field by field — project over personal over official:
 
-- **personal**: `~/.claude/.academic-slides/` with `local.json` (`template`, `lang`, `author`, `affiliation`, `footer`), `theme.scss` (palette overrides), and `templates/<name>/` (your own templates);
+- **personal**: `~/.claude/.academic-slides/` with `local.json` (`template`, `lang`, `author`, `affiliation`, `footer`), `theme.scss` (theme overrides: palette, fonts, sizes, and your own components; every `scss:defaults` value of the official theme can be overridden; write values with `!default` so that project beats personal), and `templates/<name>/` (your own templates);
 - **project**: the nearest `.claude/.academic-slides/` above the deck folder, for one project's exceptions (`"author": null` removes the author line). Its template and `theme.scss` are used only with `--trust-project`, because that folder may come from a repository you did not write.
 
 Details, including what a personal template must contain, are in `slide-deck-scaffold/SKILL.md`.

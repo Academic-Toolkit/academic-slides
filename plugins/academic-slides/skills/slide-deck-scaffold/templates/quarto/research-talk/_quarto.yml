@@ -9,6 +9,7 @@ format:
     theme: [default, _theme/deck.scss]
     width: 1280
     height: 720
+    margin: 0.18          # the page around the slide: page = slide × 1.18, on screen and in the PDF (issue #23)
     slide-number: c/t
     menu: true
     progress: true
@@ -18,3 +19,4 @@ format:
     background-transition: fade
     footer: "Venue · Date"
     html-math-method: mathjax
+    include-after-body: _theme/frame.html   # places the footer, slide number and menu button on the page

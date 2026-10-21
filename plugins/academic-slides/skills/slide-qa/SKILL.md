@@ -28,6 +28,8 @@ Why both a pixel check and a DOM check: an opaque footer hides overflowing conte
 
 Why a second pass in the print view: the PDF is laid out differently from the screen. Revealjs's print stylesheet sets every slide's padding to 0, the slide is not scaled, and the footer is placed on the paper rather than in the browser window. A slide that is clean on screen can therefore run into the footer in the PDF. `check-layout.mjs` opens the same print view that `export-pdf.mjs` prints, so a deck it passes prints with no content running into the footer, past the right edge, or onto a second title line. It does not check other overlaps (for example one figure over another), and it does not check the slide number.
 
+A deck shown as a page (issue #23) puts the footer in the page margin below the slide. On screen, checks 1 and 2 therefore use the footer's top or the slide's bottom edge, whichever is higher, so content that runs past the slide is still caught; the reference colour for check 1 is taken just left of the slide, inside the page margin, not at the window's edge, which has its own colour.
+
 What `check-density.mjs` counts: English body words and bullet lines on each main-body slide. It does not count speaker notes, hidden blocks, source lines, side notes, mathematics, tables, images, or markup. The main body ends at a level-1 section whose title starts with "Backup" (Quarto) or at `\appendix` (beamer).
 
 ## Workflow
@@ -52,4 +54,4 @@ For each failure, see [references/fix-table.md](references/fix-table.md). It lis
 - `check-fill.mjs` measures geometry only. A low fill on a closing slide such as "Thank you" is expected.
 - Title comparison normalizes case, punctuation, dashes, `\emph`, and inline math. A deliberate wording difference between the two decks will still be reported.
 - If a newer Quarto release changes the revealjs DOM, update the selectors at the top of each script.
-- A deck keeps its own copy of the shared theme: `_theme/deck.scss`, or `theme/deck.scss` in a deck made before version 0.2.0. A later fix to the plugin's theme, such as the print rules for `.vc` slides and the footer (issue #5) or the table bottom rule (issue #8), does not reach an existing deck; copy the rules from the plugin's `slide-deck-scaffold/templates/quarto/_theme/deck.scss` into it (issue #10 tracks a command that does this).
+- A deck keeps its own copy of the shared theme: `_theme/deck.scss`, or `theme/deck.scss` in a deck made before version 0.2.0. A later fix to the plugin's theme, such as the print rules for `.vc` slides and the footer (issue #5) the table bottom rule (issue #8), or the formula colour classes and overridable defaults (issue #14), does not reach an existing deck; copy the rules from the plugin's `slide-deck-scaffold/templates/quarto/_theme/deck.scss` into it (issue #10 tracks a command that does this).

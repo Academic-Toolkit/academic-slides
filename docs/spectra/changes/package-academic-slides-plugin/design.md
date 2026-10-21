@@ -68,7 +68,7 @@ Playwright 用動態 import；找不到時印出安裝指令並以狀態 1 結�
   - 版面：.roomy-1/2/3、.vc、.setting-pair、.fig-row。
   - 頁尾：footer 不透明底與頁尾留白。
 - 丟棄只屬於課程或該場演講的 class：.sim-tag、.demo-tag、.gate-*、.shot-*、.op-cue、.sim-embed、.compare-box、.big。
-- MathJax 巨集放在第一張內容頁的 hidden 區塊，色名用 \definecolor{deckB}{RGB}{…}（巨集內不可寫 #hex）。
+- MathJax 巨集放在第一張內容頁的 hidden 區塊（巨集內不可寫 #hex）。0.3.0 起 Quarto 範本的色彩巨集用 \class 對到樣式表的色票，不再用 \definecolor（D14）。
 - beamer 範本用同一組 RGB 與同名巨集（\cB \cO \cG \cP、\takeaway、\sourceline、\algobox、\bibent），標題與 qmd 主體一對一，讓 check-density 的標題對照可用。
 
 ### D5. 從審閱回饋泛化的版面規則寫進 academic-slide-design
@@ -129,11 +129,53 @@ booktabs 的三條線：表頭上方 2px、表頭下方 1.5px、最後一列下�
 - repo 根目錄放 `templates` 符號連結，指向 `plugins/academic-slides/skills/slide-deck-scaffold/templates`。安裝 plugin 時只複製 `plugins/academic-slides/`，所以連結不影響使用者；README 仍寫出真正的路徑，給不支援符號連結的環境。
 - 測試放在 repo 根目錄 `tests/`（不隨 plugin 發布）：`node --test tests/` 跑 scaffold 的單元與命令列測試；`tests/render-templates.sh` 用 Quarto 與 Playwright 實際 render 四個範本並跑檢查。Playwright 以根目錄 `package.json` 的 devDependency 安裝，`node_modules/` 不進 git。
 
+### D13. 主題的預設值全部可以由設定層覆寫（issue #14）
+
+- Quarto 把主題清單各檔的 `scss:defaults` 依「後面的檔先」串接，所以設定層的 `theme/personal.scss`、`theme/project.scss` 先於 `_theme/deck.scss` 編譯。後到的一般賦值會蓋掉先到的值，`!default` 則讓位給先到的值。#8 只給五個色票加 `!default`，其餘八個預設值（`$body-bg`、`$body-color`、`$link-color`、`$presentation-heading-color`、`$font-family-sans-serif`、`$presentation-font-size-root`、`$presentation-heading-font-weight`、`$presentation-h2-font-size`）因此一律蓋掉設定層的值，而且沒有任何警告。實測（Quarto 1.10.19）：個人層設 `"Times New Roman", serif` 與 `30px`，編譯後的 CSS 仍是 Avenir Next 與 28px。
+- 決定：`deck.scss` 在 `scss:defaults` 設的每一個變數都加 `!default`。設定層本來就是用來覆寫的，沒有哪一個值需要鎖住；只開放字型會讓字級與顏色留著同樣的靜默失效。
+- 設定層的 `scss:defaults` 仍不能引用 `$deck-*`：那段會在 `deck.scss` 定義色票之前編譯，這是 Quarto 的排列方式，主題裡改不了。兩點讓它不再造成問題：`deck.scss` 的衍生值（內文、連結、標題顏色）本來就由色票算出，設定層只改 `$deck-primary`，它們會跟著變；`scss:rules` 在所有檔的 defaults 之後編譯，設定層可以在那裡使用 `$deck-*`。SKILL 寫明這兩點。
+- 設定層自己的 `scss:defaults` 也要寫 `!default`（verify 第 1 輪）。主題清單是 `default, _theme/deck.scss, theme/personal.scss, theme/project.scss`，Quarto 把 defaults 倒過來串，專案層最先編譯。設定層用一般賦值時最後的贏，個人層會蓋掉專案層，與 D9「專案 > 個人 > 官方」相反；實測（Quarto 1.10.19）個人 #8b0000、30px 蓋過專案 #006400、24px。設定層也寫 `!default` 時最先設的贏，專案層優先。`scss:rules` 依清單順序串，本來就是專案層在後、優先。不採用：調換清單順序，那會讓 rules 換成個人層優先，只是把問題移到另一邊。
+- 頁尾的半透明底由 `$body-bg` 算出（verify 第 1 輪），設定層改底色時頁尾不會留一塊白。
+
+### D14. 公式顏色由樣式表決定（issue #14）
+
+- 原本三個有數學的範本（research-talk、short-talk、lecture）在隱藏區塊裡用 `\definecolor{deckB}{RGB}{31,78,121}` 等四行定義顏色，`\cB` 到 `\cP` 引用這些名稱，等於色票的第二份副本，設定層碰不到。
+- 決定：`\cB`、`\cO`、`\cG`、`\cP` 改為 `\class{deck-b}{#1}` 等四個 class（MathJax 的 `html` 擴充，Quarto 載入的 MathJax 會自動載入），`deck.scss` 的 `scss:rules` 給 `.deck-b`、`.deck-o`、`.deck-g`、`.deck-p` 四個色票顏色。色票因此只有一個來源。實測：個人層設 `$deck-primary: #8b0000` 時，`\cB{x}` 渲染為 `rgb(139, 0, 0)`，沒有 `mjx-merror`。
+- beamer 鏡像沒有樣式表，保留 `\definecolor`，數值與官方色票相同；設定層的色票到不了 beamer，另由 issue #21 追蹤。
+- 不採用：scaffold 讀設定層的 SCSS、改寫 `\definecolor` 的 RGB。那會留下兩份色票，而 SCSS 的值不一定是十六進位字面值（可以是函式或顏色名稱）。
+
+### D15. `.vc` 頁上的表格用固定的上下邊距（issue #14）
+
+- reveal 給表格 `margin: auto` 讓它水平置中；在 `.vc` 頁的 flex 欄裡，這個 auto 的上下邊距也會分走置中用的空白。#8 的 `section.vc > table { margin-bottom: 0 }` 只拿掉下邊距，套在每一張直屬的表格上：「導言、表格、出處」的頁上，表格的 auto 上邊距仍分走空白（空白移到表格上方），出處貼著表格（實測 6 px，results-report 的兩張頁）。
+- 只把那條規則收窄到「唯一的表格」也不對：實測出處會飄到表格下方 86–101 px，因為表格的 auto 上下邊距仍在分空白。
+- 決定：`.vc` 頁上的表格改用固定的上下邊距（0.5em），左右仍是 auto（水平置中不變）；緊接在標題、隱藏巨集區塊或講者備註後面的表格保留 auto 上邊距，由它把內文推到中間。導言、表格、出處因此是一個整塊置中，出處在表格下方約 19 px；只有一張表格的頁照樣置中。
+- 更正（verify 第 1 輪）：results-report 的兩張頁其實是「標題、表格、出處」，沒有導言；第一版說它們是「導言、表格、出處」是錯的，`.5em` 那條規則當時沒有被 render 測到。render 測試另加固定頁面：一張「導言、表格、出處」（`--source-gap 12-40`），一張「講者備註寫在表格前」的單一表格（`--vc-centred`；修正前上方 31 px、下方 445 px，沒有置中）。results-report 本身的 `--source-gap 12-40` 保留。
+
+### D16. Implementation Contract 描述實際的 render 檢查（issue #14）
+
+#8 之後範本資料夾沒有自己的主題（`_theme/` 在上一層，由 scaffold 複製），把範本資料夾複製一份就地 render 已不成立。`tests/render-templates.sh` 的做法是先用 scaffold 從每個範本建立投影片，再 render 那份投影片。契約改寫成這個流程，範本資料夾不改成可以原地 render。
+
+### D17. 投影片顯示成一張 16:9 的紙（issue #23）
+
+- revealjs 把 1280×720 的畫布縮放進視窗、`$body-bg` 鋪滿整個視窗，螢幕上看不出投影片的邊界；內容從畫布的 x = 0 開始，唯一的留白是畫布外 0.1 的 margin，顏色又和投影片一樣。手刻的 1920×1080 deck 左右各留約 150 px（7.8 %）、上方約 88 px。
+- 決定：紙＝投影片 ×(1 + margin)，margin 用 revealjs 自己的設定（範本 0.18）。寬高同比例放大，所以紙仍是 16:9、四邊各約 7.6 %；revealjs 印 PDF 時每頁本來就是投影片 ×(1 + margin)，所以螢幕與 PDF 的留白相同，只有一個設定。內容區仍是 1280×720，頁高與字級的量測與既有 deck 一致。紙在螢幕上的佔比是 (1 − m)(1 + m) = 1 − m²，永遠放得進視窗。
+- 不採用：把留白做成 section 的 padding。那會縮小內容區，每份既有 deck 的頁高預算都要重算，且 `.vc`、print 的高度規則都要跟著改。
+- 頁尾、頁碼、選單鈕原本貼著視窗；`_theme/frame.html` 依 margin 算出紙的範圍，把它們放進紙底留白、對齊內容區左右緣。列印模式看網址的 `?print-pdf`（revealjs 自己也這樣判斷）：revealjs 先觸發 ready 才加 `print-pdf` class，只看 class 會晚一步把頁尾推出頁底，Chrome 列印時每頁重複 `position: fixed` 元素，頁尾就落到下一頁頂端（實測）。
+- 頁尾不再在投影片上，`.vc` 底部為它保留的 64 px 改回與一般頁相同的 1.1em。
+
+### D18. 自寫封面 `{.cover}`（issue #23）
+
+Quarto 的標題頁由 front matter 產生，放不進版本行或下載鈕；要放這些東西的 deck 只能自寫第一張，原本被當成內容頁貼頂、下半頁空白。`{.cover}` 讓整塊垂直置中、靠左，`[..]{.eyebrow}` 寫在標題後也移到標題上方，標題字級是 `$deck-cover-title-size`。Quarto 的標題頁不變。
+
+### D19. slide-qa 在紙面版型下的量法（issue #23）
+
+`check-layout.mjs` 的頁尾帶像素檢查原本拿視窗 x = 8 當背景色參考；視窗外圈有自己的顏色之後，每一頁都被誤報（實測 16/16 頁）。參考點改取投影片左緣外 14 px，有紙時落在紙的留白、沒有紙時是投影片底色。頁尾移到紙底之後，「內容壓到頁尾」會變寬鬆，所以螢幕上的界線改為頁尾頂端與投影片下緣取較高者；`style-probe --vc-centred` 同樣處理。
+
 ## Implementation Contract
 
 **Behavior：**
 - `claude plugin validate --strict plugins/academic-slides` 與 `claude plugin validate --strict .`（marketplace）都通過。
-- 在範本資料夾複本中執行 `quarto render`，產生 talk.html；check-layout、check-density、check-mathjax 都以狀態 0 結束；以 XeLaTeX 編譯 beamer 範本，0 error、0 overfull，check-density 印出「N/N titles match」。
+- 用 `scaffold.mjs` 從每個範本建立投影片、在該資料夾執行 `quarto render`（`tests/render-templates.sh`，D16），產生 talk.html；check-layout、check-density、check-mathjax 都以狀態 0 結束；以 XeLaTeX 編譯 beamer 範本，0 error、0 overfull，check-density 印出「N/N titles match」。
 - 在成大投影片上，check-density.mjs 的輸出與 density-check.py 逐行相同（D6）。
 - repo 內 grep 不到 NCKU、ncku、成大、econblue 等專案字串（README 的「來源」說明除外）。
 

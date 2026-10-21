@@ -1,21 +1,26 @@
 /*-- scss:defaults --*/
 /* ===== Palette: change these five lines to recolour the whole deck =====
-   Each is !default, so a personal or project theme.scss listed after this file can override it. */
+   Every value in this section is !default, so a personal or project theme.scss listed after this file can
+   override any of them: Quarto compiles a later file's defaults first, and !default yields to them (issue #14).
+   A layer cannot refer to $deck-* in its own scss:defaults (they are not defined yet there); its scss:rules can. */
 $deck-primary: #1f4e79 !default; /* titles, theorem bars, outline numbers, table headers  */
 $deck-accent:  #c0504d !default; /* takeaway boxes, subtitle, failures to highlight         */
 $deck-green:   #2e7d5b !default; /* probability / "holds at every t" / the method you propose */
 $deck-purple:  #7b4f9d !default; /* constants and derived quantities                         */
 $deck-ink:     #1c2b33 !default; /* body text                                                */
 
-$body-bg: #ffffff;
-$body-color: $deck-ink;
-$link-color: $deck-primary;
-$presentation-heading-color: $deck-primary;
+$body-bg: #ffffff !default;
+$body-color: $deck-ink !default;
+$link-color: $deck-primary !default;
+$presentation-heading-color: $deck-primary !default;
 
-$font-family-sans-serif: "Avenir Next", "Helvetica Neue", "PingFang TC", "Noto Sans TC", sans-serif;
-$presentation-font-size-root: 28px;
-$presentation-heading-font-weight: 650;
-$presentation-h2-font-size: 1.35em;
+$font-family-sans-serif: "Avenir Next", "Helvetica Neue", "PingFang TC", "Noto Sans TC", sans-serif !default;
+$presentation-font-size-root: 28px !default;
+$presentation-heading-font-weight: 650 !default;
+$presentation-h2-font-size: 1.35em !default;
+/* The window around the page, and the title size of a hand-written {.cover} slide (issue #23) */
+$deck-frame-bg: #161616 !default;
+$deck-cover-title-size: 2.4em !default;
 
 /*-- scss:rules --*/
 /* Title slide */
@@ -31,9 +36,19 @@ $presentation-h2-font-size: 1.35em;
 
 /* Footer stays readable above slide content, with an opaque backing */
 .reveal .footer, .reveal .slide-number { z-index: 20; }
-.reveal .footer { background: rgba(255, 255, 255, .92); padding: .1em .4em; border-radius: .3em; }
+/* The backing follows the slide background, so a layer that sets $body-bg gets a matching footer (issue #14) */
+.reveal .footer { background: rgba($body-bg, .92); padding: .1em .4em; border-radius: .3em; }
 /* In the PDF the slide number sits inside its page, under the fixed footer, so a backing would cover it */
 html.print-pdf .reveal .footer { background: none; }
+/* The slide is shown as a 16:9 page on a dark window (issue #23). page = slide × (1 + margin), where margin is the
+   revealjs setting in _quarto.yml (0.18): width and height grow by the same factor, so the page stays 16:9, and the
+   PDF page is the same size, so screen and print have the same margins. _theme/frame.html reads the margin, writes
+   --deck-pad-x and --deck-pad-y (the fallbacks below are for 0.18) and puts the footer, slide number and menu button
+   in the page's bottom margin. The content area is still 1280 by 720. Print and PDF draw no page. */
+.reveal-viewport { background: $deck-frame-bg; }
+.reveal .slides::before { content: ""; position: absolute; left: calc(-1 * var(--deck-pad-x, 115.2px)); right: calc(-1 * var(--deck-pad-x, 115.2px)); top: calc(-1 * var(--deck-pad-y, 64.8px)); bottom: calc(-1 * var(--deck-pad-y, 64.8px)); background: $body-bg; box-shadow: 0 8px 36px rgba(0, 0, 0, .5); pointer-events: none; z-index: -1; }
+html.print-pdf .reveal-viewport { background: $body-bg; }
+html.print-pdf .reveal .slides::before { display: none; }
 /* Breathing room so boxes never reach the footer band (on screen; the print view sets section padding to 0) */
 .reveal .slides > section, .reveal .slides > section > section { padding-bottom: 1.1em; }
 
@@ -86,18 +101,25 @@ html.print-pdf .reveal .footer { background: none; }
 .reveal .slides section.roomy-3 > *:not(h2):not(aside):not(.source) { font-size: 1.18em; }
 .reveal .slides section.roomy-2 li, .reveal .slides section.roomy-3 li { margin-bottom: .45em; }
 
-/* Centre the body of a sparse slide between title and footer; the title stays put */
-.reveal .slides section.vc.present { display: flex !important; flex-direction: column; height: 100%; padding-bottom: 64px; box-sizing: border-box; }
+/* Centre the body of a sparse slide between the title and the slide's bottom edge; the title stays put. The bottom
+   reserve was 64 px while the footer sat on the slide; it now sits in the page margin (issue #23), so the reserve is
+   the same 1.1em breathing room as every other slide */
+.reveal .slides section.vc.present { display: flex !important; flex-direction: column; height: 100%; padding-bottom: 1.1em; box-sizing: border-box; }
 /* The PDF print view zeroes every section's padding with !important and makes each page taller than
    the slide (slide plus margin), so height: 100% and the reserve above would not hold there */
-html.print-pdf .reveal .slides section.vc { display: flex !important; flex-direction: column; height: var(--slide-height, 720px) !important; padding-bottom: 64px !important; box-sizing: border-box; }
+html.print-pdf .reveal .slides section.vc { display: flex !important; flex-direction: column; height: var(--slide-height, 720px) !important; padding-bottom: 1.1em !important; box-sizing: border-box; }
 .reveal .slides section.vc > h2 + * { margin-top: auto; }
-/* A hidden block (the MathJax macros) right after the title would take that auto margin and leave
-   the visible body under the title; give it to the first element after the hidden block instead */
-.reveal .slides section.vc > h2 + .hidden + * { margin-top: auto; }
-/* reveal gives tables margin: auto for horizontal centring; on a .vc slide the auto bottom margin would
-   take a third of the free space and push a lone table up */
-.reveal .slides section.vc > table { margin-bottom: 0; }
+/* A hidden block (the MathJax macros) or speaker notes written right after the title would take that auto
+   margin and leave the visible body under the title; give it to the first element after them instead */
+.reveal .slides section.vc > h2 + :is(.hidden, aside) + * { margin-top: auto; }
+/* reveal gives tables margin: auto for horizontal centring; on a .vc slide its auto top and bottom margins
+   would also take shares of the free space: a lone table sits high, and on a lead, table, source slide the
+   space moves above the table while the source line touches it (issue #14). Tables on a .vc slide get a fixed
+   vertical margin instead (left and right stay auto); a table right after the title or the hidden macro block
+   keeps the auto top margin that centres the body, so lead, table, and source line form one centred block. */
+.reveal .slides section.vc > table { margin-top: .5em; margin-bottom: .5em; }
+.reveal .slides section.vc > h2 + table,
+.reveal .slides section.vc > h2 + :is(.hidden, aside) + table { margin-top: auto; }
 .reveal .slides section.vc::after { content: ""; margin-bottom: auto; }
 
 /* Two side-by-side tables (design | methods compared) with equal rows and a clear gap.
@@ -107,7 +129,25 @@ html.print-pdf .reveal .slides section.vc { display: flex !important; flex-direc
 .setting-pair td, .setting-pair th { padding: .3em .5em; }
 .reveal .columns.setting-pair > .column + .column { margin-left: 2%; }
 
+/* Mathematics colours: \cB, \cO, \cG, \cP wrap a term in \class{deck-b|deck-o|deck-g|deck-p}{…} (MathJax),
+   so formulas take the palette from here, including a layer's palette (issue #14) */
+.reveal .deck-b { color: $deck-primary; }
+.reveal .deck-o { color: $deck-accent; }
+.reveal .deck-g { color: $deck-green; }
+.reveal .deck-p { color: $deck-purple; }
+
 /* Highlight only the numbers you discuss: the key value, the method you recommend, the failure */
 .hl-key  { color: $deck-primary; font-weight: 700; }
 .hl-good { color: $deck-green;   font-weight: 700; }
 .hl-bad  { color: $deck-accent;  font-weight: 700; }
+
+/* Hand-written cover ({.cover}): for a first slide that holds what Quarto's title slide cannot, such as a version
+   line or a download button (issue #23). The block is centred vertically and left aligned; an [..]{.eyebrow} line
+   written after the title is moved above it. Title size: $deck-cover-title-size. */
+.reveal .slides section.cover.present { display: flex !important; flex-direction: column; justify-content: center; height: 100%; box-sizing: border-box; }
+html.print-pdf .reveal .slides section.cover { display: flex !important; flex-direction: column; justify-content: center; height: var(--slide-height, 720px) !important; box-sizing: border-box; }
+.reveal .slides section.cover > h2 { font-size: $deck-cover-title-size; border-bottom: none; margin: 0 0 .4em; padding-bottom: 0; }
+.reveal .slides section.cover > p:has(> .eyebrow:only-child) { order: -1; margin: 0 0 .3em; }
+.reveal .cover .eyebrow { color: rgba($body-color, .65); letter-spacing: .14em; font-size: .6em; }
+.reveal .cover .sub { color: rgba($body-color, .65); font-size: .7em; }
+.reveal .cover .lead { font-size: .9em; }

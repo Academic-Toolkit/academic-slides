@@ -34,7 +34,7 @@ Each row gives the usual cause and a fix that keeps the deck consistent with the
 | Message | Usual cause | Fix |
 |---|---|---|
 | `undefined macro \foo` | The macro is used but not defined in the hidden macro block, for example `\Cov` or `\argmax`. | Add it to the hidden block on the first content slide: `\newcommand{\Cov}{\operatorname{Cov}}`. |
-| parse error | Unbalanced braces, or `#` inside a `\newcommand` body. | `#` is the parameter character. Define colours with `\definecolor{name}{RGB}{r,g,b}` and use the name. |
+| parse error | Unbalanced braces, or `#` inside a `\newcommand` body. | `#` is the parameter character. Colour a term with a CSS class, `\class{deck-b}{#1}`, coloured in the theme; in beamer, `\definecolor{name}{RGB}{r,g,b}` and use the name. |
 
 ## export-pdf.mjs
 

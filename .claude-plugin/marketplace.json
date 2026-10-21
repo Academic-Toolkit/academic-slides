@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "academic-slides",
-      "version": "0.2.0",
+      "version": "0.4.0",
       "description": "Design, scaffold, and check academic slide decks (Quarto revealjs with a mirrored beamer deck): readable mathematics with colored braces, consistent layout rules, and Playwright-based checks for overflow, sparse slides, text density, and MathJax errors.",
       "author": {
         "name": "Hau-Hung Yang"
