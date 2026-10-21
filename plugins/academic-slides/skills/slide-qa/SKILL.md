@@ -32,6 +32,21 @@ A deck shown as a page (issue #23) puts the footer in the page margin below the 
 
 What `check-density.mjs` counts: English body words and bullet lines on each main-body slide. It does not count speaker notes, hidden blocks, source lines, side notes, mathematics, tables, images, or markup. The main body ends at a level-1 section whose title starts with "Backup" (Quarto) or at `\appendix` (beamer).
 
+## Step 0: task list
+
+Turn the steps below into a task list before starting. If the session provides `TaskCreate` and `TaskUpdate`, create one task per step, set it to in progress when you start it, and mark it completed as soon as it is done. If those tools are not available, write the same list in your reply and tick it off there. A step that failed or was skipped is never marked completed; it stays open and is reported. A check that exits 1, 2, or 3 is not completed.
+
+```
+TaskCreate(subject="Render the deck", description="quarto render; the deck's .html exists")
+TaskCreate(subject="check-layout --shots", description="exit 0 (3 means not checked); screenshots of every slide in qa/")
+TaskCreate(subject="check-mathjax", description="exit 0: no parse errors, no undefined macros")
+TaskCreate(subject="check-density", description="--qmd, plus --tex when the deck has a beamer mirror; exit 0, titles match")
+TaskCreate(subject="check-fill", description="every flagged slide reviewed: roomy, vc, a figure, or kept as is with a reason (advice, never fails)")
+TaskCreate(subject="export-pdf", description="PDF written; its page count equals the slide count")
+TaskCreate(subject="Look at every screenshot", description="open each qa/<deck>-NN.png at full size, plus -flagged and -print-NN-flagged; a contact sheet does not count")
+TaskCreate(subject="Fix and re-run", description="each failure fixed per references/fix-table.md; the failed checks re-run until they pass")
+```
+
 ## Workflow
 
 ```bash

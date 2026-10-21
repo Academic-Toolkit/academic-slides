@@ -34,6 +34,17 @@ This skill holds the principles. The `slide-deck-scaffold` skill has templates t
 | [references/speaker-notes.md](references/speaker-notes.md) | writing the spoken script and timing |
 | [references/checklist.md](references/checklist.md) | before calling a deck done |
 
+## Step 0: task list
+
+Turn the steps below into a task list before starting. If the session provides `TaskCreate` and `TaskUpdate`, create one task per step, set it to in progress when you start it, and mark it completed as soon as it is done. If those tools are not available, write the same list in your reply and tick it off there. A step that failed or was skipped is never marked completed; it stays open and is reported.
+
+```
+TaskCreate(subject="Read the references the task needs", description="from the References table, for example math-readability.md for equations, evidence-slides.md for simulations")
+TaskCreate(subject="Review slide by slide against the ten rules", description="each problem reported with the slide title, the rule, and a concrete fix")
+TaskCreate(subject="Run slide-qa", description="the slide-qa skill, with its own task list, including looking at every screenshot")
+TaskCreate(subject="Work through the checklist", description="every item in references/checklist.md ticked before calling the deck done")
+```
+
 ## How to review a deck
 
 Go slide by slide against the ten rules. Then run the `slide-qa` scripts and look at their screenshots. Report each problem with the slide title, the rule, and a concrete fix, for example "split the decomposition onto its own line" or "move the citation to the notation table". Do not report only that the slide "looks crowded".

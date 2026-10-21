@@ -1,6 +1,6 @@
 {
   "name": "academic-slides",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Design, scaffold, and check academic slide decks (Quarto revealjs with a mirrored beamer deck). Skills: academic-slide-design (content, readable mathematics, layout rules, speaker notes), slide-deck-scaffold (starter templates with a shared palette and components), slide-qa (Playwright checks for overflow, title wrapping, sparse slides, text density, MathJax errors, and PDF export).",
   "author": {
     "name": "Hau-Hung Yang"
