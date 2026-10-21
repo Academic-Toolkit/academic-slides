@@ -87,7 +87,10 @@ export function texFor({
         + `{\\includegraphics[page=${s * perSheet + i + 1}, width=${mm(g.slideW)}mm, height=${mm(g.slideH)}mm, keepaspectratio]{${deck}}};`);
     }
     if (title) {
-      lines.push(`  \\node[anchor=south west, inner sep=0pt, font=\\small\\sffamily] at (${mm(g.left)}, ${mm(g.top - 3)}) {${texEscape(title)}};`);
+      // As wide as the grid, so a long title (Quarto appends the subtitle to the PDF title) wraps upward
+      // into the margin instead of running off the page.
+      lines.push(`  \\node[anchor=south west, inner sep=0pt, text width=${mm(g.gridW)}mm, align=left, font=\\small\\sffamily] `
+        + `at (${mm(g.left)}, ${mm(g.top - 3)}) {${texEscape(title)}};`);
     }
     if (pageNumbers) {
       lines.push(`  \\node[anchor=north, inner sep=0pt, font=\\small\\sffamily] at (${mm(paperW / 2)}, ${mm(g.top + g.gridH + 3)}) {${s + 1} / ${sheets}};`);

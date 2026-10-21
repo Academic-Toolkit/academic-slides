@@ -90,6 +90,12 @@ test('texFor: one sheet per four slides, every page referenced once, frames by d
   assert.doesNotMatch(tex, /xeCJK/);
 });
 
+test('texFor: the header wraps within the grid width instead of running off the page', () => {
+  const g = lib.geometry({ ...A4L, rows: 2, cols: 2, headerBand: 8 });
+  const tex = lib.texFor({ geometry: g, paperW: 297, paperH: 210, pages: 4, title: 'A very long title - with a subtitle' });
+  assert.match(tex, /anchor=south west, inner sep=0pt, text width=273mm, align=left/);
+});
+
 test('texFor: frame, header and page number can each be turned off', () => {
   const g = lib.geometry({ ...A4L, rows: 2, cols: 2 });
   const tex = lib.texFor({ geometry: g, paperW: 297, paperH: 210, pages: 4, frame: false, title: '', pageNumbers: false });
