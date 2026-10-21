@@ -2,6 +2,9 @@
 // Layout check for a rendered revealjs deck. A slide is flagged when
 //   1. non-background pixels reach the 8 px band just above the footer (content cut by the footer),
 //   2. a visible element ends more than 2 px below the footer's top edge (content hidden behind it),
+// On screen the limit for 1 and 2 is the footer's top or the slide's bottom edge, whichever is higher: when the deck
+// shows the slide as a page (issue #23) the footer sits in the page margin below the slide, and content past the
+// slide's edge is out of the content area even before it reaches the footer.
 //   3. a math block, image, or table ends more than 2 px past its column or the slide (right-edge spill),
 //   4. the slide title wraps to more than one line.
 // Pixel and DOM checks are both needed: an opaque footer hides content from the pixel band.
@@ -62,7 +65,7 @@ const MEASURE = `window.__slideQaMeasure = ${measureSlide.toString()};`;
 function reasons(o) {
   const why = [];
   if (o.pixels > 200) why.push(`${o.pixels} px in the footer band`);
-  if (o.domOver > 2) why.push(`content ${o.domOver} px below the footer top`);
+  if (o.domOver > 2) why.push(`content ${o.domOver} px below the footer top or the slide's bottom edge`);
   if (o.rightOver > 2) why.push(`${o.rightOver} px past the right edge`);
   if (o.titleLines > 1) why.push(`title on ${o.titleLines} lines`);
   return why.join('; ');
@@ -141,13 +144,17 @@ try {
     await page.waitForTimeout(150);
     const info = await page.evaluate((footerSel) => {
       const footer = document.querySelector(footerSel);
-      const footerTop = footer ? footer.getBoundingClientRect().top : window.innerHeight - 56;
-      return { ...window.__slideQaMeasure(window.Reveal.getCurrentSlide(), footerTop, 0), last: window.Reveal.isLastSlide() };
+      const slides = document.querySelector('.reveal .slides').getBoundingClientRect();
+      const footerTop = Math.min(footer ? footer.getBoundingClientRect().top : window.innerHeight - 56, slides.bottom);
+      const slidesLeft = slides.left;
+      return { ...window.__slideQaMeasure(window.Reveal.getCurrentSlide(), footerTop, 0), last: window.Reveal.isLastSlide(), slidesLeft };
     }, FOOTER);
 
-    // band = 8 px above the footer; reference = same rows at the far left, so a footer backing cancels out
+    // band = 8 px above the footer; reference = the same rows just left of the slide, so a footer backing cancels out.
+    // Just left of the slide is the page margin when the deck shows a page (issue #23) and the slide background when it
+    // does not; the far left of the window is neither once the window around the page has its own colour.
     const band = await page.screenshot({ clip: { x: X0, y: Math.max(0, info.footerTop - 8), width: BAND_W, height: 8 } });
-    const ref = await page.screenshot({ clip: { x: 8, y: Math.max(0, info.footerTop - 8), width: 10, height: 8 } });
+    const ref = await page.screenshot({ clip: { x: Math.max(0, Math.round(info.slidesLeft) - 14), y: Math.max(0, info.footerTop - 8), width: 10, height: 8 } });
     const nonBg = await page.evaluate(async ([bandB64, refB64]) => {
       const pixels = async (b64) => {
         const im = await new Promise((res) => { const x = new Image(); x.onload = () => res(x); x.src = `data:image/png;base64,${b64}`; });

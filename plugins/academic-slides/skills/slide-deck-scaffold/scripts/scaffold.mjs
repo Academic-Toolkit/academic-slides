@@ -13,6 +13,7 @@ const SETTINGS_DIR = path.join('.claude', '.academic-slides');
 const SKILL_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const OFFICIAL_DIR = path.join(SKILL_DIR, 'templates', 'quarto');
 const OFFICIAL_THEME = path.join(OFFICIAL_DIR, '_theme', 'deck.scss');
+const OFFICIAL_FRAME = path.join(OFFICIAL_DIR, '_theme', 'frame.html');   // places footer, slide number, menu on the page (#23)
 
 const HELP = `Usage: node scaffold.mjs --out <folder> [--template <name>] [--title <title>] [--dry-run]
        node scaffold.mjs --list [--out <folder>]
@@ -289,7 +290,7 @@ export function planDeck({ out, home, template, title, trustProject = false }) {
   // Paths the scaffold writes itself. A template file on one of them, on a folder above one, or on a case
   // or Unicode variant of one would stop the write half-way, so it is skipped before anything is written,
   // and so is a second file whose name differs from an earlier one only in case (#8 verify).
-  const generated = [path.join('_theme', 'deck.scss'), ...themeFiles.map((f) => f.rel)].map(pathKey);
+  const generated = [path.join('_theme', 'deck.scss'), path.join('_theme', 'frame.html'), ...themeFiles.map((f) => f.rel)].map(pathKey);
   const clashes = (k) => generated.some((g) => g === k || g.startsWith(k + path.sep) || k.startsWith(g + path.sep));
   const copies = [];
   const taken = new Set();
@@ -318,6 +319,7 @@ export function planDeck({ out, home, template, title, trustProject = false }) {
   const files = [
     ...copies,
     { src: OFFICIAL_THEME, rel: path.join('_theme', 'deck.scss') },
+    { src: OFFICIAL_FRAME, rel: path.join('_theme', 'frame.html') },
     ...themeFiles,
     { content: qmd, rel: 'talk.qmd' },
     { content: yml, rel: '_quarto.yml' },

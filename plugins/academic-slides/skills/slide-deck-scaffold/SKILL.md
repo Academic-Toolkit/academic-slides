@@ -102,6 +102,28 @@ The project layer is found by walking up from the deck folder, so it can come fr
 3. **Macros**: add any macro the talk uses to the hidden MathJax block and to the beamer preamble under the same name. Never write `#hex` inside a `\newcommand` body; `#` is the parameter character, and every formula that uses the macro breaks.
 4. **Slides**: one `##` per slide, `#` for section dividers, and a final `# Backup` section. Everything after `# Backup` (Quarto) or `\appendix` (beamer) is excluded from the density limits and the title comparison. Keep that divider in English in Chinese decks too: `check-density` recognises only `Backup` (issue #9).
 
+## Page, margins and cover
+
+On screen the slide is a page on a dark window. The page is the slide × (1 + `margin`), where `margin` is the revealjs setting in `_quarto.yml` (0.18 in every template): width and height grow by the same factor, so the page stays 16:9 and each side gets about 7.6 % of the page. The PDF page is the same size, so the screen and the PDF have the same margins. The content area is still 1280 by 720, so page heights and font sizes are measured as before (issue #23).
+
+- `_theme/frame.html`, copied by the scaffold like `deck.scss` and included with `include-after-body`, reads the margin and puts the footer, the slide number and the menu button in the page's bottom margin, aligned with the content area. Keep `menu: true`: the menu button opens the deck's slide list.
+- To change the margins, change `margin` in `_quarto.yml`; the page, the footer and the PDF follow it. revealjs's own default, 0.1, leaves about 4.5 %.
+- The window colour is `$deck-frame-bg` (default `#161616`), which a layer can set in `scss:defaults`; the page takes `$body-bg`.
+- A `{.vc}` slide centres its body between the title and the slide's bottom edge, keeping the same 1.1em at the bottom as every other slide; the footer no longer sits on the slide.
+- **Cover.** Quarto's title slide, built from `title`, `subtitle`, `author` and `date`, stays as it is. When the first slide must hold something the title slide cannot, such as a version line or a download button, write it yourself and put the page title in `pagetitle:` instead of `title:`, so that Quarto adds no title slide of its own:
+
+  ```markdown
+  ## Talk title {.cover}
+
+  [Series · Session]{.eyebrow}
+
+  [Speaker　Institution]{.sub}
+
+  [One sentence on the question this talk answers.]{.lead}
+  ```
+
+  The block is centred vertically and left aligned, the eyebrow line moves above the title, and the title size is `$deck-cover-title-size` (default 2.4em).
+
 ## Components (Quarto class → beamer counterpart)
 
 | Quarto | beamer | Use |
@@ -151,4 +173,4 @@ Run the checks in the `slide-qa` skill: layout, MathJax, density with the title 
 
 ## A deck made earlier
 
-A deck keeps the copy of the theme it was created with: `_theme/deck.scss`, or `theme/deck.scss` in a deck made before version 0.2.0. A later fix to the plugin's theme (the PDF print rules from issue #5, the table bottom rule and `.vc` centring from issue #8, the overridable defaults, formula colour classes and `.vc` table margins from issue #14) does not reach it. A deck made before 0.3.0 keeps its `\definecolor` macros, which still work; if you copy the new `\class` macros into such a deck, copy the `.deck-b` … `.deck-p` rules from the theme too, or the formulas lose their colour without any error; copy the rules from this skill's `templates/quarto/_theme/deck.scss`. Issue #10 tracks a command that does this.
+A deck keeps the copy of the theme it was created with: `_theme/deck.scss`, or `theme/deck.scss` in a deck made before version 0.2.0. A later fix to the plugin's theme (the PDF print rules from issue #5, the table bottom rule and `.vc` centring from issue #8, the overridable defaults, formula colour classes and `.vc` table margins from issue #14, the page, the cover and `_theme/frame.html` from issue #23) does not reach it. A deck made before 0.4.0 has no `_theme/frame.html` and no `margin` line; copying the new `deck.scss` alone draws a page while the footer stays against the window, so copy `frame.html` and add the `margin` and `include-after-body` lines from a template's `_quarto.yml` as well. A deck made before 0.3.0 keeps its `\definecolor` macros, which still work; if you copy the new `\class` macros into such a deck, copy the `.deck-b` … `.deck-p` rules from the theme too, or the formulas lose their colour without any error; copy the rules from this skill's `templates/quarto/_theme/deck.scss`. Issue #10 tracks a command that does this.

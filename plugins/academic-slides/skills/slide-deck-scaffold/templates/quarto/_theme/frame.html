@@ -1,0 +1,38 @@
+<script>
+/* The page around the slide (issue #23). page = slide × (1 + margin), the revealjs margin from _quarto.yml, which is
+   also the PDF page size. This script writes the page's extent to --deck-pad-x and --deck-pad-y for deck.scss and
+   puts the footer, slide number and menu button in the page's bottom margin: the menu button at the content's left
+   edge, the slide number at its right edge, the footer centred between them. Copied by scaffold.mjs from the
+   plugin's _theme/; edit the plugin's copy. */
+(() => {
+  /* Print mode is read from the URL, as revealjs does: revealjs fires ready before it adds the print-pdf class, so a
+     class check comes too late, moves the footer below the page, and Chrome, which repeats position: fixed elements
+     on every printed page, then shows each page's footer at the top of the next page. */
+  const PRINT = /print-pdf/i.test(location.search);
+  function place() {
+    if (PRINT || document.documentElement.classList.contains('print-pdf')) return;
+    const s = document.querySelector('.reveal .slides');
+    if (!s || !window.Reveal) return;
+    const c = Reveal.getConfig(), k = Reveal.getScale();
+    const padX = c.width * c.margin / 2, padY = c.height * c.margin / 2;
+    s.style.setProperty('--deck-pad-x', padX + 'px');
+    s.style.setProperty('--deck-pad-y', padY + 'px');
+    const r = s.getBoundingClientRect();
+    const band = padY * k, mid = innerHeight - (r.bottom + band / 2);   // centre line of the bottom margin, from the window's bottom
+    const put = (el, pos) => {
+      if (!el) return;
+      const h = el.getBoundingClientRect().height;
+      Object.assign(el.style, { top: 'auto', bottom: (mid - h / 2) + 'px' }, pos);
+    };
+    /* Quarto's footer is width: 100%; with left set it would run past the right edge, so left and right set the width */
+    put(document.querySelector('.reveal .footer'), { left: r.left + 'px', right: (innerWidth - r.right) + 'px', width: 'auto' });
+    put(document.querySelector('.reveal .slide-number'), { right: (innerWidth - r.right) + 'px' });
+    put(document.querySelector('.slide-menu-button'), { left: r.left + 'px' });
+  }
+  function hook() {
+    if (!window.Reveal || !Reveal.isReady || !Reveal.isReady()) return setTimeout(hook, 100);
+    place(); Reveal.on('resize', place); addEventListener('resize', () => setTimeout(place, 0));
+  }
+  hook();
+})();
+</script>

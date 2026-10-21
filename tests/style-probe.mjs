@@ -13,15 +13,26 @@
 //                             min px (not touching) and at most max px (not drifting off) below the table (issue #14)
 //   --class-colors <k=rgb;…>  each formula colour class (deck-b, deck-o, deck-g, deck-p) must compute to the given colour
 //   --footer-bg <rgba(...)>   the footer backing must compute to this colour (it follows $body-bg, issue #14)
+//   --page <margin>           the slide is shown as a page (issue #23): revealjs margin equals <margin>, the page drawn
+//                             behind the slide extends width × margin / 2 and height × margin / 2, so it stays 16:9,
+//                             the window around it has another colour, and the footer, slide number and menu button
+//                             sit in the page's bottom margin, within the content area's left and right edges
+//   --print-footer            in the print view the footer sits within the first printed page, not below it, where Chrome
+//                             would print it at the top of the next page (issue #23)
+//   --cover-centred           on every {.cover} slide the gap above the first line and below the last differ by at
+//                             most a fifth of the slide height, and an .eyebrow line sits above the title (issue #23)
 // Exits 0 when every requested check holds, 1 otherwise, 2 on bad arguments.
 import { args, deckPath, playwright, serve } from '../plugins/academic-slides/skills/slide-qa/scripts/_lib.mjs';
 
-const { get, has } = args('Usage: node style-probe.mjs --html talk.html [--title-color "rgb(r, g, b)"] [--table-rule] [--vc-centred] [--font-family NAME] [--root-size PX] [--math-color "rgb(r, g, b)"] [--source-gap MIN[-MAX]] [--class-colors "deck-b=rgb(r, g, b);…"] [--footer-bg "rgba(r, g, b, a)"]');
+const { get, has } = args('Usage: node style-probe.mjs --html talk.html [--title-color "rgb(r, g, b)"] [--table-rule] [--vc-centred] [--font-family NAME] [--root-size PX] [--math-color "rgb(r, g, b)"] [--source-gap MIN[-MAX]] [--class-colors "deck-b=rgb(r, g, b);…"] [--footer-bg "rgba(r, g, b, a)"] [--page MARGIN] [--cover-centred] [--print-footer]');
 const html = get('html');
 if (!html) { console.error('--html is required'); process.exit(2); }
 // A malformed value must not turn into NaN bounds that every comparison passes (verify round 1)
 if (get('source-gap') !== undefined && !/^\d+(\.\d+)?(-\d+(\.\d+)?)?$/.test(get('source-gap'))) {
   console.error(`--source-gap expects MIN or MIN-MAX in px, got ${JSON.stringify(get('source-gap'))}`); process.exit(2);
+}
+if (get('page') !== undefined && !/^(0|0?\.\d+)$/.test(get('page'))) {
+  console.error(`--page expects the revealjs margin as a number below 1, got ${JSON.stringify(get('page'))}`); process.exit(2);
 }
 const classColors = get('class-colors');
 if (classColors !== undefined && !/^(deck-[bogp]=rgba?\([^)]*\);?)+$/.test(classColors.replace(/\s*;\s*/g, ';').trim())) {
@@ -77,10 +88,12 @@ try {
         if (!kids.length) return null;
         const h2 = sl.querySelector('h2');
         const footer = document.querySelector('.reveal .footer');
+        // with a page (issue #23) the footer sits below the slide; the slide's bottom edge is then the limit
+        const limit = Math.min(footer ? footer.getBoundingClientRect().top : window.innerHeight, document.querySelector('.reveal .slides').getBoundingClientRect().bottom);
         const top = Math.min(...kids.map((k) => k.getBoundingClientRect().top));
         const bottom = Math.max(...kids.map((k) => k.getBoundingClientRect().bottom));
         const above = top - (h2 ? h2.getBoundingClientRect().bottom : sl.getBoundingClientRect().top);
-        const below = (footer ? footer.getBoundingClientRect().top : window.innerHeight) - bottom;
+        const below = limit - bottom;
         return { title: h2 ? h2.textContent.trim() : '(no title)', above, below };
       });
       if (g && g.below > 60 && g.above < g.below / 2) stuck.push(`${g.title} (above ${Math.round(g.above)} px, below ${Math.round(g.below)} px)`);
@@ -129,6 +142,73 @@ try {
     const got = await page.evaluate(() => getComputedStyle(document.querySelector('.reveal .footer')).backgroundColor);
     if (got !== footerBg) { failures++; console.log(`✗ footer backing: ${got} (want ${footerBg})`); }
     else console.log(`✓ footer backing is ${footerBg}`);
+  }
+  const pageMargin = get('page');
+  if (pageMargin) {
+    const want = Number(pageMargin);
+    const g = await page.evaluate(() => {
+      const c = window.Reveal.getConfig(), k = window.Reveal.getScale();
+      const s = document.querySelector('.reveal .slides');
+      const r = s.getBoundingClientRect();
+      const b = getComputedStyle(s, '::before');
+      const box = (sel) => { const e = document.querySelector(sel); if (!e) return null; const q = e.getBoundingClientRect(); return { top: q.top, bottom: q.bottom, left: q.left, right: q.right }; };
+      return { margin: c.margin, w: c.width, h: c.height, k, r: { top: r.top, bottom: r.bottom, left: r.left, right: r.right },
+        before: { content: b.content, left: parseFloat(b.left), top: parseFloat(b.top), bg: b.backgroundColor },
+        window: getComputedStyle(document.body).backgroundColor,
+        parts: { footer: box('.reveal .footer'), 'slide number': box('.reveal .slide-number'), 'menu button': box('.slide-menu-button') } };
+    });
+    const padX = g.w * want / 2, padY = g.h * want / 2;
+    const bad = [];
+    if (Math.abs(g.margin - want) > 1e-9) bad.push(`revealjs margin is ${g.margin}`);
+    if (g.before.content === 'none' || Math.abs(g.before.left + padX) > .5 || Math.abs(g.before.top + padY) > .5) bad.push(`page drawn at left ${g.before.left}, top ${g.before.top} (want ${-padX}, ${-padY}; content ${g.before.content})`);
+    if (Math.abs((g.w + 2 * padX) / (g.h + 2 * padY) - 16 / 9) > .01) bad.push('page is not 16:9');
+    if (g.window === g.before.bg) bad.push(`window and page are both ${g.window}`);
+    const band = { top: g.r.bottom - 1, bottom: g.r.bottom + padY * g.k + 1 };
+    for (const [label, q] of Object.entries(g.parts)) {
+      if (!q) { bad.push(`no ${label}`); continue; }
+      if (q.top < band.top || q.bottom > band.bottom || q.left < g.r.left - 1 || q.right > g.r.right + 1) bad.push(`${label} at [${Math.round(q.left)}, ${Math.round(q.top)}, ${Math.round(q.right)}, ${Math.round(q.bottom)}], outside the page's bottom margin [${Math.round(g.r.left)}, ${Math.round(band.top)}, ${Math.round(g.r.right)}, ${Math.round(band.bottom)}]`);
+    }
+    if (bad.length) { failures++; console.log(`✗ page: ${bad.join('; ')}`); }
+    else console.log(`✓ the slide is a 16:9 page with margin ${want}; footer, slide number and menu button sit in its bottom margin`);
+  }
+  if (has('cover-centred')) {
+    const indices = await page.evaluate(() => window.Reveal.getSlides().filter((sl) => sl.classList.contains('cover')).map((sl) => window.Reveal.getIndices(sl)));
+    const off = [];
+    for (const idx of indices) {
+      await page.evaluate(({ h, v }) => window.Reveal.slide(h, v ?? 0), idx);
+      await page.waitForTimeout(400);
+      const g = await page.evaluate(() => {
+        const sl = window.Reveal.getCurrentSlide(), k = window.Reveal.getScale();
+        const frame = document.querySelector('.reveal .slides').getBoundingClientRect();
+        const kids = [...sl.children].filter((el) => getComputedStyle(el).display !== 'none' && getComputedStyle(el).position !== 'absolute' && el.getBoundingClientRect().height > 0 && !el.matches('aside, .notes'));
+        const top = Math.min(...kids.map((e) => e.getBoundingClientRect().top)), bottom = Math.max(...kids.map((e) => e.getBoundingClientRect().bottom));
+        const eyebrow = sl.querySelector('.eyebrow'), h2 = sl.querySelector('h2');
+        return { title: h2?.textContent.trim() ?? '(no title)', above: (top - frame.top) / k, below: (frame.bottom - bottom) / k, h: frame.height / k,
+          eyebrowAbove: !eyebrow || (h2 && eyebrow.getBoundingClientRect().bottom <= h2.getBoundingClientRect().top + 1) };
+      });
+      if (Math.abs(g.above - g.below) > g.h / 5 || !g.eyebrowAbove) off.push(`${g.title} (above ${Math.round(g.above)}, below ${Math.round(g.below)}${g.eyebrowAbove ? '' : ', eyebrow not above the title'})`);
+    }
+    if (!indices.length) { failures++; console.log('✗ cover: no {.cover} slide'); }
+    else if (off.length) { failures++; console.log(`✗ cover slides not centred: ${off.join('; ')}`); }
+    else console.log(`✓ ${indices.length} {.cover} slide(s) centred, eyebrow above the title`);
+  }
+  if (has('print-footer')) {
+    // Chrome prints position: fixed elements relative to each page, so open the print view at the printed page's size
+    const cfg = await page.evaluate(() => { const c = window.Reveal.getConfig(); return { w: c.width, h: c.height, m: c.margin }; });
+    const pp = await browser.newPage({ viewport: { width: Math.floor(cfg.w * (1 + cfg.m)), height: Math.floor(cfg.h * (1 + cfg.m)) } });
+    await pp.goto(`http://127.0.0.1:${port}/${encodeURIComponent(name)}?print-pdf`, { waitUntil: 'networkidle' });
+    await pp.waitForSelector('.pdf-page', { timeout: 15000 }).catch(() => {});
+    await pp.waitForTimeout(1500);
+    const f = await pp.evaluate(() => {
+      const foot = document.querySelector('.reveal .footer'), pg = document.querySelector('.pdf-page');
+      if (!foot || !pg) return null;
+      const a = foot.getBoundingClientRect(), b = pg.getBoundingClientRect();
+      return { top: a.top, bottom: a.bottom, pageTop: b.top, pageBottom: b.bottom, style: foot.getAttribute('style') };
+    });
+    await pp.close();
+    if (!f) { failures++; console.log('✗ print footer: no footer or no printed page'); }
+    else if (f.top < f.pageTop - 1 || f.bottom > f.pageBottom + 1) { failures++; console.log(`✗ print footer at ${Math.round(f.top)}–${Math.round(f.bottom)}, outside the first page ${Math.round(f.pageTop)}–${Math.round(f.pageBottom)} (inline style: ${f.style})`); }
+    else console.log('✓ in the print view the footer sits on its own page');
   }
   const gap = get('source-gap');
   if (gap) {

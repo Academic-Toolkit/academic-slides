@@ -75,6 +75,25 @@ The colour macros `\cB`, `\cO`, `\cG`, and `\cP` in every Quarto template that d
 - **WHEN** a deck scaffolded from `results-report` is rendered and the last body cell of its first table is inspected
 - **THEN** its computed `border-bottom-width` is `2px` and its `border-bottom-color` equals the computed color of `$deck-ink`, while a cell of an earlier body row has a `1px` bottom border
 
+### Requirement: Slide is shown as a 16:9 page with margins
+
+Every Quarto template SHALL set the revealjs `margin` to 0.18 and include `_theme/frame.html`. On screen, `_theme/deck.scss` SHALL draw a page of the slide × (1 + `margin`) behind the slide, in `$body-bg`, on a window in `$deck-frame-bg`, and `frame.html` SHALL place the footer, the slide number and the menu button in the page's bottom margin, within the content area's left and right edges. Print mode SHALL draw no page and leave the footer where revealjs puts it. The scaffold SHALL copy `_theme/frame.html` next to `_theme/deck.scss`.
+
+#### Scenario: Page geometry
+
+- **WHEN** a deck scaffolded from any Quarto template is rendered and opened at 1280×720
+- **THEN** the revealjs margin is 0.18, the page extends 115.2 px left and right and 64.8 px above and below the 1280×720 slide, the window's background differs from the page's, and the footer, slide number and menu button lie between the slide's bottom edge and the page's bottom edge
+
+#### Scenario: Footer stays on its page in the PDF
+
+- **WHEN** the deck is exported with `export-pdf.mjs`
+- **THEN** each PDF page is the slide × 1.18 and shows its own footer at its bottom, not at the top of the next page
+
+#### Scenario: Hand-written cover
+
+- **WHEN** a deck has a `## Title {.cover}` slide with an `[..]{.eyebrow}` line after the title
+- **THEN** the gaps above the first line and below the last differ by at most a fifth of the slide height, and the eyebrow line sits above the title
+
 ### Requirement: Beamer mirror compiles with matching titles
 
 `slide-deck-scaffold/templates/beamer/talk.tex` SHALL compile with XeLaTeX, define the same RGB palette and the macros `\cB`, `\cO`, `\cG`, `\cP`, `\takeaway`, `\sourceline`, `\algobox`, and `\bibent`, and its main-body frame titles SHALL match the main-body slide titles of `research-talk/talk.qmd` one to one. The other three templates have no beamer mirror.
