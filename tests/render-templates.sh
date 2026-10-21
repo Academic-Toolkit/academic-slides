@@ -52,6 +52,9 @@ for TPL in $(find "$TEMPLATES_DIR/quarto" -mindepth 1 -maxdepth 1 -type d ! -nam
   else echo "  ✓ check-fill: no sparse slide without roomy or vc"; fi
   check "table rules" node "$PROBE" --html talk.html --table-rule
   check "centred {.vc} slides" node "$PROBE" --html talk.html --vc-centred
+  # The slide is shown as a 16:9 page with margins; footer, slide number and menu button sit on it (issue #23)
+  check "the slide is a 16:9 page with margin 0.18" node "$PROBE" --html talk.html --page 0.18
+  check "the PDF footer stays on its own page" node "$PROBE" --html talk.html --print-footer
   # results-report has lead, table, source slides: the source line sits right below its table (issue #14)
   [ "$TPL" = results-report ] && check "source lines sit right below their tables" node "$PROBE" --html talk.html --source-gap 12-40
 done
@@ -78,6 +81,8 @@ if build "$OHOME" "$DECK" --template research-talk; then
   check "every formula colour class takes the palette" node "$PROBE" --html talk.html --class-colors 'deck-b=rgb(139, 0, 0);deck-o=rgb(192, 80, 77);deck-g=rgb(46, 125, 91);deck-p=rgb(123, 79, 157)'
   check "footer backing follows the personal background" node "$PROBE" --html talk.html --footer-bg 'rgba(250, 250, 247, 0.92)'
   cmp -s "$DECK/_theme/deck.scss" "$TEMPLATES_DIR/quarto/_theme/deck.scss" && echo "  ✓ _theme/deck.scss is the plugin's copy" || fail "_theme/deck.scss differs from the plugin's"
+  cmp -s "$DECK/_theme/frame.html" "$TEMPLATES_DIR/quarto/_theme/frame.html" && echo "  ✓ _theme/frame.html is the plugin's copy" || fail "_theme/frame.html missing or differs from the plugin's"
+  check "the page takes the personal background" node "$PROBE" --html talk.html --page 0.18
 fi
 
 echo "== personal and project layers"
@@ -93,7 +98,7 @@ if build "$PHOME" "$DECK" --template research-talk --trust-project; then
   check "project palette reaches formulas" node "$PROBE" --html talk.html --class-colors 'deck-b=rgb(0, 100, 0)'
 fi
 
-echo "== centred slides: lead, table, source; notes before a lone table"
+echo "== centred slides: lead, table, source; notes before a lone table; a hand-written cover"
 FHOME="$WORK/home-fixture"
 DECK="$FHOME/decks/fixture"
 if build "$FHOME" "$DECK" --template results-report; then
@@ -123,15 +128,25 @@ Fixture: speaker notes written before a lone table.
 |------|----|
 | 一 | 1 |
 | 二 | 2 |
+
+## 自寫的封面 {.cover}
+
+[課程名稱 · 第 N 講]{.eyebrow}
+
+[講者　單位]{.sub}
+
+[一句話說這一講要回答的問題。]{.lead}
 QMD
   (cd "$DECK" && quarto render >"$DECK.render.log" 2>&1) || { fail "quarto render failed (fixture)"; tail -15 "$DECK.render.log"; }
   check "lead, table, source: the source line stays with its table" node "$PROBE" --html talk.html --source-gap 12-40
   check "centred {.vc} slides, including both fixtures" node "$PROBE" --html talk.html --vc-centred
+  check "a {.cover} slide is centred, eyebrow above the title" node "$PROBE" --html talk.html --cover-centred
 fi
 
 echo "== probe argument checks"
 node "$PROBE" --html "$DECK/talk.html" --source-gap abc >/dev/null 2>&1; [ $? -eq 2 ] && echo "  ✓ malformed --source-gap exits 2" || fail "malformed --source-gap did not exit 2"
 node "$PROBE" --html "$DECK/talk.html" --class-colors 'deck-x=red' >/dev/null 2>&1; [ $? -eq 2 ] && echo "  ✓ malformed --class-colors exits 2" || fail "malformed --class-colors did not exit 2"
+node "$PROBE" --html "$DECK/talk.html" --page 1.5 >/dev/null 2>&1; [ $? -eq 2 ] && echo "  ✓ malformed --page exits 2" || fail "malformed --page did not exit 2"
 
 [ "$FAIL" = 0 ] && { echo "✓ every template rendered and passed its checks"; exit 0; }
 echo "✗ some checks failed"; exit 1

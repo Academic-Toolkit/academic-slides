@@ -53,7 +53,7 @@ The templates live in `plugins/academic-slides/skills/slide-deck-scaffold/templa
 | `results-report` | Traditional Chinese | results in tables, no mathematics |
 | `lecture` | Traditional Chinese | a class: objectives, definition, worked example, in-class question, recap |
 
-`templates/quarto/_theme/deck.scss` is the only stylesheet; a template folder holds just `_quarto.yml` and `talk.qmd`.
+`templates/quarto/_theme/deck.scss` is the only stylesheet, and `_theme/frame.html` places the footer, slide number and menu button on the page (the slide is shown as a 16:9 page with margins on a dark window; `margin` in `_quarto.yml` sets the margins on screen and in the PDF); a template folder holds just `_quarto.yml` and `talk.qmd`.
 
 `scaffold.mjs` merges three layers field by field — project over personal over official:
 

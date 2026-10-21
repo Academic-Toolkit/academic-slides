@@ -18,6 +18,9 @@ $font-family-sans-serif: "Avenir Next", "Helvetica Neue", "PingFang TC", "Noto S
 $presentation-font-size-root: 28px !default;
 $presentation-heading-font-weight: 650 !default;
 $presentation-h2-font-size: 1.35em !default;
+/* The window around the page, and the title size of a hand-written {.cover} slide (issue #23) */
+$deck-frame-bg: #161616 !default;
+$deck-cover-title-size: 2.4em !default;
 
 /*-- scss:rules --*/
 /* Title slide */
@@ -37,6 +40,15 @@ $presentation-h2-font-size: 1.35em !default;
 .reveal .footer { background: rgba($body-bg, .92); padding: .1em .4em; border-radius: .3em; }
 /* In the PDF the slide number sits inside its page, under the fixed footer, so a backing would cover it */
 html.print-pdf .reveal .footer { background: none; }
+/* The slide is shown as a 16:9 page on a dark window (issue #23). page = slide × (1 + margin), where margin is the
+   revealjs setting in _quarto.yml (0.18): width and height grow by the same factor, so the page stays 16:9, and the
+   PDF page is the same size, so screen and print have the same margins. _theme/frame.html reads the margin, writes
+   --deck-pad-x and --deck-pad-y (the fallbacks below are for 0.18) and puts the footer, slide number and menu button
+   in the page's bottom margin. The content area is still 1280 by 720. Print and PDF draw no page. */
+.reveal-viewport { background: $deck-frame-bg; }
+.reveal .slides::before { content: ""; position: absolute; left: calc(-1 * var(--deck-pad-x, 115.2px)); right: calc(-1 * var(--deck-pad-x, 115.2px)); top: calc(-1 * var(--deck-pad-y, 64.8px)); bottom: calc(-1 * var(--deck-pad-y, 64.8px)); background: $body-bg; box-shadow: 0 8px 36px rgba(0, 0, 0, .5); pointer-events: none; z-index: -1; }
+html.print-pdf .reveal-viewport { background: $body-bg; }
+html.print-pdf .reveal .slides::before { display: none; }
 /* Breathing room so boxes never reach the footer band (on screen; the print view sets section padding to 0) */
 .reveal .slides > section, .reveal .slides > section > section { padding-bottom: 1.1em; }
 
@@ -89,11 +101,13 @@ html.print-pdf .reveal .footer { background: none; }
 .reveal .slides section.roomy-3 > *:not(h2):not(aside):not(.source) { font-size: 1.18em; }
 .reveal .slides section.roomy-2 li, .reveal .slides section.roomy-3 li { margin-bottom: .45em; }
 
-/* Centre the body of a sparse slide between title and footer; the title stays put */
-.reveal .slides section.vc.present { display: flex !important; flex-direction: column; height: 100%; padding-bottom: 64px; box-sizing: border-box; }
+/* Centre the body of a sparse slide between the title and the slide's bottom edge; the title stays put. The bottom
+   reserve was 64 px while the footer sat on the slide; it now sits in the page margin (issue #23), so the reserve is
+   the same 1.1em breathing room as every other slide */
+.reveal .slides section.vc.present { display: flex !important; flex-direction: column; height: 100%; padding-bottom: 1.1em; box-sizing: border-box; }
 /* The PDF print view zeroes every section's padding with !important and makes each page taller than
    the slide (slide plus margin), so height: 100% and the reserve above would not hold there */
-html.print-pdf .reveal .slides section.vc { display: flex !important; flex-direction: column; height: var(--slide-height, 720px) !important; padding-bottom: 64px !important; box-sizing: border-box; }
+html.print-pdf .reveal .slides section.vc { display: flex !important; flex-direction: column; height: var(--slide-height, 720px) !important; padding-bottom: 1.1em !important; box-sizing: border-box; }
 .reveal .slides section.vc > h2 + * { margin-top: auto; }
 /* A hidden block (the MathJax macros) or speaker notes written right after the title would take that auto
    margin and leave the visible body under the title; give it to the first element after them instead */
@@ -126,3 +140,14 @@ html.print-pdf .reveal .slides section.vc { display: flex !important; flex-direc
 .hl-key  { color: $deck-primary; font-weight: 700; }
 .hl-good { color: $deck-green;   font-weight: 700; }
 .hl-bad  { color: $deck-accent;  font-weight: 700; }
+
+/* Hand-written cover ({.cover}): for a first slide that holds what Quarto's title slide cannot, such as a version
+   line or a download button (issue #23). The block is centred vertically and left aligned; an [..]{.eyebrow} line
+   written after the title is moved above it. Title size: $deck-cover-title-size. */
+.reveal .slides section.cover.present { display: flex !important; flex-direction: column; justify-content: center; height: 100%; box-sizing: border-box; }
+html.print-pdf .reveal .slides section.cover { display: flex !important; flex-direction: column; justify-content: center; height: var(--slide-height, 720px) !important; box-sizing: border-box; }
+.reveal .slides section.cover > h2 { font-size: $deck-cover-title-size; border-bottom: none; margin: 0 0 .4em; padding-bottom: 0; }
+.reveal .slides section.cover > p:has(> .eyebrow:only-child) { order: -1; margin: 0 0 .3em; }
+.reveal .cover .eyebrow { color: rgba($body-color, .65); letter-spacing: .14em; font-size: .6em; }
+.reveal .cover .sub { color: rgba($body-color, .65); font-size: .7em; }
+.reveal .cover .lead { font-size: .9em; }

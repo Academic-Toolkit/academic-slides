@@ -28,6 +28,8 @@ Why both a pixel check and a DOM check: an opaque footer hides overflowing conte
 
 Why a second pass in the print view: the PDF is laid out differently from the screen. Revealjs's print stylesheet sets every slide's padding to 0, the slide is not scaled, and the footer is placed on the paper rather than in the browser window. A slide that is clean on screen can therefore run into the footer in the PDF. `check-layout.mjs` opens the same print view that `export-pdf.mjs` prints, so a deck it passes prints with no content running into the footer, past the right edge, or onto a second title line. It does not check other overlaps (for example one figure over another), and it does not check the slide number.
 
+A deck shown as a page (issue #23) puts the footer in the page margin below the slide. On screen, checks 1 and 2 therefore use the footer's top or the slide's bottom edge, whichever is higher, so content that runs past the slide is still caught; the reference colour for check 1 is taken just left of the slide, inside the page margin, not at the window's edge, which has its own colour.
+
 What `check-density.mjs` counts: English body words and bullet lines on each main-body slide. It does not count speaker notes, hidden blocks, source lines, side notes, mathematics, tables, images, or markup. The main body ends at a level-1 section whose title starts with "Backup" (Quarto) or at `\appendix` (beamer).
 
 ## Workflow

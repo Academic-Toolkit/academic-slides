@@ -155,6 +155,22 @@ booktabs 的三條線：表頭上方 2px、表頭下方 1.5px、最後一列下�
 
 #8 之後範本資料夾沒有自己的主題（`_theme/` 在上一層，由 scaffold 複製），把範本資料夾複製一份就地 render 已不成立。`tests/render-templates.sh` 的做法是先用 scaffold 從每個範本建立投影片，再 render 那份投影片。契約改寫成這個流程，範本資料夾不改成可以原地 render。
 
+### D17. 投影片顯示成一張 16:9 的紙（issue #23）
+
+- revealjs 把 1280×720 的畫布縮放進視窗、`$body-bg` 鋪滿整個視窗，螢幕上看不出投影片的邊界；內容從畫布的 x = 0 開始，唯一的留白是畫布外 0.1 的 margin，顏色又和投影片一樣。手刻的 1920×1080 deck 左右各留約 150 px（7.8 %）、上方約 88 px。
+- 決定：紙＝投影片 ×(1 + margin)，margin 用 revealjs 自己的設定（範本 0.18）。寬高同比例放大，所以紙仍是 16:9、四邊各約 7.6 %；revealjs 印 PDF 時每頁本來就是投影片 ×(1 + margin)，所以螢幕與 PDF 的留白相同，只有一個設定。內容區仍是 1280×720，頁高與字級的量測與既有 deck 一致。紙在螢幕上的佔比是 (1 − m)(1 + m) = 1 − m²，永遠放得進視窗。
+- 不採用：把留白做成 section 的 padding。那會縮小內容區，每份既有 deck 的頁高預算都要重算，且 `.vc`、print 的高度規則都要跟著改。
+- 頁尾、頁碼、選單鈕原本貼著視窗；`_theme/frame.html` 依 margin 算出紙的範圍，把它們放進紙底留白、對齊內容區左右緣。列印模式看網址的 `?print-pdf`（revealjs 自己也這樣判斷）：revealjs 先觸發 ready 才加 `print-pdf` class，只看 class 會晚一步把頁尾推出頁底，Chrome 列印時每頁重複 `position: fixed` 元素，頁尾就落到下一頁頂端（實測）。
+- 頁尾不再在投影片上，`.vc` 底部為它保留的 64 px 改回與一般頁相同的 1.1em。
+
+### D18. 自寫封面 `{.cover}`（issue #23）
+
+Quarto 的標題頁由 front matter 產生，放不進版本行或下載鈕；要放這些東西的 deck 只能自寫第一張，原本被當成內容頁貼頂、下半頁空白。`{.cover}` 讓整塊垂直置中、靠左，`[..]{.eyebrow}` 寫在標題後也移到標題上方，標題字級是 `$deck-cover-title-size`。Quarto 的標題頁不變。
+
+### D19. slide-qa 在紙面版型下的量法（issue #23）
+
+`check-layout.mjs` 的頁尾帶像素檢查原本拿視窗 x = 8 當背景色參考；視窗外圈有自己的顏色之後，每一頁都被誤報（實測 16/16 頁）。參考點改取投影片左緣外 14 px，有紙時落在紙的留白、沒有紙時是投影片底色。頁尾移到紙底之後，「內容壓到頁尾」會變寬鬆，所以螢幕上的界線改為頁尾頂端與投影片下緣取較高者；`style-probe --vc-centred` 同樣處理。
+
 ## Implementation Contract
 
 **Behavior：**
