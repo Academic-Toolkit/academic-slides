@@ -33,7 +33,8 @@ $presentation-h2-font-size: 1.35em !default;
 
 /* Footer stays readable above slide content, with an opaque backing */
 .reveal .footer, .reveal .slide-number { z-index: 20; }
-.reveal .footer { background: rgba(255, 255, 255, .92); padding: .1em .4em; border-radius: .3em; }
+/* The backing follows the slide background, so a layer that sets $body-bg gets a matching footer (issue #14) */
+.reveal .footer { background: rgba($body-bg, .92); padding: .1em .4em; border-radius: .3em; }
 /* In the PDF the slide number sits inside its page, under the fixed footer, so a backing would cover it */
 html.print-pdf .reveal .footer { background: none; }
 /* Breathing room so boxes never reach the footer band (on screen; the print view sets section padding to 0) */
@@ -94,9 +95,9 @@ html.print-pdf .reveal .footer { background: none; }
    the slide (slide plus margin), so height: 100% and the reserve above would not hold there */
 html.print-pdf .reveal .slides section.vc { display: flex !important; flex-direction: column; height: var(--slide-height, 720px) !important; padding-bottom: 64px !important; box-sizing: border-box; }
 .reveal .slides section.vc > h2 + * { margin-top: auto; }
-/* A hidden block (the MathJax macros) right after the title would take that auto margin and leave
-   the visible body under the title; give it to the first element after the hidden block instead */
-.reveal .slides section.vc > h2 + .hidden + * { margin-top: auto; }
+/* A hidden block (the MathJax macros) or speaker notes written right after the title would take that auto
+   margin and leave the visible body under the title; give it to the first element after them instead */
+.reveal .slides section.vc > h2 + :is(.hidden, aside) + * { margin-top: auto; }
 /* reveal gives tables margin: auto for horizontal centring; on a .vc slide its auto top and bottom margins
    would also take shares of the free space: a lone table sits high, and on a lead, table, source slide the
    space moves above the table while the source line touches it (issue #14). Tables on a .vc slide get a fixed
@@ -104,7 +105,7 @@ html.print-pdf .reveal .slides section.vc { display: flex !important; flex-direc
    keeps the auto top margin that centres the body, so lead, table, and source line form one centred block. */
 .reveal .slides section.vc > table { margin-top: .5em; margin-bottom: .5em; }
 .reveal .slides section.vc > h2 + table,
-.reveal .slides section.vc > h2 + .hidden + table { margin-top: auto; }
+.reveal .slides section.vc > h2 + :is(.hidden, aside) + table { margin-top: auto; }
 .reveal .slides section.vc::after { content: ""; margin-bottom: auto; }
 
 /* Two side-by-side tables (design | methods compared) with equal rows and a clear gap.

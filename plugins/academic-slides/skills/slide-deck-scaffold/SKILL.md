@@ -66,18 +66,20 @@ Settings values are plain text: `<`, `{`, `[`, `]`, `&`, backslashes, backticks,
 
 ### Theme overrides
 
-A layer's `theme.scss` is copied into the deck as `theme/personal.scss` or `theme/project.scss` and listed after `_theme/deck.scss`. Every variable `deck.scss` sets in `scss:defaults` is `!default` — the five palette colours, the background, body, link and heading colours, the font family, the root and heading sizes, and the heading weight — so an override only names what it changes:
+A layer's `theme.scss` is copied into the deck as `theme/personal.scss` or `theme/project.scss` and listed after `_theme/deck.scss`. Every variable `deck.scss` sets in `scss:defaults` is `!default` — the five palette colours, the background, body, link and heading colours, the font family, the root and heading sizes, and the heading weight — so an override only names what it changes. Write each value with `!default` too:
 
 ```scss
 /*-- scss:defaults --*/
-$deck-primary: #8b0000;
-$font-family-sans-serif: "Noto Serif TC", serif;
-$presentation-font-size-root: 30px;
+$deck-primary: #8b0000 !default;
+$font-family-sans-serif: "Noto Serif TC", serif !default;
+$presentation-font-size-root: 30px !default;
 
 /*-- scss:rules --*/
 .reveal h2 { letter-spacing: .01em; }
 .reveal .eyebrow { color: $deck-accent; }
 ```
+
+Why `!default` in a layer: Quarto compiles the `scss:defaults` of the theme list in reverse, so `theme/project.scss` comes first, then `theme/personal.scss`, then `_theme/deck.scss`. With `!default` the first value set wins, which gives project over personal over official. With a plain assignment the last one wins, so a personal value would silently beat the project's (measured with Quarto 1.10.19, issue #14). `scss:rules` run the other way round, in list order, so a project rule already comes after a personal one and wins.
 
 Inside `scss:defaults` an override cannot refer to a `$deck-*` variable (write `#8b0000`, not `$deck-primary`): Quarto compiles a later file's defaults before `deck.scss` defines them. It rarely needs to: the body, link and heading colours are derived from the palette in `deck.scss`, so changing `$deck-primary` moves them too. In `scss:rules`, which comes after every file's defaults, `$deck-*` can be used freely, as in the `.eyebrow` rule above. A deck's own components (classes the official theme does not have) belong in that `scss:rules` section, so the layer holds only what differs from the official theme.
 
@@ -149,4 +151,4 @@ Run the checks in the `slide-qa` skill: layout, MathJax, density with the title 
 
 ## A deck made earlier
 
-A deck keeps the copy of the theme it was created with: `_theme/deck.scss`, or `theme/deck.scss` in a deck made before version 0.2.0. A later fix to the plugin's theme (the PDF print rules from issue #5, the table bottom rule and `.vc` centring from issue #8) does not reach it; copy the rules from this skill's `templates/quarto/_theme/deck.scss`. Issue #10 tracks a command that does this.
+A deck keeps the copy of the theme it was created with: `_theme/deck.scss`, or `theme/deck.scss` in a deck made before version 0.2.0. A later fix to the plugin's theme (the PDF print rules from issue #5, the table bottom rule and `.vc` centring from issue #8, the overridable defaults, formula colour classes and `.vc` table margins from issue #14) does not reach it. A deck made before 0.3.0 keeps its `\definecolor` macros, which still work; if you copy the new `\class` macros into such a deck, copy the `.deck-b` … `.deck-p` rules from the theme too, or the formulas lose their colour without any error; copy the rules from this skill's `templates/quarto/_theme/deck.scss`. Issue #10 tracks a command that does this.

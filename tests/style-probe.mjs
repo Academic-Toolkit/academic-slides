@@ -11,12 +11,22 @@
 //                             formula may show a MathJax error (issue #14)
 //   --source-gap <min[-max]>  on every {.vc} slide, a .source line right after a table must sit at least
 //                             min px (not touching) and at most max px (not drifting off) below the table (issue #14)
+//   --class-colors <k=rgb;…>  each formula colour class (deck-b, deck-o, deck-g, deck-p) must compute to the given colour
+//   --footer-bg <rgba(...)>   the footer backing must compute to this colour (it follows $body-bg, issue #14)
 // Exits 0 when every requested check holds, 1 otherwise, 2 on bad arguments.
 import { args, deckPath, playwright, serve } from '../plugins/academic-slides/skills/slide-qa/scripts/_lib.mjs';
 
-const { get, has } = args('Usage: node style-probe.mjs --html talk.html [--title-color "rgb(r, g, b)"] [--table-rule] [--vc-centred] [--font-family NAME] [--root-size PX] [--math-color "rgb(r, g, b)"] [--source-gap MIN[-MAX]]');
+const { get, has } = args('Usage: node style-probe.mjs --html talk.html [--title-color "rgb(r, g, b)"] [--table-rule] [--vc-centred] [--font-family NAME] [--root-size PX] [--math-color "rgb(r, g, b)"] [--source-gap MIN[-MAX]] [--class-colors "deck-b=rgb(r, g, b);…"] [--footer-bg "rgba(r, g, b, a)"]');
 const html = get('html');
 if (!html) { console.error('--html is required'); process.exit(2); }
+// A malformed value must not turn into NaN bounds that every comparison passes (verify round 1)
+if (get('source-gap') !== undefined && !/^\d+(\.\d+)?(-\d+(\.\d+)?)?$/.test(get('source-gap'))) {
+  console.error(`--source-gap expects MIN or MIN-MAX in px, got ${JSON.stringify(get('source-gap'))}`); process.exit(2);
+}
+const classColors = get('class-colors');
+if (classColors !== undefined && !/^(deck-[bogp]=rgba?\([^)]*\);?)+$/.test(classColors.replace(/\s*;\s*/g, ';').trim())) {
+  console.error(`--class-colors expects 'deck-b=rgb(r, g, b);deck-o=…', got ${JSON.stringify(classColors)}`); process.exit(2);
+}
 const { root, name } = deckPath(html);
 const chromium = await playwright();
 const { server, port } = await serve(root);
@@ -103,6 +113,22 @@ try {
     if (!m.color) { failures++; console.log('✗ math color: no \\cB term (class deck-b) in any formula'); }
     else if (m.color !== math || m.errors) { failures++; console.log(`✗ math color: \\cB renders ${m.color} (want ${math}); ${m.errors} MathJax errors`); }
     else console.log(`✓ \\cB terms render in ${math}; no MathJax errors`);
+  }
+  if (classColors) {
+    const want = Object.fromEntries(classColors.split(';').filter(Boolean).map((kv) => kv.split('=').map((x) => x.trim())));
+    const got = await page.evaluate((keys) => Object.fromEntries(keys.map((k) => {
+      const el = document.createElement('span'); el.className = k; el.textContent = 'x';
+      document.querySelector('.reveal').appendChild(el); const c = getComputedStyle(el).color; el.remove(); return [k, c];
+    })), Object.keys(want));
+    const wrong = Object.keys(want).filter((k) => got[k] !== want[k]);
+    if (wrong.length) { failures++; console.log(`✗ formula colour classes: ${wrong.map((k) => `${k} is ${got[k]} (want ${want[k]})`).join('; ')}`); }
+    else console.log(`✓ formula colour classes ${Object.keys(want).join(', ')} take the palette`);
+  }
+  const footerBg = get('footer-bg');
+  if (footerBg) {
+    const got = await page.evaluate(() => getComputedStyle(document.querySelector('.reveal .footer')).backgroundColor);
+    if (got !== footerBg) { failures++; console.log(`✗ footer backing: ${got} (want ${footerBg})`); }
+    else console.log(`✓ footer backing is ${footerBg}`);
   }
   const gap = get('source-gap');
   if (gap) {

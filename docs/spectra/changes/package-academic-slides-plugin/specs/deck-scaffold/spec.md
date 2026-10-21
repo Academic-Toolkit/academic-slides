@@ -47,6 +47,16 @@ Give an agent a ready-to-copy starting point for a Quarto revealjs deck and a mi
 - **WHEN** `~/.claude/.academic-slides/theme.scss` sets `$font-family-sans-serif: "Times New Roman", serif;` and `$presentation-font-size-root: 30px;` in its `scss:defaults` section and a deck scaffolded afterwards is rendered
 - **THEN** the computed font family of the slides begins with `"Times New Roman"` and the computed font size of `.reveal` is `30px`
 
+#### Scenario: Project layer over personal layer
+
+- **WHEN** the personal `theme.scss` sets `$deck-primary: #8b0000 !default;` and `$presentation-font-size-root: 30px !default;`, the project `theme.scss` sets `$deck-primary: #006400 !default;`, `$presentation-font-size-root: 24px !default;` and `$presentation-heading-color: #123456 !default;`, and a deck scaffolded with `--trust-project` is rendered
+- **THEN** the slide titles render in `rgb(18, 52, 86)`, the computed font size of `.reveal` is `24px`, and `\cB` terms render in `rgb(0, 100, 0)`: the project layer wins, as the layer order project > personal > official states (verify round 1 of issue #14)
+
+#### Scenario: Footer backing follows the background
+
+- **WHEN** a layer sets `$body-bg: #fafaf7 !default;` and the deck is rendered
+- **THEN** the footer backing computes to `rgba(250, 250, 247, 0.92)`
+
 ### Requirement: Mathematics colours follow the palette
 
 The colour macros `\cB`, `\cO`, `\cG`, and `\cP` in every Quarto template that defines them SHALL wrap their argument in the CSS classes `deck-b`, `deck-o`, `deck-g`, and `deck-p` (MathJax `\class`), and `_theme/deck.scss` SHALL colour those classes with `$deck-primary`, `$deck-accent`, `$deck-green`, and `$deck-purple`. The Quarto templates SHALL NOT define the palette a second time with `\definecolor`; the beamer mirror keeps its `\definecolor` lines with the official palette's RGB values (issue #14).

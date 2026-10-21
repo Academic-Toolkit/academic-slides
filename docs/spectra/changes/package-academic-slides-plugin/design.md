@@ -68,7 +68,7 @@ Playwright 用動態 import；找不到時印出安裝指令並以狀態 1 結�
   - 版面：.roomy-1/2/3、.vc、.setting-pair、.fig-row。
   - 頁尾：footer 不透明底與頁尾留白。
 - 丟棄只屬於課程或該場演講的 class：.sim-tag、.demo-tag、.gate-*、.shot-*、.op-cue、.sim-embed、.compare-box、.big。
-- MathJax 巨集放在第一張內容頁的 hidden 區塊，色名用 \definecolor{deckB}{RGB}{…}（巨集內不可寫 #hex）。
+- MathJax 巨集放在第一張內容頁的 hidden 區塊（巨集內不可寫 #hex）。0.3.0 起 Quarto 範本的色彩巨集用 \class 對到樣式表的色票，不再用 \definecolor（D14）。
 - beamer 範本用同一組 RGB 與同名巨集（\cB \cO \cG \cP、\takeaway、\sourceline、\algobox、\bibent），標題與 qmd 主體一對一，讓 check-density 的標題對照可用。
 
 ### D5. 從審閱回饋泛化的版面規則寫進 academic-slide-design
@@ -134,6 +134,8 @@ booktabs 的三條線：表頭上方 2px、表頭下方 1.5px、最後一列下�
 - Quarto 把主題清單各檔的 `scss:defaults` 依「後面的檔先」串接，所以設定層的 `theme/personal.scss`、`theme/project.scss` 先於 `_theme/deck.scss` 編譯。後到的一般賦值會蓋掉先到的值，`!default` 則讓位給先到的值。#8 只給五個色票加 `!default`，其餘八個預設值（`$body-bg`、`$body-color`、`$link-color`、`$presentation-heading-color`、`$font-family-sans-serif`、`$presentation-font-size-root`、`$presentation-heading-font-weight`、`$presentation-h2-font-size`）因此一律蓋掉設定層的值，而且沒有任何警告。實測（Quarto 1.10.19）：個人層設 `"Times New Roman", serif` 與 `30px`，編譯後的 CSS 仍是 Avenir Next 與 28px。
 - 決定：`deck.scss` 在 `scss:defaults` 設的每一個變數都加 `!default`。設定層本來就是用來覆寫的，沒有哪一個值需要鎖住；只開放字型會讓字級與顏色留著同樣的靜默失效。
 - 設定層的 `scss:defaults` 仍不能引用 `$deck-*`：那段會在 `deck.scss` 定義色票之前編譯，這是 Quarto 的排列方式，主題裡改不了。兩點讓它不再造成問題：`deck.scss` 的衍生值（內文、連結、標題顏色）本來就由色票算出，設定層只改 `$deck-primary`，它們會跟著變；`scss:rules` 在所有檔的 defaults 之後編譯，設定層可以在那裡使用 `$deck-*`。SKILL 寫明這兩點。
+- 設定層自己的 `scss:defaults` 也要寫 `!default`（verify 第 1 輪）。主題清單是 `default, _theme/deck.scss, theme/personal.scss, theme/project.scss`，Quarto 把 defaults 倒過來串，專案層最先編譯。設定層用一般賦值時最後的贏，個人層會蓋掉專案層，與 D9「專案 > 個人 > 官方」相反；實測（Quarto 1.10.19）個人 #8b0000、30px 蓋過專案 #006400、24px。設定層也寫 `!default` 時最先設的贏，專案層優先。`scss:rules` 依清單順序串，本來就是專案層在後、優先。不採用：調換清單順序，那會讓 rules 換成個人層優先，只是把問題移到另一邊。
+- 頁尾的半透明底由 `$body-bg` 算出（verify 第 1 輪），設定層改底色時頁尾不會留一塊白。
 
 ### D14. 公式顏色由樣式表決定（issue #14）
 
@@ -146,7 +148,8 @@ booktabs 的三條線：表頭上方 2px、表頭下方 1.5px、最後一列下�
 
 - reveal 給表格 `margin: auto` 讓它水平置中；在 `.vc` 頁的 flex 欄裡，這個 auto 的上下邊距也會分走置中用的空白。#8 的 `section.vc > table { margin-bottom: 0 }` 只拿掉下邊距，套在每一張直屬的表格上：「導言、表格、出處」的頁上，表格的 auto 上邊距仍分走空白（空白移到表格上方），出處貼著表格（實測 6 px，results-report 的兩張頁）。
 - 只把那條規則收窄到「唯一的表格」也不對：實測出處會飄到表格下方 86–101 px，因為表格的 auto 上下邊距仍在分空白。
-- 決定：`.vc` 頁上的表格改用固定的上下邊距（0.5em），左右仍是 auto（水平置中不變）；緊接在標題或隱藏巨集區塊後面的表格保留 auto 上邊距，由它把內文推到中間。導言、表格、出處因此是一個整塊置中，出處在表格下方 19.4 px；只有一張表格的頁照樣置中。驗證：results-report 的 render 檢查加 `--source-gap 12-40`，四個範本的 `--vc-centred` 照常通過。
+- 決定：`.vc` 頁上的表格改用固定的上下邊距（0.5em），左右仍是 auto（水平置中不變）；緊接在標題、隱藏巨集區塊或講者備註後面的表格保留 auto 上邊距，由它把內文推到中間。導言、表格、出處因此是一個整塊置中，出處在表格下方約 19 px；只有一張表格的頁照樣置中。
+- 更正（verify 第 1 輪）：results-report 的兩張頁其實是「標題、表格、出處」，沒有導言；第一版說它們是「導言、表格、出處」是錯的，`.5em` 那條規則當時沒有被 render 測到。render 測試另加固定頁面：一張「導言、表格、出處」（`--source-gap 12-40`），一張「講者備註寫在表格前」的單一表格（`--vc-centred`；修正前上方 31 px、下方 445 px，沒有置中）。results-report 本身的 `--source-gap 12-40` 保留。
 
 ### D16. Implementation Contract 描述實際的 render 檢查（issue #14）
 
