@@ -11,9 +11,8 @@
 // Checks 2-4 run twice: on screen, slide by slide, and in the print view that export-pdf.mjs prints.
 // The print view is a different layout (revealjs's print stylesheet, an unscaled slide, the footer
 // placed on the paper), so a slide that is clean on screen can still run into the footer in the PDF.
-import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';
-import { args, playwright, deckPath, serve, openDeck, openPrintView } from './_lib.mjs';
+import { args, playwright, deckPath, serve, openDeck, openPrintView, outputDirectory, writeOutput } from './_lib.mjs';
 
 const { get, has } = args(`Usage: node check-layout.mjs [--html talk.html] [--width 1280] [--height 720]
                              [--footer '.reveal .footer'] [--out <deck folder>/qa] [--shots]
@@ -30,7 +29,7 @@ const SHOTS = has('shots');
 const { root, name } = deckPath(get('html', 'talk.html'));
 const deck = name.replace(/\.html?$/, '');
 // default output sits next to the deck (owned by the user, specific to the project), never a shared temp path
-const OUT = path.resolve(get('out', path.join(root, 'qa')));
+let OUT = path.resolve(get('out', path.join(root, 'qa')));
 // band margins avoid the menu button (bottom left) and the slide number (bottom right)
 const X0 = 110;
 const BAND_W = WIDTH - X0 - 150;
@@ -115,8 +114,11 @@ async function checkPrintView(browser, url) {
   const offenders = [];
   for (const info of found.pages) {
     if (!(info.domOver > 2 || info.rightOver > 2 || info.titleLines > 1)) continue;
+    if (!Number.isSafeInteger(info.page) || info.page < 1) {
+      throw new Error('invalid page number in print view');
+    }
     const file = path.join(OUT, `${deck}-print-${String(info.page).padStart(2, '0')}-flagged.png`);
-    await printPage.locator(PRINTED_PAGES).nth(info.index).screenshot({ path: file });
+    await writeOutput(file, await printPage.locator(PRINTED_PAGES).nth(info.index).screenshot());
     offenders.push({ ...info, file });
   }
   const warning = found.pages.length < found.totalSlides
@@ -133,7 +135,7 @@ const chromium = await playwright();
 const { server, port } = await serve(root);
 let browser;
 try {
-  await mkdir(OUT, { recursive: true });
+  OUT = await outputDirectory(OUT, has('out') ? undefined : root);
   browser = await chromium.launch();
   const url = `http://127.0.0.1:${port}/${encodeURIComponent(name)}`;
   const page = await browser.newPage({ viewport: { width: WIDTH, height: HEIGHT } });
@@ -172,10 +174,10 @@ try {
     }, [band.toString('base64'), ref.toString('base64')]);
 
     const nn = String(i).padStart(2, '0');
-    if (SHOTS) await writeFile(path.join(OUT, `${deck}-${nn}.png`), await page.screenshot());
+    if (SHOTS) await writeOutput(path.join(OUT, `${deck}-${nn}.png`), await page.screenshot());
     if (nonBg > 200 || info.domOver > 2 || info.rightOver > 2 || info.titleLines > 1) {
       const file = path.join(OUT, `${deck}-${nn}-flagged.png`);
-      await writeFile(file, await page.screenshot());
+      await writeOutput(file, await page.screenshot());
       offenders.push({ index: i, ...info, pixels: nonBg, file });
     }
     if (info.last) break;

@@ -4,7 +4,7 @@
 // check-layout.mjs measures this same print view, so a deck it passes prints with nothing running into
 // the footer, past the right edge, or onto a second title line.
 import path from 'path';
-import { args, playwright, deckPath, serve, openPrintView } from './_lib.mjs';
+import { args, playwright, deckPath, serve, openPrintView, writeOutput } from './_lib.mjs';
 
 const { get } = args(`Usage: node export-pdf.mjs [--html talk.html] [--out talk.pdf] [--width 1280] [--height 720]
 Exit status: 0 PDF written, 1 export failed, 2 HTML not found.`);
@@ -20,7 +20,7 @@ try {
   const page = await browser.newPage({ viewport: { width: WIDTH, height: HEIGHT } });
   await openPrintView(page, `http://127.0.0.1:${port}/${encodeURIComponent(name)}`);
   const slides = await page.evaluate(() => window.Reveal.getTotalSlides());
-  await page.pdf({ path: OUT, width: `${WIDTH}px`, height: `${HEIGHT}px`, printBackground: true, preferCSSPageSize: true });
+  await writeOutput(OUT, await page.pdf({ width: `${WIDTH}px`, height: `${HEIGHT}px`, printBackground: true, preferCSSPageSize: true }));
   console.log(`✓ wrote ${OUT} (${slides} slides)`);
 } catch (err) {
   console.error(`PDF export failed: ${err.message}`);

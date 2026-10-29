@@ -70,3 +70,23 @@ For each failure, see [references/fix-table.md](references/fix-table.md). It lis
 - Title comparison normalizes case, punctuation, dashes, `\emph`, and inline math. A deliberate wording difference between the two decks will still be reported.
 - If a newer Quarto release changes the revealjs DOM, update the selectors at the top of each script.
 - A deck keeps its own copy of the shared theme: `_theme/deck.scss`, or `theme/deck.scss` in a deck made before version 0.2.0. A later fix to the plugin's theme, such as the print rules for `.vc` slides and the footer (issue #5) the table bottom rule (issue #8), or the formula colour classes and overridable defaults (issue #14), does not reach an existing deck; copy the rules from the plugin's `slide-deck-scaffold/templates/quarto/_theme/deck.scss` into it (issue #10 tracks a command that does this).
+
+## 檔案與輸出安全邊界
+
+本機 HTTP server 以投影片目錄的 `realpath` 為根，請求路徑在解碼與正規化後仍須位於根內，其 `realpath` 也須位於根內，才讀取該實體檔案。因此，指向目錄外的檔案連結與目錄連結不會被提供；指向根內的連結，以及使用者用來開啟整個投影片目錄的別名連結，仍可使用。原有的 loopback 綁定、Host 檢查與檔名 URL 編碼維持不變。
+
+未指定 `--out` 時，截圖仍寫入投影片旁的 `qa/`，且 `qa/` 的實體位置必須位於投影片目錄內；指向內部目錄的 `qa/` 連結可用，指向外部的連結會讓檢查以狀態 3 結束。明確指定 `check-layout.mjs --out` 表示授權該輸出目錄及其實體位置，可使用外部目錄、巢狀新目錄或目錄別名。`export-pdf.mjs --out` 接受檔案路徑，授權其父目錄的實體位置；這些選項都不會授權追隨目的檔案本身的連結。
+
+三種截圖（`<deck>-NN.png`、`<deck>-NN-flagged.png`、`<deck>-print-NN-flagged.png`）與 PDF 共用安全寫入方式：先取得 Playwright 回傳的 buffer，在目的檔案所在目錄建立不覆用既有路徑的新暫存檔，再以 rename 取代目的檔案。若目的檔案原本是連結，會以新檔案取代連結，連結指向的外部檔案不變；一般重跑仍可覆蓋先前產物。
+
+這些措施防護匯入資料夾中已存在的惡意連結，並非針對有權限在檢查與讀寫之間同時替換本機目錄的程序提供 sandbox。投影片 HTML 仍會執行 JavaScript，server 仍提供整個投影片目錄中的檔案。檢查外來投影片時，應放在獨立且不含秘密資料的目錄。
+
+## 開發驗證
+
+在本 repository 根目錄執行以下命令；`npm test` 的安全回歸測試會啟動真正的 Chromium，須先安裝鎖定的依賴與瀏覽器：
+
+```bash
+npm ci
+npx playwright install chromium
+npm test
+```
