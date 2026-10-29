@@ -10,10 +10,10 @@ A Claude Code plugin for research-talk and lecture slides that a seminar audienc
 
 ## Install
 
-This repository is private. Installing requires GitHub access to `PsychQuant/academic-slides` (for example through `gh auth login`).
+This repository is private. Installing requires GitHub access to `Academic-Toolkit/academic-slides` (for example through `gh auth login`).
 
 ```
-/plugin marketplace add PsychQuant/academic-slides
+/plugin marketplace add Academic-Toolkit/academic-slides
 /plugin install academic-slides@academic-slides
 ```
 
