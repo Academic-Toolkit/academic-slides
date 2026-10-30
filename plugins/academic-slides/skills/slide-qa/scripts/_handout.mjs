@@ -58,8 +58,16 @@ function cjkPreamble(title, cjkFont) {
 
 const mm = (v) => +v.toFixed(3);
 
-// One page per sheet. Each slide is a TikZ node placed at absolute page coordinates; the frame is
-// drawn around the node, so it hugs the actual slide image even when the deck is not 16:9.
+// The header title from `pdfinfo` output: the Title line when it has text, else the file name.
+// `[ \t]*` instead of `\s+`, so an empty title cannot reach across the newline into the next line.
+export function pdfTitle(pdfinfoOut, stem) {
+  return pdfinfoOut.match(/^Title:[ \t]*(\S.*)$/m)?.[1].trim() || stem;
+}
+
+// One page per sheet. Each slide is a named TikZ node placed at absolute page coordinates. The frame
+// is a separate rectangle drawn after the node, along the node's edges, so it hugs the actual slide
+// image even when the deck is not 16:9. It cannot be the node's own `draw=`: TikZ paints that before
+// the node's content, and an opaque slide page then covers the inner half of the line.
 export function texFor({
   geometry: g, paperW, paperH, pages, deck = 'deck.pdf',
   frame = true, frameWidth = 0.4, title = '', pageNumbers = true, cjkFont = '',
@@ -78,13 +86,14 @@ export function texFor({
     '\\setlength{\\parindent}{0pt}',
     '\\begin{document}',
   ];
-  const box = frame ? `draw=black, line width=${frameWidth}pt, ` : '';
   for (let s = 0; s < sheets; s++) {
     lines.push('\\begin{tikzpicture}[remember picture, overlay, x=1mm, y=-1mm, shift={(current page.north west)}]');
     for (let i = 0; i < perSheet && s * perSheet + i < pages; i++) {
       const c = g.cells[i];
-      lines.push(`  \\node[${box}inner sep=0pt, outer sep=0pt] at (${mm(c.x + g.slideW / 2)}, ${mm(c.y + g.slideH / 2)}) `
+      const name = `s${i + 1}`;
+      lines.push(`  \\node[inner sep=0pt, outer sep=0pt] (${name}) at (${mm(c.x + g.slideW / 2)}, ${mm(c.y + g.slideH / 2)}) `
         + `{\\includegraphics[page=${s * perSheet + i + 1}, width=${mm(g.slideW)}mm, height=${mm(g.slideH)}mm, keepaspectratio]{${deck}}};`);
+      if (frame) lines.push(`  \\draw[black, line width=${frameWidth}pt] (${name}.south west) rectangle (${name}.north east);`);
     }
     if (title) {
       // As wide as the grid, so a long title (Quarto appends the subtitle to the PDF title) wraps upward

@@ -73,6 +73,34 @@ test('a grid that does not fit on the page is refused', () => {
   assert.throws(() => lib.geometry({ ...A4L, rows: 2, cols: 40 }), /does not fit/);
 });
 
+test('texFor: the frame is drawn after the slide, so the slide image cannot cover half of it', () => {
+  // verify #35 finding 1: a `draw=` on the node is painted before the node's content, and an opaque
+  // slide page then hides the inner half of the line.
+  const g = lib.geometry({ ...A4L, rows: 2, cols: 2 });
+  const tex = lib.texFor({ geometry: g, paperW: 297, paperH: 210, pages: 4, frameWidth: 0.6 });
+  assert.doesNotMatch(tex, /draw=/);
+  const nodes = [...tex.matchAll(/\\node\[inner sep=0pt, outer sep=0pt\] \((s\d+)\) at/g)].map((m) => m[1]);
+  assert.deepEqual(nodes, ['s1', 's2', 's3', 's4']);
+  for (const n of nodes) {
+    const node = tex.indexOf(`(${n}) at`);
+    const rect = tex.indexOf(`\\draw[black, line width=0.6pt] (${n}.south west) rectangle (${n}.north east);`);
+    assert.ok(rect > node, `the frame of ${n} must come after its node`);
+  }
+});
+
+test('pdfTitle: takes the Title line, and falls back to the file name when it is missing or empty', () => {
+  assert.equal(lib.pdfTitle('Title:           Fixture Deck\nPages: 5\n', 'deck'), 'Fixture Deck');
+  assert.equal(lib.pdfTitle('Title:           \nSubject:         Something else\n', 'deck'), 'deck');
+  assert.equal(lib.pdfTitle('Pages: 5\n', 'deck'), 'deck');
+});
+
+test('a single band shifts the grid: it is centred in the space left after the header', () => {
+  // verify #35 finding 3: the grid is centred together with its bands, not on the page.
+  const g = lib.geometry({ ...A4L, rows: 2, cols: 2, headerBand: 8 });
+  near(g.top, 30.47, 0.02);
+  near(210 - g.top - g.gridH, 22.47, 0.02);
+});
+
 test('texEscape escapes the LaTeX special characters and keeps CJK text', () => {
   assert.equal(lib.texEscape('A & B: 50% #1_x $y$ {z} ~ ^ \\'),
     'A \\& B: 50\\% \\#1\\_x \\$y\\$ \\{z\\} \\textasciitilde{} \\textasciicircum{} \\textbackslash{}');
@@ -84,7 +112,7 @@ test('texFor: one sheet per four slides, every page referenced once, frames by d
   const tex = lib.texFor({ geometry: g, paperW: 297, paperH: 210, pages: 5, title: 'Talk', pageNumbers: true });
   assert.equal((tex.match(/\\clearpage/g) || []).length, 2);
   for (let k = 1; k <= 5; k++) assert.equal((tex.match(new RegExp(`page=${k},`, 'g')) || []).length, 1);
-  assert.match(tex, /draw=black, line width=0\.4pt/);
+  assert.match(tex, /\\draw\[black, line width=0\.4pt\] \(s1\.south west\) rectangle \(s1\.north east\);/);
   assert.match(tex, /\{1 \/ 2\}/);
   assert.match(tex, /\{Talk\}/);
   assert.doesNotMatch(tex, /xeCJK/);
@@ -99,7 +127,7 @@ test('texFor: the header wraps within the grid width instead of running off the 
 test('texFor: frame, header and page number can each be turned off', () => {
   const g = lib.geometry({ ...A4L, rows: 2, cols: 2 });
   const tex = lib.texFor({ geometry: g, paperW: 297, paperH: 210, pages: 4, frame: false, title: '', pageNumbers: false });
-  assert.doesNotMatch(tex, /draw=black/);
+  assert.doesNotMatch(tex, /\\draw\[/);
   assert.doesNotMatch(tex, /\/ 1\}/);
   assert.doesNotMatch(tex, /anchor=south west/);
 });
@@ -237,6 +265,66 @@ test('handout: a CJK title is typeset, or refused with a hint about --cjk-font',
     assert.equal(code, 1);
     assert.match(log, /--cjk-font/);
   }
+});
+
+// One slide on a page painted white, as beamer and Chromium exports are. `\\pagecolor` is not enough:
+// under XeLaTeX it sets a page background that an included page does not carry, so the page stays
+// transparent and the frame test passes whether or not the frame is half hidden.
+function opaqueFixture() {
+  fixture();
+  const out = path.join(fixtureDir, 'opaque.pdf');
+  if (existsSync(out)) return out;
+  writeFileSync(path.join(fixtureDir, 'opaque.tex'), `\\documentclass{article}
+\\usepackage[paperwidth=160mm,paperheight=90mm,margin=0mm]{geometry}
+\\usepackage{tikz}
+\\pagestyle{empty}
+\\begin{document}
+\\begin{tikzpicture}[remember picture, overlay]\\fill[white] (current page.south west) rectangle (current page.north east);\\end{tikzpicture}%
+\\vspace*{38mm}\\centering{\\Huge Opaque}
+\\end{document}
+`);
+  for (let pass = 1; pass <= 2; pass++) {   // `remember picture` needs a second pass to find the page
+    const r = spawnSync('xelatex', ['-interaction=nonstopmode', '-halt-on-error', 'opaque.tex'], { cwd: fixtureDir, encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stdout.slice(-800));
+  }
+  return out;
+}
+
+// Width in mm of the dark run that crosses the row y (mm) near x (mm), at 2400 dpi.
+function lineWidth(file, xmm, ymm) {
+  const dpi = 2400, pxmm = dpi / 25.4;
+  const prefix = path.join(path.dirname(file), 'line');
+  const x0 = Math.round((xmm - 1) * pxmm), y0 = Math.round(ymm * pxmm);
+  spawnSync('pdftoppm', ['-gray', '-r', String(dpi), '-f', '1', '-l', '1', '-x', String(x0), '-y', String(y0),
+    '-W', String(Math.round(2 * pxmm)), '-H', '1', '-singlefile', file, prefix]);
+  const buf = readFileSync(`${prefix}.pgm`);
+  const header = buf.toString('latin1', 0, 40).match(/^P5\s+\d+\s+\d+\s+255\s/)[0];
+  const row = [...buf.subarray(header.length)];
+  return row.filter((v) => v < 128).length / pxmm;
+}
+
+test('handout: the default frame is the full 0.4 pt wide on an opaque slide', { skip }, () => {
+  const deck = opaqueFixture();
+  const out = path.join(fixtureDir, 'opaque-handout.pdf');
+  assert.equal(runHandout(['--pdf', deck, '--out', out]).code, 0);
+  near(lineWidth(out, 12, 26.5 + 74.5 / 2), 0.4 * 25.4 / 72, 0.03);   // 0.141 mm; half would be 0.071
+});
+
+test('handout: an option given without a value is refused, not a stack trace', () => {
+  for (const argv of [['--pdf'], ['--pdf', 'x.pdf', '--out']]) {
+    const { code, out } = runHandout(argv);
+    assert.equal(code, 1, out);
+    assert.match(out, /needs a value/);
+    assert.doesNotMatch(out, /\n\s+at /);
+  }
+});
+
+test('handout: --out in a folder that does not exist is refused before XeLaTeX runs', { skip }, () => {
+  const deck = fixture();
+  const { code, out } = runHandout(['--pdf', deck, '--out', path.join(fixtureDir, 'no-such-folder', 'h.pdf')]);
+  assert.equal(code, 1, out);
+  assert.match(out, /folder does not exist/);
+  assert.doesNotMatch(out, /\n\s+at /);
 });
 
 test('handout: a missing PDF exits 2', () => {

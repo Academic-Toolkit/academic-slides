@@ -42,7 +42,7 @@ For a grid of *r* rows × *c* columns on a page *W* × *H* mm, with margin *m* (
 
 slide width = min( (W − 2m − (c−1)g) / c , ((H − 2m − bands − (r−1)g) / r) × aspect ), slide height = width / aspect
 
-The aspect ratio is read from the PDF's first page. The whole grid is then centred on the page. The bands are 8 mm for the header and 8 mm for the page numbers; they shrink the slides only when the height binds, which neither preset does.
+The aspect ratio is read from the PDF's first page. The grid is centred in the space left after the header and footer bands, so with only one band on, the grid sits about 4 mm off the page centre, away from that band. The bands are 8 mm for the header and 8 mm for the page numbers; they shrink the slides only when the height binds, which neither preset does.
 
 | Preset | Page | Slide | Space above and below the grid |
 |---|---|---|---|
@@ -51,12 +51,12 @@ The aspect ratio is read from the PDF's first page. The whole grid is then centr
 
 `--rows R --cols C` replaces the preset grid, with the same formula; give both. They are named rather than written as `3x2` because "3x2" reads either as rows × columns or as columns × rows (issue #34).
 
-- **Frame**: 0.4 pt black around each slide, drawn around the actual image, so a 4:3 deck in a 16:9 cell is still framed tightly. `--frame-width` changes it, and `--no-frame` removes it.
+- **Frame**: 0.4 pt black around each slide, drawn after the slide so the slide's own background cannot cover half of the line, and drawn around the actual image, so a 4:3 deck in a 16:9 cell is still framed tightly. `--frame-width` changes it, and `--no-frame` removes it.
 - **Header**: the PDF's title, else the file name. It is left-aligned with the grid and wraps within the grid's width. `--title "…"` replaces it, and `--no-header` drops it. Quarto puts the subtitle into the PDF title, so the default can be long.
 - **Page numbers**: `n / N`, centred below the grid; `--no-page-numbers` drops them.
 - **Chinese, Japanese and Korean titles**: XeLaTeX tries PingFang TC, Heiti TC, Noto Sans CJK TC, Source Han Sans TC and Noto Sans TC, in that order. If none is installed, the script exits 1 and asks for `--cjk-font "<installed font>"` or `--no-header`.
 
-Look at the handout the way you look at the slides: render every page with `pdftoppm -r 150 -png talk-handout.pdf qa/talk-handout` and open each image at full size. A frame is about 0.14 mm wide, so in an image under about 150 dpi some edges can look faint; zoom in, or render that page at a higher resolution, before deciding a frame is missing.
+Look at the handout the way you look at the slides: render every page with `pdftoppm -r 150 -png talk-handout.pdf qa/talk-handout` and open each image at full size. A frame is about 0.14 mm wide (0.4 pt), so in an image under about 150 dpi some edges can look faint; zoom in, or render that page at a higher resolution, before deciding a frame is missing.
 
 ## Step 0: task list
 
@@ -69,10 +69,11 @@ TaskCreate(subject="check-mathjax", description="exit 0: no parse errors, no und
 TaskCreate(subject="check-density", description="--qmd, plus --tex when the deck has a beamer mirror; exit 0, titles match")
 TaskCreate(subject="check-fill", description="every flagged slide reviewed: roomy, vc, a figure, or kept as is with a reason (advice, never fails)")
 TaskCreate(subject="export-pdf", description="PDF written; its page count equals the slide count")
-TaskCreate(subject="handout (when printed handouts are wanted)", description="handout.mjs on the PDF exits 0; every handout page rendered and looked at at full size")
 TaskCreate(subject="Look at every screenshot", description="open each qa/<deck>-NN.png at full size, plus -flagged and -print-NN-flagged; a contact sheet does not count")
 TaskCreate(subject="Fix and re-run", description="each failure fixed per references/fix-table.md; the failed checks re-run until they pass")
 ```
+
+Add a handout task only when printed handouts are asked for, and put it after "Fix and re-run": `TaskCreate(subject="handout", description="after the last fix: export-pdf re-run, handout.mjs on that PDF exits 0, every handout page rendered and looked at at full size")`. A run that does not want handouts has no handout task, so it does not leave one open.
 
 ## Workflow
 
@@ -85,6 +86,8 @@ node scripts/check-fill.mjs                     # 5. half-empty slides (advice, 
 node scripts/export-pdf.mjs                     # 6. offline PDF; page count = slide count
 node scripts/handout.mjs --pdf talk.pdf         # 7. A4 handout (optional): 2 × 2 landscape; --portrait for 3 rows × 2 columns
 ```
+
+Step 7 prints whatever PDF it is given, so make the handout last: after every fix, re-run step 6 and then step 7. A handout made before a fix shows the old deck.
 
 Then look at the screenshots from step 2: `qa/<deck>-NN.png` for every slide, `qa/<deck>-NN-flagged.png` for flagged slides, and `qa/<deck>-print-NN-flagged.png` for flagged PDF pages. Screen slides are numbered from 0 (`#NN`), PDF pages from 1 (`page NN`, the page number in the PDF, counting the extra pages of a slide taller than the paper and of separate notes pages). Pixel figures differ between the two because the screen view is scaled to fit its margin. For a handout from step 7, render its pages (`pdftoppm -r 150 -png talk-handout.pdf qa/talk-handout`) and look at each one too. Add `qa/` to the project's `.gitignore`. Check label collisions in figures, awkward line breaks inside narrow columns, and whether highlighted numbers are the ones the speaker talks about.
 

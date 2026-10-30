@@ -5,13 +5,13 @@
 // The page is laid out by _handout.mjs and typeset by XeLaTeX, so the margins are exact rather than
 // left to the printer dialog, and a Chinese title can go in the header.
 import { spawnSync } from 'child_process';
-import { mkdtempSync, copyFileSync, writeFileSync, existsSync, readFileSync, rmSync } from 'fs';
+import { mkdtempSync, copyFileSync, writeFileSync, existsSync, readFileSync, rmSync, statSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 import { args } from './_lib.mjs';
-import { PRESETS, A4, geometry, texFor } from './_handout.mjs';
+import { PRESETS, A4, geometry, texFor, pdfTitle } from './_handout.mjs';
 
-const { get, has } = args(`Usage: node handout.mjs --pdf talk.pdf [--out talk-handout.pdf] [--landscape | --portrait]
+const { get: rawGet, has } = args(`Usage: node handout.mjs --pdf talk.pdf [--out talk-handout.pdf] [--landscape | --portrait]
          [--rows R --cols C] [--margin 12] [--gap 8] [--no-frame] [--frame-width 0.4]
          [--title "text"] [--no-header] [--no-page-numbers] [--cjk-font "PingFang TC"]
 Presets: --landscape (the default) is 2 rows × 2 columns; --portrait is 3 rows × 2 columns.
@@ -25,6 +25,15 @@ function fail(message, code = 1) {
   process.exit(code);
 }
 
+// An option that takes a value but is given without one (`--out` at the end, or followed by another
+// option) is refused here; otherwise it reaches path.resolve as undefined and ends in a stack trace.
+function get(name, fallback) {
+  if (!has(name)) return fallback;
+  const value = rawGet(name);
+  if (value === undefined || value.startsWith('--')) fail(`--${name} needs a value.`);
+  return value;
+}
+
 function number(name, fallback, { min, integer = false }) {
   const raw = get(name);
   if (raw === undefined) return fallback;
@@ -36,6 +45,7 @@ function number(name, fallback, { min, integer = false }) {
 }
 
 // Options first, so a bad option is reported even when the PDF is also missing.
+for (const name of ['pdf', 'out', 'title', 'cjk-font', 'rows', 'cols', 'margin', 'gap', 'frame-width']) get(name);
 if (has('landscape') && has('portrait')) fail('Give --landscape or --portrait, not both.');
 const orientation = has('portrait') ? 'portrait' : 'landscape';
 if ((get('rows') === undefined) !== (get('cols') === undefined)) {
@@ -54,6 +64,8 @@ if (!existsSync(PDF)) fail(`PDF not found: ${PDF} (export or compile the deck fi
 const stem = path.basename(PDF, path.extname(PDF));
 const OUT = path.resolve(get('out', path.join(path.dirname(PDF), `${stem}-handout.pdf`)));
 if (OUT === PDF) fail('--out must differ from --pdf; the handout would overwrite the deck.');
+const outDir = path.dirname(OUT);
+if (!existsSync(outDir) || !statSync(outDir).isDirectory()) fail(`--out: the folder does not exist: ${outDir}`);
 
 const info = spawnSync('pdfinfo', ['-enc', 'UTF-8', PDF], { encoding: 'utf8' });
 if (info.error) fail('pdfinfo not found. Install poppler: brew install poppler (macOS) or apt install poppler-utils.');
@@ -63,7 +75,7 @@ const size = info.stdout.match(/^Page size:\s+([\d.]+) x ([\d.]+)/m);
 if (!pages || !size) fail(`pdfinfo did not report a page count and page size for ${PDF}.`);
 const aspect = Number(size[1]) / Number(size[2]);
 
-const title = has('no-header') ? '' : (get('title') ?? info.stdout.match(/^Title:\s+(.+)$/m)?.[1].trim() ?? stem);
+const title = has('no-header') ? '' : (get('title') ?? pdfTitle(info.stdout, stem));
 const pageNumbers = !has('no-page-numbers');
 const { paperW, paperH } = A4[orientation];
 
