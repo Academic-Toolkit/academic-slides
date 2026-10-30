@@ -8,7 +8,7 @@ import { spawnSync } from 'child_process';
 import { mkdtempSync, copyFileSync, writeFileSync, existsSync, readFileSync, rmSync, statSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
-import { args } from './_lib.mjs';
+import { args, writeOutput } from './_lib.mjs';
 import { PRESETS, A4, geometry, texFor, pdfTitle } from './_handout.mjs';
 
 const { get: rawGet, has } = args(`Usage: node handout.mjs --pdf talk.pdf [--out talk-handout.pdf] [--landscape | --portrait]
@@ -38,13 +38,24 @@ function number(name, fallback, { min, integer = false }) {
   const raw = get(name);
   if (raw === undefined) return fallback;
   const value = Number(raw);
-  if (!Number.isFinite(value) || value < min || (integer && !Number.isInteger(value))) {
+  // Number('') is 0, so an empty value (often an unset shell variable) would pass as a 0 mm margin.
+  if (raw.trim() === '' || !Number.isFinite(value) || value < min || (integer && !Number.isInteger(value))) {
     fail(`--${name} must be ${integer ? 'a whole number' : 'a number'} of at least ${min} (got "${raw}")`);
   }
   return value;
 }
 
-// Options first, so a bad option is reported even when the PDF is also missing.
+// Options first, so a bad option is reported even when the PDF is also missing. An unknown one (a typo
+// such as --potrait) is refused too, or the run would succeed with the default layout.
+const VALUE_OPTIONS = ['pdf', 'out', 'title', 'cjk-font', 'rows', 'cols', 'margin', 'gap', 'frame-width'];
+const FLAGS = ['landscape', 'portrait', 'no-frame', 'no-header', 'no-page-numbers'];
+for (const token of process.argv.slice(2)) {
+  if (!token.startsWith('--')) continue;
+  const name = token.slice(2);
+  if (VALUE_OPTIONS.includes(name) || FLAGS.includes(name)) continue;
+  if (name === 'nup') fail('--nup is not an option: give the grid as --rows R --cols C.');
+  fail(`unknown option ${token} (see --help)`);
+}
 for (const name of ['pdf', 'out', 'title', 'cjk-font', 'rows', 'cols', 'margin', 'gap', 'frame-width']) get(name);
 if (has('landscape') && has('portrait')) fail('Give --landscape or --portrait, not both.');
 const orientation = has('portrait') ? 'portrait' : 'landscape';
@@ -63,9 +74,15 @@ const PDF = path.resolve(get('pdf', 'talk.pdf'));
 if (!existsSync(PDF)) fail(`PDF not found: ${PDF} (export or compile the deck first)`, 2);
 const stem = path.basename(PDF, path.extname(PDF));
 const OUT = path.resolve(get('out', path.join(path.dirname(PDF), `${stem}-handout.pdf`)));
-if (OUT === PDF) fail('--out must differ from --pdf; the handout would overwrite the deck.');
+// Compare the files themselves, not the path strings: a link or a second name for the deck would pass a
+// string test. The write below replaces whatever is at OUT (writeOutput), so it never writes through a link.
+const same = (a, b) => a.dev === b.dev && a.ino === b.ino;
+if (OUT === PDF || (existsSync(OUT) && same(statSync(OUT), statSync(PDF)))) {
+  fail('--out must differ from --pdf; the handout would overwrite the deck.');
+}
 const outDir = path.dirname(OUT);
 if (!existsSync(outDir) || !statSync(outDir).isDirectory()) fail(`--out: the folder does not exist: ${outDir}`);
+if (existsSync(OUT) && statSync(OUT).isDirectory()) fail(`--out is a folder, not a file: ${OUT}`);
 
 const info = spawnSync('pdfinfo', ['-enc', 'UTF-8', PDF], { encoding: 'utf8' });
 if (info.error) fail('pdfinfo not found. Install poppler: brew install poppler (macOS) or apt install poppler-utils.');
@@ -114,7 +131,12 @@ for (let pass = 1; pass <= 2; pass++) {
   }
 }
 
-copyFileSync(path.join(work, 'handout.pdf'), OUT);
+try {
+  await writeOutput(OUT, readFileSync(path.join(work, 'handout.pdf')));
+} catch (err) {
+  rmSync(work, { recursive: true, force: true });
+  fail(`Could not write ${OUT}: ${err.message}`);
+}
 rmSync(work, { recursive: true, force: true });
 const sheets = Math.ceil(pages / (rows * cols));
 const count = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;

@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, realpathSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, realpathSync, symlinkSync, mkdirSync, lstatSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -336,4 +336,57 @@ test('handout: --rows without --cols is refused before anything is written', () 
   const { code, out } = runHandout(['--pdf', path.join(tmpdir(), 'no-such-deck.pdf'), '--rows', '2']);
   assert.equal(code, 1, out);
   assert.match(out, /--rows and --cols/);
+});
+
+// Round 2 of the verify (#34): the last write followed a link at the output path, so a link there
+// could overwrite another file, or the deck itself. The handout now goes through writeOutput (PR #41).
+test('handout: a link at the default output path is replaced, and the file it points to is left alone', { skip }, () => {
+  const deck = fixture();
+  const dir = realpathSync(mkdtempSync(path.join(tmpdir(), 'handout-link-')));
+  const copy = path.join(dir, 'b.pdf');
+  writeFileSync(copy, readFileSync(deck));
+  const victim = path.join(dir, 'victim.txt');
+  writeFileSync(victim, 'keep me');
+  symlinkSync(victim, path.join(dir, 'b-handout.pdf'));
+  const { code, out } = runHandout(['--pdf', copy]);
+  assert.equal(code, 0, out);
+  assert.equal(readFileSync(victim, 'utf8'), 'keep me');
+  assert.ok(!lstatSync(path.join(dir, 'b-handout.pdf')).isSymbolicLink());
+});
+
+test('handout: --out that is a link to the deck is refused and the deck is unchanged', { skip }, () => {
+  const deck = fixture();
+  const dir = realpathSync(mkdtempSync(path.join(tmpdir(), 'handout-self-')));
+  const copy = path.join(dir, 'b.pdf');
+  writeFileSync(copy, readFileSync(deck));
+  const before = readFileSync(copy);
+  symlinkSync(copy, path.join(dir, 'self.pdf'));
+  const { code, out } = runHandout(['--pdf', copy, '--out', path.join(dir, 'self.pdf')]);
+  assert.equal(code, 1, out);
+  assert.match(out, /would overwrite the deck/);
+  assert.ok(readFileSync(copy).equals(before));
+});
+
+test('handout: --out that is a folder is refused before XeLaTeX runs', { skip }, () => {
+  const deck = fixture();
+  const folder = path.join(fixtureDir, 'a-folder.pdf');
+  mkdirSync(folder, { recursive: true });
+  const { code, out } = runHandout(['--pdf', deck, '--out', folder]);
+  assert.equal(code, 1, out);
+  assert.match(out, /is a folder/);
+  assert.doesNotMatch(out, /\n\s+at /);
+});
+
+test('handout: an empty number is refused rather than read as 0', () => {
+  const { code, out } = runHandout(['--pdf', path.join(tmpdir(), 'no-such-deck.pdf'), '--margin', '']);
+  assert.equal(code, 1, out);
+  assert.match(out, /--margin must be/);
+});
+
+test('handout: an unknown option is refused, and --nup points to --rows and --cols', () => {
+  for (const [argv, hint] of [[['--potrait'], /unknown option --potrait/], [['--nup', '2x3'], /--rows R --cols C/]]) {
+    const { code, out } = runHandout(['--pdf', path.join(tmpdir(), 'no-such-deck.pdf'), ...argv]);
+    assert.equal(code, 1, out);
+    assert.match(out, hint);
+  }
 });
