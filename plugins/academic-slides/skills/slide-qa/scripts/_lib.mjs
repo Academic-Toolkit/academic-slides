@@ -2,7 +2,7 @@
 // file server rooted at the folder that holds the rendered deck (revealjs needs http, not file://).
 import { createServer } from 'http';
 import { readFile, realpath, stat, lstat, mkdir, mkdtemp, writeFile, rename, rm } from 'fs/promises';
-import { existsSync } from 'fs';
+import { existsSync, readdirSync, statSync } from 'fs';
 import path from 'path';
 
 export function args(help) {
@@ -20,6 +20,28 @@ export async function playwright() {
     console.error('Playwright not found. Install with: npm i -D playwright && npx playwright install chromium');
     process.exit(1);
   }
+}
+
+// The deck files in `dir` with extension `ext` (issue #44): files only, this folder only (not its
+// subfolders), sorted. `exclude` drops names a script writes itself, such as handout's -handout.pdf.
+export function deckCandidates(ext, { dir = process.cwd(), exclude = null } = {}) {
+  const isFile = (name) => { try { return statSync(path.join(dir, name)).isFile(); } catch { return false; } };
+  return readdirSync(dir)
+    .filter((name) => path.extname(name).toLowerCase() === ext && !(exclude && exclude.test(name)) && isFile(name))
+    .sort();
+}
+
+// A script's input file (issue #44): the file given with --<option>, else the single candidate in the
+// current folder. There is no fixed default such as talk.html; with none or several candidates the
+// script says where it looked and what it found, and exits 2 rather than guess.
+export function findDeckFile(given, ext, option, { exclude = null } = {}) {
+  if (given !== undefined && given !== null) return given;
+  const dir = process.cwd();
+  const found = deckCandidates(ext, { dir, exclude });
+  if (found.length === 1) return found[0];
+  if (found.length === 0) console.error(`No ${ext} file in ${dir}; run this in the deck folder or pass --${option} <file>.`);
+  else console.error(`More than one ${ext} file in ${dir}: ${found.join(', ')}; pass --${option} <file> to choose one.`);
+  process.exit(2);
 }
 
 // Resolve the deck path; exit 2 when it does not exist.

@@ -4,11 +4,11 @@
 //   - undefined macros: MathJax 3's noundefined extension renders them as red text, not mjx-merror,
 //     so they are found as red <mtext> beginning with a backslash in the assistive MathML.
 // Exits 1 when any error exists.
-import { args, playwright, deckPath, serve } from './_lib.mjs';
+import { args, playwright, deckPath, findDeckFile, serve } from './_lib.mjs';
 
-const { get } = args(`Usage: node check-mathjax.mjs [--html talk.html]
-Exit status: 0 no MathJax errors, 1 at least one error, 2 HTML not found.`);
-const { root, name } = deckPath(get('html', 'talk.html'));
+const { get } = args(`Usage: node check-mathjax.mjs [--html <deck>.html]
+Exit status: 0 no MathJax errors, 1 at least one error, 2 HTML not found, or no single .html in the current folder when --html is not given.`);
+const { root, name } = deckPath(findDeckFile(get('html'), '.html', 'html'));
 
 const chromium = await playwright();
 const { server, port } = await serve(root);

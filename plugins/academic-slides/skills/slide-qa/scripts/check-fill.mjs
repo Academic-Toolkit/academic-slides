@@ -3,16 +3,16 @@
 // the bottom of the title and the top of the footer. Lists slides below --threshold with a suggested
 // class: roomy-1 (0.58–0.70), roomy-2 (0.45–0.58), roomy-3 (< 0.45), or vc when the slide is already
 // scaled. Informational: always exits 0 unless the HTML is missing.
-import { args, playwright, deckPath, serve, openDeck } from './_lib.mjs';
+import { args, playwright, deckPath, findDeckFile, serve, openDeck } from './_lib.mjs';
 
-const { get } = args(`Usage: node check-fill.mjs [--html talk.html] [--threshold 0.70] [--width 1280] [--height 720]
+const { get } = args(`Usage: node check-fill.mjs [--html <deck>.html] [--threshold 0.70] [--width 1280] [--height 720]
                            [--footer '.reveal .footer']
-Exit status: 0 report printed, 2 HTML not found.`);
+Exit status: 0 report printed, 2 HTML not found, or no single .html in the current folder when --html is not given.`);
 const THRESHOLD = Number(get('threshold', 0.7));
 const WIDTH = Number(get('width', 1280));
 const HEIGHT = Number(get('height', 720));
 const FOOTER = get('footer', '.reveal .footer');
-const { root, name } = deckPath(get('html', 'talk.html'));
+const { root, name } = deckPath(findDeckFile(get('html'), '.html', 'html'));
 
 const suggest = (fill, classes) => {
   if (classes.includes('vc')) return 'already centred (vc); add a figure or more content';
