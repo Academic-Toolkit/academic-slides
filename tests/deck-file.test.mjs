@@ -251,3 +251,17 @@ test('a render list naming several decks falls back to the folder\'s only .qmd',
   assert.deepEqual(lib.chooseDeckFile('.pdf', { dir }), { file: 'talk.pdf' });
 });
 
+test('the revealjs output-file wins over the top-level one, whichever comes first', () => {
+  const files = { 'deck.qmd': QMD, 'slides.html': 'x', 'generic.html': 'x' };
+  for (const yml of ['project:\n  render: [deck.qmd]\nformat:\n  revealjs:\n    output-file: slides\noutput-file: generic\n',
+                     'output-file: generic\nproject:\n  render: [deck.qmd]\nformat:\n  revealjs:\n    output-file: slides\n']) {
+    assert.deepEqual(lib.chooseDeckFile('.html', { dir: folder({ ...files, '_quarto.yml': yml }) }), { file: 'slides.html' });
+  }
+  assert.deepEqual(lib.chooseDeckFile('.html', { dir: folder({ ...files, '_quarto.yml': 'output-file: generic\n' }) }), { file: 'generic.html' });
+});
+
+test('a quoted output-file with spaces is read whole', () => {
+  const dir = folder({ '_quarto.yml': 'format:\n  revealjs:\n    output-file: "my slides"\n', 'deck.qmd': QMD, 'my slides.html': 'x' });
+  assert.deepEqual(lib.chooseDeckFile('.html', { dir }), { file: 'my slides.html' });
+});
+

@@ -10,13 +10,14 @@ export const FIELDS = ['template', 'lang', 'author', 'affiliation', 'footer'];
 export const DEFAULT_TEMPLATE = 'research-talk';
 const NAME = /^[a-z0-9][a-z0-9-]*$/;
 // The deck's main file is <name>.qmd, named after the deck's content (issue #44). The name the user gives is
-// used exactly as given, not normalised: letters of any script (W07_記憶), digits, _ and -, and dots inside the
-// name (user decision 2026-10-31, after verify round 1). Refused, because they are unsafe or not portable as a file
+// used exactly as given, not normalised: letters of any script (W07_記憶), digits, _ - + ( ) @ （ ）, and dots inside
+// the name (user decision 2026-10-31, after verify round 1). Refused, because they are unsafe or not portable as a file
 // name: whitespace, path separators, a leading - or ., a trailing dot, control characters, : * ? " < > |, and the
-// Windows device names (CON, NUL, COM1, …), which stay reserved with any extension.
-export const DECK_NAME = /^[\p{L}\p{N}_][\p{L}\p{M}\p{N}_.-]*$/u;
-const DEVICE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
-export const NAME_RULE = 'letters of any script, digits, _ and -, and dots inside the name; no spaces, path separators, '
+// Windows device names (CON, NUL, COM1, COM¹, …), which stay reserved with any extension. Characters that YAML or
+// a shell treats specially (# , [ ] { } & * ! | > ' % `) are not in the set, so the name is safe to write into _quarto.yml.
+export const DECK_NAME = /^[\p{L}\p{N}_][\p{L}\p{M}\p{N}_.+()@（）-]*$/u;
+const DEVICE = /^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])$/i;
+export const NAME_RULE = 'letters of any script, digits, _ - + ( ) @ （ ）, and dots inside the name; no spaces, path separators, '
   + 'leading - or ., trailing dot, : * ? " < > |, or a Windows device name such as CON or NUL';
 export const deckNameOk = (name) => typeof name === 'string' && DECK_NAME.test(name) && !name.endsWith('.')
   && !DEVICE.test(name.split('.')[0]);

@@ -764,7 +764,7 @@ test('CLI: without --name the scaffold exits 2, says to name the file after the 
 
 test('CLI: unsafe or unportable names exit 2 with the rule and write nothing', () => {
   const s = sandbox();
-  for (const bad of ['My Talk', '../x', 'a/b', 'a\\b', '-x', '.x', 'x.', 'a:b', 'a*b', 'a?b', 'a"b', 'a<b', 'a|b', 'a\tb', '', 'CON', 'nul.v2', 'Com1']) {
+  for (const bad of ['My Talk', '../x', 'a/b', 'a\\b', '-x', '.x', 'x.', 'a:b', 'a*b', 'a?b', 'a"b', 'a<b', 'a|b', 'a\tb', '', 'CON', 'nul.v2', 'Com1', 'COM¹', 'a#b', 'a,b', 'a[b]', 'a&b']) {
     const out = path.join(s.project, 'deck');
     const r = run(['--name', bad, '--out', out], s.home);
     assert.equal(r.code, 2, `${JSON.stringify(bad)}: ${r.out}`);
@@ -775,12 +775,12 @@ test('CLI: unsafe or unportable names exit 2 with the rule and write nothing', (
 
 test('CLI: the name the user gives is used as given: any script, capitals, underscores, inner dots', () => {
   const s = sandbox();
-  for (const good of ['W07_記憶', 'JSCS2026-imputation', '202610_會議名', 'w07.v2', 'Deck', '_deck', 'console']) {
+  for (const good of ['W07_記憶', 'JSCS2026-imputation', '202610_會議名', 'w07.v2', 'Deck', '_deck', 'console', 'week+lab', 'lecture(2)', 'results@2026', 'W07_記憶（上）']) {
     const out = path.join(s.project, `deck-${Buffer.from(good).toString('hex')}`);
     const r = run(['--name', good, '--out', out], s.home);
     assert.equal(r.code, 0, `${good}: ${r.out}`);
     assert.ok(existsSync(path.join(out, `${good}.qmd`)), good);
-    assert.match(readFileSync(path.join(out, '_quarto.yml'), 'utf8'), new RegExp(`- "${good.replace('.', '\\.')}\\.qmd"`));
+    assert.ok(readFileSync(path.join(out, '_quarto.yml'), 'utf8').includes(`- "${good}.qmd"`), good);
   }
 });
 

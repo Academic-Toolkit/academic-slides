@@ -54,11 +54,13 @@ const unquote = (v) => (/^(["']).*\1$/.test(v) ? v.slice(1, -1) : v);
 const plainName = (v) => typeof v === 'string' && v !== '' && path.basename(v) === v && v !== '.' && v !== '..' && !/[*?[\]{}]/.test(v);
 
 // The values of project.render (its direct child key; block or flow list, or one value; whole values only,
-// quoted or not, with ./ dropped) and the output-file that applies to revealjs (top level or under format:
-// revealjs:), from a _quarto.yml.
+// quoted or not, with ./ dropped) and the output-file that applies to revealjs (the one under format: revealjs:,
+// else the top-level one, whatever their order in the file), from a _quarto.yml. Block-style YAML as the templates
+// write it; other forms (flow mappings, quoted keys) are not read, and the scripts then need their file option.
 export function readQuartoYml(yml) {
   const render = [];
-  let outputFile = null;
+  let topOutput = null;
+  let revealOutput = null;
   let top = null; let childIndent = -1; let renderIndent = -1; let fmtIndent = -1;
   for (const raw of yml.split(/\r?\n/)) {
     const [code] = splitComment(raw);
@@ -83,10 +85,10 @@ export function readQuartoYml(yml) {
     }
     if (indent === 0 || (fmtIndent >= 0 && indent > fmtIndent)) {
       const o = code.match(/^[ \t]*output-file:[ \t]*(?:"([^"]*)"|'([^']*)'|(\S+))[ \t]*$/);
-      if (o) outputFile = (o[1] ?? o[2] ?? o[3]).replace(/^\.\//, '');
+      if (o) { const v = (o[1] ?? o[2] ?? o[3]).replace(/^\.\//, ''); if (indent === 0) topOutput = v; else revealOutput = v; }
     }
   }
-  return { render, outputFile };
+  return { render, outputFile: revealOutput ?? topOutput };
 }
 
 // The .qmd files project.render names in this folder (plain names only).
