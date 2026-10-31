@@ -39,10 +39,10 @@ TaskCreate(subject="Run slide-qa", description="the slide-qa skill, with its own
 The deck's main file is `<name>.qmd`, and it renders to `<name>.html`; the PDF, the handout, and the screenshots take the same name. Name it after what the deck is, so that two decks in a downloads folder, a cloud drive, or an email never share a name:
 
 1. The name the user gave, if they gave one.
-2. Otherwise a name that follows from the title, the venue, or the course **and has only one reasonable spelling**: `jscs2026-imputation` for a JSCS 2026 talk on imputation, `w07-memory` for week 7 of a course, on memory.
+2. Otherwise a name that follows from the title, the venue, or the course **and has only one reasonable spelling**: `jscs2026-imputation` for a JSCS 2026 talk on imputation, `W07_記憶` for week 7 of a course whose decks are already named that way.
 3. Otherwise ask the user. Two plausible names (the venue or the topic first, an English or a romanised form) count as not knowing; do not pick one.
 
-Names use lower-case letters, digits, and hyphens (`^[a-z0-9][a-z0-9-]*$`), so write a Chinese title as a short English or romanised name. `scaffold.mjs` refuses to run without `--name` (exit 2) rather than fall back to a default. Decks made earlier keep their `talk.*` files and need no renaming; the slide-qa scripts find them the same way.
+Use the name as given, in any script and with capitals or underscores (`W07_記憶`, `JSCS2026-imputation`). `scaffold.mjs` refuses only what is unsafe or not portable as a file name — spaces, path separators, a leading `-` or `.`, a trailing dot, control characters, and `: * ? " < > |` — and refuses to run without `--name` (exit 2) rather than fall back to a default. When a name the user gave is refused, show the user a corrected name and ask before using it. Decks made earlier keep their `talk.*` files and need no renaming; the slide-qa scripts find them the same way.
 
 ## Start a deck
 
