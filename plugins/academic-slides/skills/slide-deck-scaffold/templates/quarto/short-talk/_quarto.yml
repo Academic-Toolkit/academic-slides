@@ -1,4 +1,4 @@
-# Quarto revealjs project for one short talk. Render with `quarto render`; the output is talk.html.
+# Quarto revealjs project for one short talk. Render with `quarto render`; the output is the main file's name with .html.
 project:
   title: "Short talk"
   render:
