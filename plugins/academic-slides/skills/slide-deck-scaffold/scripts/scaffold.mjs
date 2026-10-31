@@ -10,13 +10,16 @@ export const FIELDS = ['template', 'lang', 'author', 'affiliation', 'footer'];
 export const DEFAULT_TEMPLATE = 'research-talk';
 const NAME = /^[a-z0-9][a-z0-9-]*$/;
 // The deck's main file is <name>.qmd, named after the deck's content (issue #44). The name the user gives is
-// used as given: letters of any script (W07_記憶), digits, _ and -, and dots inside the name. Refused, because
-// they are unsafe or not portable as a file name: whitespace, path separators, a leading - or ., a trailing dot,
-// control characters, and : * ? " < > | (user decision 2026-10-31, after verify round 1).
-export const DECK_NAME = /^[\p{L}\p{N}][\p{L}\p{M}\p{N}_.-]*$/u;
+// used exactly as given, not normalised: letters of any script (W07_記憶), digits, _ and -, and dots inside the
+// name (user decision 2026-10-31, after verify round 1). Refused, because they are unsafe or not portable as a file
+// name: whitespace, path separators, a leading - or ., a trailing dot, control characters, : * ? " < > |, and the
+// Windows device names (CON, NUL, COM1, …), which stay reserved with any extension.
+export const DECK_NAME = /^[\p{L}\p{N}_][\p{L}\p{M}\p{N}_.-]*$/u;
+const DEVICE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
 export const NAME_RULE = 'letters of any script, digits, _ and -, and dots inside the name; no spaces, path separators, '
-  + 'leading - or ., trailing dot, or : * ? " < > |';
-export const deckNameOk = (name) => typeof name === 'string' && DECK_NAME.test(name) && !name.endsWith('.');
+  + 'leading - or ., trailing dot, : * ? " < > |, or a Windows device name such as CON or NUL';
+export const deckNameOk = (name) => typeof name === 'string' && DECK_NAME.test(name) && !name.endsWith('.')
+  && !DEVICE.test(name.split('.')[0]);
 export const NAME_HINT = 'name the main file after the deck\'s content (for example <venue>-<topic>, or W07_<topic> for a lecture); '
   + 'when no single name follows from what the user said or from the title, venue, or course, ask the user';
 const SETTINGS_DIR = path.join('.claude', '.academic-slides');
@@ -220,28 +223,45 @@ export function rewriteQuartoYml(text, { theme, footer, mainFile }, where = '_qu
   return out.replace(themeLine, (line, indent) => `${line}\n${indent}footer: ${show(footer)}`);
 }
 
-// Point the deck's _quarto.yml at its own main file (issue #44). In project.render, talk.qmd becomes <name>.qmd,
-// whether the list is a block or a flow list, quoted or not, with ./ or a trailing comment; a talk.qmd listed
-// anywhere else (under resources, say) is not the render target and is left alone. An output-file of talk or
-// talk.html becomes <name> or <name>.html. A _quarto.yml without these entries is left as it is.
-const TALK_QMD = /(^|[\s[,"'])(\.\/)?talk\.qmd(?=["'\s,\]#]|$)/g;
+// Point the deck's _quarto.yml at its own main file (issue #44). In the render list that is a direct child of
+// project:, a value that is exactly talk.qmd (quoted or not, with or without ./) becomes <name>.qmd, in a block
+// list, a flow list, or a single value; a value that only contains talk.qmd ("my talk.qmd"), a comment, and a
+// talk.qmd listed anywhere else (under resources, say) are left alone. An output-file of talk or talk.html,
+// at the top level or under format: revealjs:, becomes <name> or <name>.html.
+export function splitComment(body) {   // YAML: '#' after whitespace, outside quotes, starts a comment
+  let quote = null;
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (quote) { if (c === quote) quote = null; }
+    else if (c === '"' || c === "'") quote = c;
+    else if (c === '#' && (i === 0 || /\s/.test(body[i - 1]))) return [body.slice(0, i), body.slice(i)];
+  }
+  return [body, ''];
+}
+const WHOLE_TALK = /(^|[[,:]|-[ \t])([ \t]*)(["']?)(\.\/)?talk\.qmd\3(?=[ \t]*(?:,|\]|$))/g;
 export function renameRenderTarget(text, mainFile) {
   const stem = mainFile.replace(/\.qmd$/, '');
-  let inProject = false;
-  let renderIndent = -1;
+  let top = null;            // the current top-level key
+  let childIndent = -1;      // indent of that key's direct children
+  let renderIndent = -1;     // indent of project.render while inside its value
+  let fmtIndent = -1;        // indent of format.revealjs while inside it
   return text.split(/(?<=\n)/).map((line) => {
-    const body = line.replace(/\r?\n$/, '');
-    const indent = body.match(/^[ \t]*/)[0].length;
-    const blank = /^\s*(#.*)?$/.test(body);
-    if (!blank && indent === 0) { inProject = /^project:/.test(body); renderIndent = -1; }
-    if (inProject && !blank) {
-      const key = body.match(/^([ \t]+)render:/);
-      if (key) renderIndent = key[1].length;
-      else if (renderIndent >= 0 && !(indent > renderIndent || (indent === renderIndent && /^[ \t]*-/.test(body)))) renderIndent = -1;
-      if (renderIndent >= 0) return line.replace(TALK_QMD, (_, pre, dot) => `${pre}${dot ?? ''}${mainFile}`);
+    const nl = line.match(/\r?\n$/)?.[0] ?? '';
+    const [code, comment] = splitComment(line.slice(0, line.length - nl.length));
+    if (/^\s*$/.test(code)) return line;
+    const indent = code.match(/^[ \t]*/)[0].length;
+    if (indent === 0) { top = code.match(/^([^:\s]+):/)?.[1] ?? null; childIndent = -1; renderIndent = -1; fmtIndent = -1; }
+    else {
+      if (childIndent < 0) childIndent = indent;
+      if (indent <= childIndent && !(renderIndent === indent && /^\s*-/.test(code))) { renderIndent = -1; if (indent < childIndent || !/^\s*revealjs:/.test(code)) fmtIndent = -1; }
+      if (top === 'project' && indent === childIndent && /^\s*render:/.test(code)) renderIndent = indent;
+      if (top === 'format' && indent === childIndent && /^\s*revealjs:/.test(code)) fmtIndent = indent;
+      if (renderIndent >= 0) return code.replace(WHOLE_TALK, (_, d, sp, q, dot) => `${d}${sp}${q}${dot ?? ''}${mainFile}${q}`) + comment + nl;
     }
-    return line.replace(/^([ \t]*output-file:[ \t]*)(["']?)(\.\/)?talk(\.html)?\2([ \t]*(#.*)?)(\r?\n)?$/,
-      (_, lead, q, dot, ext, tail, _comment, nl) => `${lead}${q}${dot ?? ''}${stem}${ext ?? ''}${q}${tail}${nl ?? ''}`);
+    const outputFile = indent === 0 || (fmtIndent >= 0 && indent > fmtIndent);
+    if (!outputFile) return line;
+    return code.replace(/^([ \t]*output-file:[ \t]*)(["']?)(\.\/)?talk(\.html)?\2([ \t]*)$/,
+      (_, lead, q, dot, ext, tail) => `${lead}${q}${dot ?? ''}${stem}${ext ?? ''}${q}${tail}`) + comment + nl;
   }).join('');
 }
 
@@ -322,7 +342,7 @@ function untrustedProjectFiles(tpl, themeFiles, project) {
 // Everything the deck will contain, computed without writing anything.
 export function planDeck({ out, home, template, title, deckName, trustProject = false }) {
   if (!deckNameOk(deckName)) throw new ScaffoldError(`deck name ${show(deckName)} is invalid: use ${NAME_RULE}`);
-  const mainFile = `${deckName.normalize('NFC')}.qmd`;
+  const mainFile = `${deckName}.qmd`;
   const resolvedOut = path.resolve(out);
   checkOut(resolvedOut);
   const { personal, project, layers } = settingsLayers(home, resolvedOut, trustProject);

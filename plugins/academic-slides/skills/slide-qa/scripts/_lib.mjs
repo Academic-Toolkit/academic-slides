@@ -35,39 +35,79 @@ export function deckCandidates(ext, { dir = process.cwd(), exclude = null } = {}
     .sort();
 }
 
-// The .qmd entries of project.render in a _quarto.yml (block or flow list, quoted or not).
-export function renderedQmds(yml) {
-  const found = [];
-  let inProject = false;
-  let renderIndent = -1;
-  for (const line of yml.split(/\r?\n/)) {
-    if (/^\s*(#.*)?$/.test(line)) continue;
-    const indent = line.match(/^[ \t]*/)[0].length;
-    if (indent === 0) { inProject = /^project:/.test(line); renderIndent = -1; continue; }
-    if (!inProject) continue;
-    const key = line.match(/^([ \t]+)render:(.*)$/);
-    let part;
-    if (key) { renderIndent = key[1].length; part = key[2]; }
-    else if (renderIndent >= 0 && (indent > renderIndent || (indent === renderIndent && /^[ \t]*-/.test(line)))) part = line;
-    else { renderIndent = -1; continue; }
-    for (const m of part.replace(/#.*$/, '').matchAll(/[^\s[\],"'-][^\s[\],"']*\.qmd/g)) found.push(m[0]);
+// YAML: '#' after whitespace, outside quotes, starts a comment.
+function splitComment(body) {
+  let quote = null;
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (quote) { if (c === quote) quote = null; }
+    else if (c === '"' || c === "'") quote = c;
+    else if (c === '#' && (i === 0 || /\s/.test(body[i - 1]))) return [body.slice(0, i), body.slice(i)];
   }
-  return found;
+  return [body, ''];
 }
 
-// The deck's main file (issue #44): the single .qmd in project.render of the folder's _quarto.yml, else the
-// folder's only .qmd; null when neither settles it. Its .html is <stem>.html unless output-file says otherwise,
-// and export-pdf writes the .pdf under the .html's stem.
+const unquote = (v) => (/^(["']).*\1$/.test(v) ? v.slice(1, -1) : v);
+
+// A value read from _quarto.yml names a file in the deck folder only when it is a plain file name: no folder,
+// no .., not absolute, no glob. Anything else is ignored, so the lookup never leaves the current folder.
+const plainName = (v) => typeof v === 'string' && v !== '' && path.basename(v) === v && v !== '.' && v !== '..' && !/[*?[\]{}]/.test(v);
+
+// The values of project.render (its direct child key; block or flow list, or one value; whole values only,
+// quoted or not, with ./ dropped) and the output-file that applies to revealjs (top level or under format:
+// revealjs:), from a _quarto.yml.
+export function readQuartoYml(yml) {
+  const render = [];
+  let outputFile = null;
+  let top = null; let childIndent = -1; let renderIndent = -1; let fmtIndent = -1;
+  for (const raw of yml.split(/\r?\n/)) {
+    const [code] = splitComment(raw);
+    if (/^\s*$/.test(code)) continue;
+    const indent = code.match(/^[ \t]*/)[0].length;
+    if (indent === 0) { top = code.match(/^([^:\s]+):/)?.[1] ?? null; childIndent = -1; renderIndent = -1; fmtIndent = -1; }
+    else {
+      if (childIndent < 0) childIndent = indent;
+      if (indent <= childIndent && !(renderIndent === indent && /^\s*-/.test(code))) { renderIndent = -1; if (indent < childIndent || !/^\s*revealjs:/.test(code)) fmtIndent = -1; }
+      if (top === 'project' && indent === childIndent && /^\s*render:/.test(code)) renderIndent = indent;
+      if (top === 'format' && indent === childIndent && /^\s*revealjs:/.test(code)) fmtIndent = indent;
+      if (renderIndent >= 0) {
+        let rest = code.replace(/^\s*render:/, '');
+        rest = rest.replace(/^\s*-\s+/, '');                          // a block-list item
+        const pieces = /[[\],]/.test(rest) ? rest.replace(/^[\s[]+|[\s\]]+$/g, '').split(',') : [rest];
+        for (const piece of pieces) {
+          const v = unquote(piece.trim()).replace(/^\.\//, '');
+          if (v) render.push(v);
+        }
+        continue;
+      }
+    }
+    if (indent === 0 || (fmtIndent >= 0 && indent > fmtIndent)) {
+      const o = code.match(/^[ \t]*output-file:[ \t]*(?:"([^"]*)"|'([^']*)'|(\S+))[ \t]*$/);
+      if (o) outputFile = (o[1] ?? o[2] ?? o[3]).replace(/^\.\//, '');
+    }
+  }
+  return { render, outputFile };
+}
+
+// The .qmd files project.render names in this folder (plain names only).
+export function renderedQmds(yml) {
+  return readQuartoYml(yml).render.filter((v) => v.endsWith('.qmd') && plainName(v));
+}
+
+// The deck's main file (issue #44): the single .qmd that project.render names in this folder, else the folder's
+// only .qmd; null when neither settles it. Its .html is <stem>.html, or the revealjs output-file (with .html added
+// unless it ends in .html, as Quarto does) when that is a plain name; export-pdf writes the .pdf under the
+// .html's stem. Every name returned is a plain file name in `dir`.
 export function deckMain(dir = process.cwd()) {
   let yml = '';
   try { yml = readFileSync(path.join(dir, '_quarto.yml'), 'utf8'); } catch { /* no project file */ }
   const listed = renderedQmds(yml);
   const qmds = deckCandidates('.qmd', { dir });
-  const qmd = listed.length === 1 ? listed[0] : listed.length === 0 && qmds.length === 1 ? qmds[0] : null;
+  const qmd = listed.length === 1 ? listed[0] : qmds.length === 1 ? qmds[0] : null;
   if (!qmd) return null;
-  const out = yml.match(/^[ \t]*output-file:[ \t]*["']?(?:\.\/)?([^"'#\s]+)["']?/m)?.[1];
-  const html = out ? (path.extname(out) ? out : `${out}.html`) : qmd.replace(/\.qmd$/, '.html');
-  return { '.qmd': qmd, '.html': html, '.pdf': html.replace(/\.html?$/, '.pdf') };
+  const out = readQuartoYml(yml).outputFile;
+  const html = plainName(out) ? (out.endsWith('.html') ? out : `${out}.html`) : qmd.replace(/\.qmd$/, '.html');
+  return { '.qmd': qmd, '.html': html, '.pdf': html.replace(/\.html$/, '.pdf') };
 }
 
 // Which file a script reads when no file option is given (issue #44). When the deck's main file can be

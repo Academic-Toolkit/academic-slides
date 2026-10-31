@@ -148,7 +148,7 @@ const YML = (render) => `project:\n  type: default\n  render:\n    - ${render}\n
 test('renderedQmds reads project.render in block and flow form and ignores other lists', () => {
   assert.deepEqual(lib.renderedQmds('project:\n  render:\n    - "talk.qmd" # main\n'), ['talk.qmd']);
   assert.deepEqual(lib.renderedQmds("project:\n  render: ['a.qmd', b.qmd]\n"), ['a.qmd', 'b.qmd']);
-  assert.deepEqual(lib.renderedQmds('format:\n  revealjs:\n    resources:\n      - x.qmd\nproject:\n  render:\n  - ./W07_記憶.qmd\n'), ['./W07_記憶.qmd']);
+  assert.deepEqual(lib.renderedQmds('format:\n  revealjs:\n    resources:\n      - x.qmd\nproject:\n  render:\n  - ./W07_記憶.qmd\n'), ['W07_記憶.qmd']);
   assert.deepEqual(lib.renderedQmds('format:\n  revealjs:\n    theme: [default]\n'), []);
 });
 
@@ -220,3 +220,34 @@ test('handout without --pdf in a talk deck with derived PDFs lays out talk.pdf',
   assert.equal(pageCount(path.join(dir, 'talk-handout.pdf')), 2);
   assert.equal(existsSync(path.join(dir, 'talk-notes-handout.pdf')), false);
 });
+
+// ---------- verify round 2: whole values, plain names, the revealjs output-file ----------
+
+test('renderedQmds keeps whole values and drops what is not a plain .qmd name in this folder', () => {
+  assert.deepEqual(lib.renderedQmds('project:\n  render: ["my deck.qmd", talk.qmd.bak, "*.qmd", ../o.qmd, sub/t.qmd, /abs/x.qmd]\n'), ['my deck.qmd']);
+  assert.deepEqual(lib.renderedQmds('project:\n  metadata:\n    render:\n      - x.qmd\n'), []);
+  assert.deepEqual(lib.renderedQmds('project:\n  render: [other.qmd] # talk.qmd\n'), ['other.qmd']);
+});
+
+test('the lookup never leaves the current folder', () => {
+  const parent = folder({ 'other.pdf': 'x', 'other.qmd': QMD });
+  const dir = path.join(parent, 'deck');
+  mkdirSync(dir);
+  writeFileSync(path.join(dir, '_quarto.yml'), 'project:\n  render: [../other.qmd]\nformat:\n  revealjs:\n    output-file: ../other.html\n');
+  writeFileSync(path.join(dir, 'w07.qmd'), QMD);
+  writeFileSync(path.join(dir, 'w07.pdf'), 'x');
+  assert.deepEqual(lib.chooseDeckFile('.pdf', { dir }), { file: 'w07.pdf' });
+  assert.deepEqual(lib.chooseDeckFile('.qmd', { dir }), { file: 'w07.qmd' });
+});
+
+test('the revealjs output-file is used, a dotted one gets .html added, and another format is ignored', () => {
+  const dir = folder({ '_quarto.yml': 'project:\n  render: [w07.v2.qmd]\nformat:\n  pdf:\n    output-file: printed\n  revealjs:\n    output-file: w07.v2\n', 'w07.v2.qmd': QMD, 'w07.v2.html': 'x', 'w07.v2.pdf': 'x', 'printed.html': 'x' });
+  assert.deepEqual(lib.chooseDeckFile('.html', { dir }), { file: 'w07.v2.html' });
+  assert.deepEqual(lib.chooseDeckFile('.pdf', { dir }), { file: 'w07.v2.pdf' });
+});
+
+test('a render list naming several decks falls back to the folder\'s only .qmd', () => {
+  const dir = folder({ '_quarto.yml': 'project:\n  render: [talk.qmd, extra.qmd]\n', 'talk.qmd': QMD, 'talk.pdf': 'x', 'talk-notes.pdf': 'x' });
+  assert.deepEqual(lib.chooseDeckFile('.pdf', { dir }), { file: 'talk.pdf' });
+});
+

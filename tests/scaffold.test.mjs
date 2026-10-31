@@ -764,7 +764,7 @@ test('CLI: without --name the scaffold exits 2, says to name the file after the 
 
 test('CLI: unsafe or unportable names exit 2 with the rule and write nothing', () => {
   const s = sandbox();
-  for (const bad of ['My Talk', '../x', 'a/b', 'a\\b', '-x', '.x', 'x.', 'a:b', 'a*b', 'a?b', 'a"b', 'a<b', 'a|b', 'a\tb', '']) {
+  for (const bad of ['My Talk', '../x', 'a/b', 'a\\b', '-x', '.x', 'x.', 'a:b', 'a*b', 'a?b', 'a"b', 'a<b', 'a|b', 'a\tb', '', 'CON', 'nul.v2', 'Com1']) {
     const out = path.join(s.project, 'deck');
     const r = run(['--name', bad, '--out', out], s.home);
     assert.equal(r.code, 2, `${JSON.stringify(bad)}: ${r.out}`);
@@ -775,11 +775,11 @@ test('CLI: unsafe or unportable names exit 2 with the rule and write nothing', (
 
 test('CLI: the name the user gives is used as given: any script, capitals, underscores, inner dots', () => {
   const s = sandbox();
-  for (const good of ['W07_記憶', 'JSCS2026-imputation', '202610_會議名', 'w07.v2', 'Deck']) {
+  for (const good of ['W07_記憶', 'JSCS2026-imputation', '202610_會議名', 'w07.v2', 'Deck', '_deck', 'console']) {
     const out = path.join(s.project, `deck-${Buffer.from(good).toString('hex')}`);
     const r = run(['--name', good, '--out', out], s.home);
     assert.equal(r.code, 0, `${good}: ${r.out}`);
-    assert.ok(existsSync(path.join(out, `${good.normalize('NFC')}.qmd`)), good);
+    assert.ok(existsSync(path.join(out, `${good}.qmd`)), good);
     assert.match(readFileSync(path.join(out, '_quarto.yml'), 'utf8'), new RegExp(`- "${good.replace('.', '\\.')}\\.qmd"`));
   }
 });
@@ -856,5 +856,28 @@ test('CLI: render outputs of talk.qmd in a template copied from a finished deck 
   assert.ok(existsSync(path.join(out, 'img', 'logo.txt')));
   assert.match(r.out, /^warning: ignored the template's own talk\.html; it is an output of rendering talk\.qmd/m);
   assert.match(r.out, /^warning: ignored the template's own talk_files\/;/m);
+});
+
+test('CLI: the name is not normalised: a decomposed name reaches _quarto.yml unchanged', () => {
+  const s = sandbox();
+  const name = 'café';
+  const out = path.join(s.project, 'deck');
+  assert.equal(run(['--name', name, '--out', out], s.home).code, 0);
+  assert.ok(readFileSync(path.join(out, '_quarto.yml'), 'utf8').includes(`- "${name}.qmd"`));
+});
+
+test('renameRenderTarget changes only a value that is exactly talk.qmd, in project.render itself', () => {
+  const r = (yml) => lib.renameRenderTarget(yml, 'w07.qmd');
+  const same = (yml) => assert.equal(r(yml), yml);
+  same('project:\n  render: ["my talk.qmd"]\n');
+  same('project:\n  render:\n    - my talk.qmd\n');
+  same('project:\n  render: [other.qmd] # talk.qmd is the old name\n');
+  same('project:\n  render:\n    - talk.qmd.bak\n');
+  same('project:\n  metadata:\n    render:\n      - talk.qmd\n');
+  same('format:\n  pdf:\n    output-file: talk\n');
+  assert.equal(r('project:\n  render: [\n    talk.qmd,\n    other.qmd ]\n'), 'project:\n  render: [\n    w07.qmd,\n    other.qmd ]\n');
+  assert.equal(r('project:\n  render: talk.qmd  # main\n'), 'project:\n  render: w07.qmd  # main\n');
+  assert.equal(r('output-file: talk.html\nproject:\n  render: [talk.qmd]\n'), 'output-file: w07.html\nproject:\n  render: [w07.qmd]\n');
+  assert.equal(r('format:\n  pdf:\n    output-file: talk\n  revealjs:\n    output-file: talk.html\n'), 'format:\n  pdf:\n    output-file: talk\n  revealjs:\n    output-file: w07.html\n');
 });
 
