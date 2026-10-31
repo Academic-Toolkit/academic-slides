@@ -18,7 +18,7 @@ Presets: --landscape (the default) is 2 rows × 2 columns; --portrait is 3 rows 
 --rows and --cols replace the preset grid. Margin and gap are in mm, the frame width in pt.
 The header is the PDF's title (else the file name) unless --title or --no-header is given.
 Needs XeLaTeX (TeX Live) and pdfinfo (poppler).
-Exit status: 0 handout written, 1 failed (bad option, missing tool, LaTeX error), 2 PDF not found, or no single .pdf in the current folder when --pdf is not given (its own -handout.pdf excepted).`);
+Exit status: 0 handout written, 1 failed (bad option, missing tool, LaTeX error), 2 PDF not found, or the deck's .pdf not found in the current folder when --pdf is not given.`);
 
 function fail(message, code = 1) {
   console.error(message);

@@ -7,7 +7,7 @@ import { args, playwright, deckPath, findDeckFile, serve, openDeck } from './_li
 
 const { get } = args(`Usage: node check-fill.mjs [--html <deck>.html] [--threshold 0.70] [--width 1280] [--height 720]
                            [--footer '.reveal .footer']
-Exit status: 0 report printed, 2 HTML not found, or no single .html in the current folder when --html is not given.`);
+Exit status: 0 report printed, 2 HTML not found, or the deck's .html not found in the current folder when --html is not given.`);
 const THRESHOLD = Number(get('threshold', 0.7));
 const WIDTH = Number(get('width', 1280));
 const HEIGHT = Number(get('height', 720));

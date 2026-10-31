@@ -87,7 +87,7 @@ node scripts/export-pdf.mjs                     # 6. offline PDF; page count = s
 node scripts/handout.mjs                        # 7. A4 handout (optional): 2 × 2 landscape; --portrait for 3 rows × 2 columns
 ```
 
-Run these in the deck folder. Without `--html`, `--qmd`, or `--pdf`, each script uses the deck's only `.html`, `.qmd`, or `.pdf` there (handout leaves out its own `-handout.pdf`); when there is none or more than one, it lists what it found and exits 2, and you pass the option. A deck whose files are named `talk.*` works the same way.
+Run these in the deck folder. Without `--html`, `--qmd`, or `--pdf`, each script reads the deck's own file: the one named after the deck's main file, which is the `.qmd` in `project.render` of `_quarto.yml`, else the folder's only `.qmd` (so `talk.pdf`, not the `talk-notes.pdf` beside it; `output-file` is followed). If that file is missing, the script says so and exits 2 rather than read another one. Only when the main file cannot be told does it take the folder's only file of that type (handout leaves out its own `-handout.pdf` there); with none or several it lists them and exits 2. An option given without a file name exits 2. Decks named `talk.*` work the same way.
 
 Step 7 prints whatever PDF it is given, so make the handout last: after every fix, rebuild the PDF (step 6 for a revealjs deck, recompile the beamer deck for a beamer PDF) and then run step 7. A handout made before a fix shows the old deck.
 

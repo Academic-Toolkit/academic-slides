@@ -20,7 +20,7 @@ const { get, has } = args(`Usage: node check-layout.mjs [--html <deck>.html] [--
   --shots  save one screenshot per slide as <deck>-NN.png; flagged slides are always saved as <deck>-NN-flagged.png
 Checks every slide on screen at --width x --height, then every page of the print view that export-pdf.mjs
 prints; flagged PDF pages are saved as <deck>-print-NN-flagged.png (NN = PDF page number).
-Exit status: 0 no problems, 1 at least one flagged slide or PDF page, 2 HTML not found, or no single .html in the current folder when --html is not given,
+Exit status: 0 no problems, 1 at least one flagged slide or PDF page, 2 HTML not found, or the deck's .html not found in the current folder when --html is not given,
              3 the check could not run or the print view showed no slide pages.`);
 const WIDTH = Number(get('width', 1280));
 const HEIGHT = Number(get('height', 720));

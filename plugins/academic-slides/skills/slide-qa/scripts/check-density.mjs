@@ -12,13 +12,13 @@ import { findDeckFile } from './_lib.mjs';
 const HELP = `Usage: node check-density.mjs [--qmd <deck>.qmd] [--tex beamer/<deck>.tex] [--words 35] [--bullets 3]
                               [--skip-classes notes,hidden,source,sidenote,sim-tag]
                               [--skip-macros simtag,sourceline,sidenote]
-  --qmd           Quarto deck (default: the only .qmd in the current folder)
+  --qmd           Quarto deck (default: the deck's main .qmd in the current folder)
   --tex           beamer mirror; enables the per-frame report and the title comparison
   --words         maximum body words per main-body slide (default 35)
   --bullets       maximum bullets per main-body slide (default 3)
   --skip-classes  fenced-div / span classes whose text is not counted
   --skip-macros   beamer macros whose argument text is not counted
-Exit status: 0 all within limits and titles match, 1 otherwise, 2 file not found, or no single .qmd in the current folder when --qmd is not given.`;
+Exit status: 0 all within limits and titles match, 1 otherwise, 2 file not found, or the deck's .qmd not found in the current folder when --qmd is not given.`;
 
 const argv = process.argv.slice(2);
 if (argv.includes('--help') || argv.includes('-h')) { console.log(HELP); process.exit(0); }

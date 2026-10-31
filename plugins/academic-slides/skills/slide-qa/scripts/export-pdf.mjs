@@ -7,7 +7,7 @@ import path from 'path';
 import { args, playwright, deckPath, findDeckFile, serve, openPrintView, writeOutput } from './_lib.mjs';
 
 const { get } = args(`Usage: node export-pdf.mjs [--html <deck>.html] [--out <deck>.pdf] [--width 1280] [--height 720]
-Exit status: 0 PDF written, 1 export failed, 2 HTML not found, or no single .html in the current folder when --html is not given.`);
+Exit status: 0 PDF written, 1 export failed, 2 HTML not found, or the deck's .html not found in the current folder when --html is not given.`);
 const WIDTH = Number(get('width', 1280));
 const HEIGHT = Number(get('height', 720));
 const { root, name } = deckPath(findDeckFile(get('html'), '.html', 'html'));

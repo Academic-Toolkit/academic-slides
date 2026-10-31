@@ -7,7 +7,7 @@
 import { args, playwright, deckPath, findDeckFile, serve } from './_lib.mjs';
 
 const { get } = args(`Usage: node check-mathjax.mjs [--html <deck>.html]
-Exit status: 0 no MathJax errors, 1 at least one error, 2 HTML not found, or no single .html in the current folder when --html is not given.`);
+Exit status: 0 no MathJax errors, 1 at least one error, 2 HTML not found, or the deck's .html not found in the current folder when --html is not given.`);
 const { root, name } = deckPath(findDeckFile(get('html'), '.html', 'html'));
 
 const chromium = await playwright();

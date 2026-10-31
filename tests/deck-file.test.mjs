@@ -140,3 +140,83 @@ test('handout without --pdf and no .pdf in the folder exits 2 naming the option'
   assert.equal(r.code, 2, r.out);
   assert.match(r.out, /--pdf/);
 });
+
+// ---------- the deck's own file first (user decision 2026-10-31, after verify round 1) ----------
+
+const YML = (render) => `project:\n  type: default\n  render:\n    - ${render}\nformat:\n  revealjs:\n    theme: [default]\n`;
+
+test('renderedQmds reads project.render in block and flow form and ignores other lists', () => {
+  assert.deepEqual(lib.renderedQmds('project:\n  render:\n    - "talk.qmd" # main\n'), ['talk.qmd']);
+  assert.deepEqual(lib.renderedQmds("project:\n  render: ['a.qmd', b.qmd]\n"), ['a.qmd', 'b.qmd']);
+  assert.deepEqual(lib.renderedQmds('format:\n  revealjs:\n    resources:\n      - x.qmd\nproject:\n  render:\n  - ./W07_記憶.qmd\n'), ['./W07_記憶.qmd']);
+  assert.deepEqual(lib.renderedQmds('format:\n  revealjs:\n    theme: [default]\n'), []);
+});
+
+test('chooseDeckFile picks the deck\'s own PDF beside its derived PDFs', () => {
+  const dir = folder({ '_quarto.yml': YML('talk.qmd'), 'talk.qmd': QMD, 'talk.pdf': 'x', 'talk-notes.pdf': 'x', 'talk-dual.pdf': 'x', 'talk-presenter-notes.pdf': 'x' });
+  assert.deepEqual(lib.chooseDeckFile('.pdf', { dir, exclude: /-handout\.pdf$/i }), { file: 'talk.pdf' });
+  assert.deepEqual(lib.chooseDeckFile('.qmd', { dir }), { file: 'talk.qmd' });
+});
+
+test('chooseDeckFile follows the render list when an old copy of the .qmd sits beside it', () => {
+  const dir = folder({ '_quarto.yml': YML('talk.qmd'), 'talk.qmd': QMD, 'talk.before-issue38.qmd': QMD });
+  assert.deepEqual(lib.chooseDeckFile('.qmd', { dir }), { file: 'talk.qmd' });
+});
+
+test('chooseDeckFile reports the missing output instead of picking another file', () => {
+  const dir = folder({ 'talk.qmd': QMD, 'talk-notes.pdf': 'x' });
+  const r = lib.chooseDeckFile('.pdf', { dir });
+  assert.equal(r.file, undefined);
+  assert.equal(r.reason, 'missing');
+  assert.equal(r.expected, 'talk.pdf');
+  assert.deepEqual(r.candidates, ['talk-notes.pdf']);
+});
+
+test('chooseDeckFile uses output-file for the .html and .pdf names', () => {
+  const dir = folder({ '_quarto.yml': 'project:\n  render: [w07.qmd]\nformat:\n  revealjs:\n    output-file: slides.html\n', 'w07.qmd': QMD, 'slides.html': 'x', 'w07.html': 'x' });
+  assert.deepEqual(lib.chooseDeckFile('.html', { dir }), { file: 'slides.html' });
+});
+
+test('chooseDeckFile keeps a deck named *-handout: the main file wins over the exclusion', () => {
+  const dir = folder({ 'w07-handout.qmd': QMD, 'w07-handout.pdf': 'x' });
+  assert.deepEqual(lib.chooseDeckFile('.pdf', { dir, exclude: /-handout\.pdf$/i }), { file: 'w07-handout.pdf' });
+});
+
+test('chooseDeckFile falls back to the only candidate when the main file cannot be told, and never matches .HTML', () => {
+  assert.deepEqual(lib.chooseDeckFile('.pdf', { dir: folder({ 'beamer.pdf': 'x' }) }), { file: 'beamer.pdf' });
+  assert.equal(lib.chooseDeckFile('.html', { dir: folder({ 'deck.HTML': 'x' }) }).reason, 'none');
+  const several = lib.chooseDeckFile('.qmd', { dir: folder({ '_quarto.yml': 'project:\n  render: [a.qmd, b.qmd]\n', 'a.qmd': QMD, 'b.qmd': QMD }) });
+  assert.equal(several.reason, 'several');
+});
+
+test('check-density follows the render list beside an old copy of the deck', () => {
+  const r = runIn(folder({ '_quarto.yml': YML('talk.qmd'), 'talk.qmd': QMD, 'talk.before-issue38.qmd': QMD }), 'check-density.mjs');
+  assert.equal(r.code, 0, r.out);
+});
+
+test('a file option given without a file name exits 2 instead of picking a file', () => {
+  const dir = folder({ 'deck.qmd': QMD, 'deck.html': '<html></html>' });
+  for (const [script, args] of [['check-density.mjs', ['--qmd']], ['check-fill.mjs', ['--html', '--threshold', '0.7']], ['check-mathjax.mjs', ['--html']]]) {
+    const r = runIn(dir, script, args);
+    assert.equal(r.code, 2, `${script}: ${r.out}`);
+    assert.match(r.out, /needs a file name/, script);
+  }
+});
+
+test('candidate names are printed without control characters', () => {
+  const r = runIn(folder({ 'a.qmd': QMD, 'b\u001b[31mred.qmd': QMD }), 'check-density.mjs');
+  assert.equal(r.code, 2, r.out);
+  assert.doesNotMatch(r.out, /\u001b/);
+  assert.match(r.out, /b\?\[31mred\.qmd/);
+});
+
+test('handout without --pdf in a talk deck with derived PDFs lays out talk.pdf', { skip }, () => {
+  const dir = folder({ '_quarto.yml': YML('talk.qmd'), 'talk.qmd': QMD });
+  pdfFixture(dir, 'talk', 5);
+  pdfFixture(dir, 'talk-notes', 1);
+  pdfFixture(dir, 'talk-dual', 1);
+  const r = runIn(dir, 'handout.mjs');
+  assert.equal(r.code, 0, r.out);
+  assert.equal(pageCount(path.join(dir, 'talk-handout.pdf')), 2);
+  assert.equal(existsSync(path.join(dir, 'talk-notes-handout.pdf')), false);
+});
