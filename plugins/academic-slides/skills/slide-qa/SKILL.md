@@ -56,7 +56,7 @@ The aspect ratio is read from the PDF's first page. The grid is centred in the s
 - **Page numbers**: `n / N`, centred below the grid; `--no-page-numbers` drops them.
 - **Chinese, Japanese and Korean titles**: XeLaTeX tries PingFang TC, Heiti TC, Noto Sans CJK TC, Source Han Sans TC and Noto Sans TC, in that order. If none is installed, the script exits 1 and asks for `--cjk-font "<installed font>"` or `--no-header`.
 
-Look at the handout the way you look at the slides: render every page with `pdftoppm -r 150 -png talk-handout.pdf qa/talk-handout` and open each image at full size. A frame is about 0.14 mm wide (0.4 pt), so in an image under about 150 dpi some edges can look faint; zoom in, or render that page at a higher resolution, before deciding a frame is missing.
+Look at the handout the way you look at the slides: render every page with `pdftoppm -r 150 -png <deck>-handout.pdf qa/<deck>-handout` and open each image at full size. A frame is about 0.14 mm wide (0.4 pt), so in an image under about 150 dpi some edges can look faint; zoom in, or render that page at a higher resolution, before deciding a frame is missing.
 
 ## Step 0: task list
 
@@ -78,18 +78,20 @@ Add a handout task only when printed handouts are asked for, and put it after "F
 ## Workflow
 
 ```bash
-quarto render                                   # 1. produce talk.html
+quarto render                                   # 1. produce <deck>.html
 node scripts/check-layout.mjs --shots           # 2. layout; screenshots of every slide in qa/ next to the deck
 node scripts/check-mathjax.mjs                  # 3. red math
-node scripts/check-density.mjs --qmd talk.qmd --tex beamer/talk.tex   # 4. words, bullets, titles
+node scripts/check-density.mjs --tex beamer/<deck>.tex   # 4. words, bullets, titles
 node scripts/check-fill.mjs                     # 5. half-empty slides (advice, never fails)
 node scripts/export-pdf.mjs                     # 6. offline PDF; page count = slide count
-node scripts/handout.mjs --pdf talk.pdf         # 7. A4 handout (optional): 2 × 2 landscape; --portrait for 3 rows × 2 columns
+node scripts/handout.mjs                        # 7. A4 handout (optional): 2 × 2 landscape; --portrait for 3 rows × 2 columns
 ```
+
+Run these in the deck folder. Without `--html`, `--qmd`, or `--pdf`, each script uses the deck's only `.html`, `.qmd`, or `.pdf` there (handout leaves out its own `-handout.pdf`); when there is none or more than one, it lists what it found and exits 2, and you pass the option. A deck whose files are named `talk.*` works the same way.
 
 Step 7 prints whatever PDF it is given, so make the handout last: after every fix, rebuild the PDF (step 6 for a revealjs deck, recompile the beamer deck for a beamer PDF) and then run step 7. A handout made before a fix shows the old deck.
 
-Then look at the screenshots from step 2: `qa/<deck>-NN.png` for every slide, `qa/<deck>-NN-flagged.png` for flagged slides, and `qa/<deck>-print-NN-flagged.png` for flagged PDF pages. Screen slides are numbered from 0 (`#NN`), PDF pages from 1 (`page NN`, the page number in the PDF, counting the extra pages of a slide taller than the paper and of separate notes pages). Pixel figures differ between the two because the screen view is scaled to fit its margin. For a handout from step 7, render its pages (`pdftoppm -r 150 -png talk-handout.pdf qa/talk-handout`) and look at each one too. Add `qa/` to the project's `.gitignore`. Check label collisions in figures, awkward line breaks inside narrow columns, and whether highlighted numbers are the ones the speaker talks about.
+Then look at the screenshots from step 2: `qa/<deck>-NN.png` for every slide, `qa/<deck>-NN-flagged.png` for flagged slides, and `qa/<deck>-print-NN-flagged.png` for flagged PDF pages. Screen slides are numbered from 0 (`#NN`), PDF pages from 1 (`page NN`, the page number in the PDF, counting the extra pages of a slide taller than the paper and of separate notes pages). Pixel figures differ between the two because the screen view is scaled to fit its margin. For a handout from step 7, render its pages (`pdftoppm -r 150 -png <deck>-handout.pdf qa/<deck>-handout`) and look at each one too. Add `qa/` to the project's `.gitignore`. Check label collisions in figures, awkward line breaks inside narrow columns, and whether highlighted numbers are the ones the speaker talks about.
 
 For each failure, see [references/fix-table.md](references/fix-table.md). It lists the usual cause and the fix that keeps the deck consistent with the rules in the `academic-slide-design` skill.
 

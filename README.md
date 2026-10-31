@@ -31,16 +31,18 @@ This repository is private. Installing requires GitHub access to `Academic-Toolk
 
 ```bash
 SKILLS=~/.claude/plugins/marketplaces/academic-slides/plugins/academic-slides/skills   # or this repo's plugins/academic-slides/skills
-node $SKILLS/slide-deck-scaffold/scripts/scaffold.mjs --out my-talk --template research-talk
-cd my-talk && quarto render
+node $SKILLS/slide-deck-scaffold/scripts/scaffold.mjs --out jscs2026 --name jscs2026-imputation --template research-talk
+cd jscs2026 && quarto render    # → jscs2026-imputation.html
 
 node $SKILLS/slide-qa/scripts/check-layout.mjs --shots        # screenshots in qa/
 node $SKILLS/slide-qa/scripts/check-mathjax.mjs
-node $SKILLS/slide-qa/scripts/check-density.mjs --qmd talk.qmd
+node $SKILLS/slide-qa/scripts/check-density.mjs
 node $SKILLS/slide-qa/scripts/check-fill.mjs
 node $SKILLS/slide-qa/scripts/export-pdf.mjs
-node $SKILLS/slide-qa/scripts/handout.mjs --pdf talk.pdf      # A4 handout: 2 × 2; --portrait for 3 rows × 2 columns
+node $SKILLS/slide-qa/scripts/handout.mjs                    # A4 handout: 2 × 2; --portrait for 3 rows × 2 columns
 ```
+
+`--name` names the deck's main file (`<name>.qmd`): name it after the deck's content. The slide-qa scripts run in the deck folder and find the deck's file there, so they need no file name.
 
 In practice you rarely run these by hand. Ask the agent to start a deck, review a slide, or check the deck before a talk, and the matching skill loads.
 
@@ -55,7 +57,7 @@ The templates live in `plugins/academic-slides/skills/slide-deck-scaffold/templa
 | `results-report` | Traditional Chinese | results in tables, no mathematics |
 | `lecture` | Traditional Chinese | a class: objectives, definition, worked example, in-class question, recap |
 
-`templates/quarto/_theme/deck.scss` is the only stylesheet, and `_theme/frame.html` places the footer, slide number and menu button on the page (the slide is shown as a 16:9 page with margins on a dark window; `margin` in `_quarto.yml` sets the margins on screen and in the PDF); a template folder holds just `_quarto.yml` and `talk.qmd`.
+`templates/quarto/_theme/deck.scss` is the only stylesheet, and `_theme/frame.html` places the footer, slide number and menu button on the page (the slide is shown as a 16:9 page with margins on a dark window; `margin` in `_quarto.yml` sets the margins on screen and in the PDF); a template folder holds just `_quarto.yml` and `talk.qmd` (written into a new deck as `<name>.qmd`).
 
 `scaffold.mjs` merges three layers field by field — project over personal over official:
 
