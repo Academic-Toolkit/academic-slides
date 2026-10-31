@@ -854,7 +854,7 @@ test('CLI: render outputs of talk.qmd in a template copied from a finished deck 
   assert.equal(r.code, 0, r.out);
   for (const stale of ['talk.html', 'talk.pdf', 'talk_files']) assert.equal(existsSync(path.join(out, stale)), false, stale);
   assert.ok(existsSync(path.join(out, 'img', 'logo.txt')));
-  assert.match(r.out, /^warning: ignored the template's own talk\.html; it is an output of rendering talk\.qmd/m);
+  assert.match(r.out, /^warning: ignored the template's own talk\.html; it is an output of rendering or checking a deck/m);
   assert.match(r.out, /^warning: ignored the template's own talk_files\/;/m);
 });
 
@@ -879,5 +879,54 @@ test('renameRenderTarget changes only a value that is exactly talk.qmd, in proje
   assert.equal(r('project:\n  render: talk.qmd  # main\n'), 'project:\n  render: w07.qmd  # main\n');
   assert.equal(r('output-file: talk.html\nproject:\n  render: [talk.qmd]\n'), 'output-file: w07.html\nproject:\n  render: [w07.qmd]\n');
   assert.equal(r('format:\n  pdf:\n    output-file: talk\n  revealjs:\n    output-file: talk.html\n'), 'format:\n  pdf:\n    output-file: talk\n  revealjs:\n    output-file: w07.html\n');
+});
+
+// ---------- verify round 2 (adversarial review) ----------
+
+test('CLI: CJK middle dots are allowed, and a refused name says which characters are refused', () => {
+  const s = sandbox();
+  for (const good of ['W07・記憶', 'a·b']) assert.equal(run(['--name', good, '--out', path.join(s.project, `d-${Buffer.from(good).toString('hex')}`)], s.home).code, 0, good);
+  const r = run(['--name', 'R&D', '--out', path.join(s.project, 'deck')], s.home);
+  assert.equal(r.code, 2, r.out);
+  assert.match(r.out, /contains "&"/);
+});
+
+test('CLI: a name longer than 200 bytes is refused before anything is written', () => {
+  const s = sandbox();
+  const out = path.join(s.project, 'deck');
+  const r = run(['--name', '記'.repeat(67), '--out', out], s.home);   // 201 bytes
+  assert.equal(r.code, 2, r.out);
+  assert.match(r.out, /longer than 200 bytes/);
+  assert.equal(existsSync(out), false);
+});
+
+test('CLI: a name given with .qmd names that file, not <name>.qmd.qmd', () => {
+  const s = sandbox();
+  const out = path.join(s.project, 'deck');
+  assert.equal(run(['--name', 'w07-memory.qmd', '--out', out], s.home).code, 0);
+  assert.ok(existsSync(path.join(out, 'w07-memory.qmd')));
+  assert.equal(existsSync(path.join(out, 'w07-memory.qmd.qmd')), false);
+});
+
+test('CLI: a name ending in talk is not reported as a leftover talk.qmd', () => {
+  const s = sandbox();
+  const r = run(['--name', 'w07-talk', '--out', path.join(s.project, 'deck')], s.home);
+  assert.equal(r.code, 0, r.out);
+  assert.doesNotMatch(r.out, /still mentions/);
+});
+
+test('renameRenderTarget matches talk.qmd in any letter case', () => {
+  assert.equal(lib.renameRenderTarget('project:\n  render:\n    - "Talk.qmd"\n', 'w07.qmd'), 'project:\n  render:\n    - "w07.qmd"\n');
+});
+
+test('CLI: derived PDFs, qa/ and .quarto/ in a template copied from a finished deck are left out', () => {
+  const s = sandbox();
+  const tpl = path.join(s.personal, 'templates', 'finished2');
+  makeTemplate(tpl, { extra: { 'talk-notes.pdf': 'x', 'talk-handout.pdf': 'x', 'qa/talk-01.png': 'x', '.quarto/xref/x': 'x', 'talking-points.md': 'keep' } });
+  const out = path.join(s.project, 'deck');
+  const r = run(['--name', 'icsa', '--out', out, '--template', 'finished2'], s.home);
+  assert.equal(r.code, 0, r.out);
+  for (const stale of ['talk-notes.pdf', 'talk-handout.pdf', 'qa', '.quarto']) assert.equal(existsSync(path.join(out, stale)), false, stale);
+  assert.ok(existsSync(path.join(out, 'talking-points.md')));
 });
 

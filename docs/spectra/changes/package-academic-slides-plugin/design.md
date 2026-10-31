@@ -176,9 +176,9 @@ Quarto 的標題頁由 front matter 產生，放不進版本行或下載鈕；�
 scaffold 原本把主檔固定寫成 `talk.qmd`，課堂講義、結果報告也叫 talk，跨場合的 deck 在下載資料夾與附件裡同名。`scaffold.mjs` 改為必填 `--name <stem>`，以範本的 `talk.qmd` 寫出 `<stem>.qmd`；寫出的 `_quarto.yml` 裡 `project.render` 列出 `talk.qmd` 的那一項換成 `<stem>.qmd`，沒有這一項的自訂範本照原樣寫出（Quarto 會 render 資料夾裡唯一的 `.qmd`）。改寫限在 `project:` 直接底下的 `render`，只換「整個值就是 `talk.qmd`」的項目（有沒有引號、`./` 前綴都算；區塊清單、行內清單、跨行的行內清單、單一值都處理）；只是含有 `talk.qmd` 的值（`"my talk.qmd"`）、註解、`project` 更深一層的 `render`、列在別處（例如 `resources`）的 `talk.qmd` 都不動。最上層或 `format: revealjs:` 底下的 `output-file: talk` 或 `talk.html` 換成 `<stem>` 或 `<stem>.html`；其他 format 的 `output-file` 不動。改寫後若還看得到 `talk.qmd`，印出警告。
 
 - 沒給 `--name` 時以狀態 2 結束、什麼都不寫，訊息要 agent 依內容取名、推不出唯一名稱時問使用者。不採「預設用 `--out` 資料夾名」：資料夾叫 `slides` 或 `my-talk` 時會安靜地產生不反映內容的檔名，等於換一個預設，而腳本本身無法問人。
-- 名稱照使用者給的寫法，不做正規化：任何文字的字母（含中文）、數字、`_`（開頭也可以：Quarto 只要 render 清單列了就會 render，已實測）、`-`、`+ ( ) @`、全形括號 `（ ）`，以及名稱中間的 `.`；YAML 或 shell 有特殊意義的字元（`# , [ ] { } & * ! | > ' %` 與反引號）不在其中，名稱寫進 `_quarto.yml` 不會改變結構；只擋不安全或不可攜的字元：空白、路徑分隔、開頭的 `-` 或 `.`、結尾的 `.`、控制字元、`: * ? " < > |`，以及 Windows 的裝置名稱（`CON`、`NUL`、`COM1`、`COM¹` 等，帶副檔名也保留）。第 2 版曾先做 NFC 正規化，verify 第 2 輪指出那會改掉使用者給的名稱，已移除。Supersedes：本決策第 1 版沿用範本名稱的 `^[a-z0-9][a-z0-9-]*$`，那是 agent 在 unattended discuss 中自行決定的；verify 第 1 輪實測中文、底線檔名經 render、check-*、export-pdf、handout 全部可用，並指出它收窄了使用者「不強制格式」的決定，使用者 2026-10-31 改定為只擋不安全的字元。使用者給的名稱被拒時，SKILL 要求 agent 把修正後的名稱給使用者確認。
+- 名稱照使用者給的寫法，不做正規化：任何文字的字母（含中文）、數字、`_`（開頭也可以：Quarto 只要 render 清單列了就會 render，已實測）、`-`、`+ ( ) @`、全形括號 `（ ）`、中黑點 `・ ·`，以及名稱中間的 `.`；名稱帶 `.qmd` 結尾時視同沒帶；YAML 或 shell 有特殊意義的字元（`# , [ ] { } & * ! | > ' %` 與反引號）不在其中，名稱寫進 `_quarto.yml` 不會改變結構；只擋不安全或不可攜的字元：空白、路徑分隔、開頭的 `-` 或 `.`、結尾的 `.`、控制字元、`: * ? " < > |`，Windows 的裝置名稱（`CON`、`NUL`、`COM1`、`COM¹` 等，帶副檔名也保留），以及超過 200 bytes 的名稱。這是一份允許清單，不是禁止清單：清單外的字元（例如 `&`、`=`、emoji）都會被拒，錯誤訊息點名被拒的字元。第 2 版曾先做 NFC 正規化，verify 第 2 輪指出那會改掉使用者給的名稱，已移除。Supersedes：本決策第 1 版沿用範本名稱的 `^[a-z0-9][a-z0-9-]*$`，那是 agent 在 unattended discuss 中自行決定的；verify 第 1 輪實測中文、底線檔名經 render、check-*、export-pdf、handout 全部可用，並指出它收窄了使用者「不強制格式」的決定，使用者 2026-10-31 改定為只擋不安全的字元。使用者給的名稱被拒時，SKILL 要求 agent 把修正後的名稱給使用者確認。
 - 取名程序寫在 slide-deck-scaffold `SKILL.md`：使用者明說的名稱 → 從標題、場合或課程推得出、而且只有一種寫法的名稱 → 否則問使用者（使用者 2026-10-31 定案）。判斷名稱是否反映內容是 agent 的工作，腳本只驗證與拒絕。
-- 用完成的 deck 複製成範本時，範本頂層的 `talk.html`、`talk.pdf`、`talk_files/` 是 render 的產物，不複製（印出警告）；否則它們會和新的 `<stem>.html` 並存，讓 slide-qa 找檔失準。
+- 用完成的 deck 複製成範本時，範本頂層的 `talk.html`、`talk.pdf`、`talk-*.html`／`talk-*.pdf`（講者備註版、講義等衍生檔）、`talk_files/`、slide-qa 的 `qa/`、Quarto 的 `.quarto/` 都是產物，不複製（印出警告）；否則它們會和新的 `<stem>.html` 並存，讓 slide-qa 找檔失準。
 - 範本來源檔名不改：`templates/quarto/<name>/talk.qmd` 與 `templates/beamer/talk.tex` 是範本內部的名字，使用者看不到；個人與專案層的自訂範本依 spec 也必須有 `talk.qmd`，改名會讓它們失效。beamer 鏡像複製進 deck 時改叫 `beamer/<stem>.tex`。
 - 在範圍內：`scaffold.mjs`、四個範本 `_quarto.yml` 的註解、`tests/scaffold.test.mjs`、`tests/render-templates.sh`、兩份 SKILL 與 README 的指令範例。不在範圍內：既有 deck 的改名工具（使用者定案不做）、scaffold 自動複製 beamer 檔。
 
@@ -190,8 +190,8 @@ scaffold 原本把主檔固定寫成 `talk.qmd`，課堂講義、結果報告也
 - 主檔定不出來時（例如只放 PDF 的資料夾），才用資料夾裡唯一的那個檔；handout 在這一步排除自己產生的 `*-handout.pdf`。沒有或不只一個時以狀態 2 結束，列出資料夾與所有候選。
 - Supersedes：本決策第 1 版是「資料夾裡唯一的檔案，不只一個就報錯」（使用者 2026-10-31 的 Clarity 決定）。verify 第 1 輪重建既有 deck 的檔名結構，發現 deck 資料夾通常同時有衍生 PDF（`talk-notes.pdf`、`talk-dual.pdf` 等，#36、#38 還會再加），handout 不帶參數 5/5 失敗，與「既有 deck 照常可用」衝突；使用者 2026-10-31 改定為先挑主檔同名的檔案。兩種做法都不會退回 `talk` 這個固定預設。
 - 只讀範本那種區塊寫法的 `_quarto.yml`；行內 mapping、加引號的鍵、anchor、值裡的逗號等寫法讀不到，這時要明確給檔名參數，完整解析追蹤於 #46。
-- 副檔名大小寫完全相符（伺服器只把小寫 `.html` 當 HTML 提供）；印出的檔名把控制字元換成 `?`。
-- 給了 `--html`、`--qmd`、`--pdf` 卻沒有檔名（放在最後，或後面接著另一個選項）時以狀態 2 結束，不改為自動找檔。其他帶值選項缺值的處理不在這次範圍，追蹤於 #45。
+- 副檔名大小寫完全相符（伺服器只把小寫 `.html` 當 HTML 提供）；錯誤訊息裡的檔名把控制字元換成 `?`。
+- 給了 `--html`、`--qmd` 卻沒有檔名（放在最後，或後面接著另一個選項）時以狀態 2 結束，不改為自動找檔；handout 的 `--pdf` 依它在 #34 訂下的規則以 1 結束。其他帶值選項缺值的處理不在這次範圍，追蹤於 #45。
 - 明確給的參數照舊優先；check-density 的 `--tex` 本來就沒有預設值，維持要明確指定。檔名叫 `talk.*` 的既有 deck 同樣適用。
 - 在範圍內：`_lib.mjs`、六支腳本與它們的說明文字、slide-qa `SKILL.md` 與 `references/fix-table.md`。
 
