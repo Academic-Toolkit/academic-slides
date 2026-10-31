@@ -171,7 +171,7 @@ The project layer is discovered by walking up from the deck folder, so it can co
 
 ### Requirement: Scaffold names the deck's main file after its content
 
-`scaffold.mjs` SHALL require `--name <stem>` to create a deck or to print a dry run; `--list` does not need it. The stem SHALL match `^[a-z0-9][a-z0-9-]*$`. Without `--name`, or with a stem that does not match, the script SHALL exit with status 2 before anything is written; without `--name`, its message SHALL tell the reader to name the file after the deck's content and to ask the user when no single name follows. The deck's main file SHALL be `<stem>.qmd`, written from the template's `talk.qmd`, and the deck SHALL hold no `talk.qmd` unless the stem is `talk`. In the written `_quarto.yml`, a `project.render` entry naming `talk.qmd` SHALL name `<stem>.qmd` instead; a `_quarto.yml` without such an entry is written without that change. The resolution report and the closing message SHALL name the main file. `slide-deck-scaffold/SKILL.md` SHALL tell the agent to take the name from what the user said, else from the title, venue, or course when exactly one spelling follows, and otherwise to ask the user (issue #44).
+`scaffold.mjs` SHALL require `--name <stem>` to create a deck or to print a dry run; `--list` does not need it. The stem is used as given, after NFC normalisation: letters of any script, digits, `_`, `-`, and dots inside the name. The script SHALL refuse a stem that is empty, starts with `-` or `.`, ends with `.`, or contains whitespace, a path separator, a control character, or any of `: * ? " < > |` (user decision 2026-10-31, after verify round 1). Without `--name`, or with a refused stem, the script SHALL exit with status 2 before anything is written; without `--name`, its message SHALL tell the reader to name the file after the deck's content and to ask the user when no single name follows. The deck's main file SHALL be `<stem>.qmd`, written from the template's `talk.qmd`, and the deck SHALL hold no `talk.qmd` unless the stem is `talk`. In the written `_quarto.yml`, a `talk.qmd` entry in `project.render` SHALL name `<stem>.qmd` instead, whether the list is a block or a flow list, quoted or not, prefixed with `./` or followed by a comment; a `talk.qmd` listed outside `project.render` is left unchanged, and an `output-file` of `talk` or `talk.html` SHALL become `<stem>` or `<stem>.html`. A `_quarto.yml` without such entries is written without that change; when the written `_quarto.yml` still mentions `talk.qmd`, the script SHALL print a warning. A template's top-level `talk.html`, `talk.pdf`, and `talk_files/` are render outputs, not template content, and SHALL be left out with a warning. The resolution report and the closing message SHALL name the main file. `slide-deck-scaffold/SKILL.md` SHALL tell the agent to take the name from what the user said, else from the title, venue, or course when exactly one spelling follows, and otherwise to ask the user, and to show the user a corrected name before using it when a name the user gave is refused (issue #44).
 
 #### Scenario: Deck named after its content
 
@@ -185,8 +185,23 @@ The project layer is discovered by walking up from the deck folder, so it can co
 
 #### Scenario: Name outside the allowed characters
 
-- **WHEN** the scaffold runs with `--name "My Talk"` or `--name ../x`
-- **THEN** it exits with status 2 naming the allowed pattern, and nothing is written
+- **WHEN** the scaffold runs with `--name "My Talk"`, `--name ../x`, or `--name a:b`
+- **THEN** it exits with status 2 stating what a name may contain, and nothing is written
+
+#### Scenario: A name in the user's own script
+
+- **WHEN** the scaffold runs with `--name W07_記憶`
+- **THEN** the deck holds `W07_記憶.qmd` and its `_quarto.yml` renders `W07_記憶.qmd`
+
+#### Scenario: Flow render list and output-file
+
+- **WHEN** a personal template's `_quarto.yml` has `render: ["talk.qmd"]` and `output-file: talk.html`, and the scaffold runs with `--name w07-memory`
+- **THEN** the written `_quarto.yml` has `render: ["w07-memory.qmd"]` and `output-file: w07-memory.html`
+
+#### Scenario: Template copied from a deck that was rendered
+
+- **WHEN** a personal template holds `talk.html`, `talk.pdf`, and `talk_files/` beside `talk.qmd`, and the scaffold runs with `--name icsa-matrix`
+- **THEN** the deck holds none of the three, and a warning names each
 
 #### Scenario: Personal template without a render list
 

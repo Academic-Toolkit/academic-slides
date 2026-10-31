@@ -57,9 +57,9 @@
 
 ## 後續變更：issue #44（2026-10-31）
 
-- `slide-deck-scaffold` 產生的 deck 不再一律叫 `talk`：`scaffold.mjs` 新增必填的 `--name`，用範本的 `talk.qmd` 寫出 `<name>.qmd`，`_quarto.yml` 的 render 清單跟著改。名稱依序取自使用者明說的名稱、從標題、場合或課程推得出且只有一種寫法的名稱，否則問使用者（使用者 2026-10-31 定案）。
-- slide-qa 六支腳本（check-density、check-fill、check-layout、check-mathjax、export-pdf、handout）沒給檔名時，在目前資料夾找唯一的 `.qmd`／`.html`／`.pdf`；沒有或不只一個時以狀態 2 結束並列出候選，不再預設 `talk`。
+- `slide-deck-scaffold` 產生的 deck 不再一律叫 `talk`：`scaffold.mjs` 新增必填的 `--name`，用範本的 `talk.qmd` 寫出 `<name>.qmd`，`_quarto.yml` 的 render 清單跟著改。名稱依序取自使用者明說的名稱、從標題、場合或課程推得出且只有一種寫法的名稱，否則問使用者（使用者 2026-10-31 定案）；名稱照使用者給的寫法，含中文、大小寫與底線，只擋不安全或不可攜的字元（使用者 2026-10-31 於 verify 第 1 輪後定案）。
+- slide-qa 六支腳本（check-density、check-fill、check-layout、check-mathjax、export-pdf、handout）沒給檔名時讀 deck 自己的檔案：以 `project.render` 或唯一的 `.qmd` 定出主檔名，挑同名的 `.qmd`／`.html`／`.pdf`；主檔名定不出來時才用資料夾裡唯一的檔案；缺檔或分不出來時以狀態 2 結束並列出候選，不再預設 `talk`（使用者 2026-10-31 於 verify 第 1 輪後定案）。
 - 範本來源檔名（`templates/quarto/<name>/talk.qmd`、`templates/beamer/talk.tex`）不變，既有個人與專案範本照常可用；既有 `talk.*` deck 照常可用，不提供改名工具。
 - 版本升為 0.7.0。
-- 不在這次範圍：腳本參數缺值的處理（`--html` 放在最後時拿到空值）、scaffold 自動複製 beamer 檔、中文檔名。
+- 不在這次範圍：檔案以外的選項缺值的處理（#45）、scaffold 自動複製 beamer 檔。
 - 受影響的 capability：`deck-scaffold`、`slide-qa-tools`。
