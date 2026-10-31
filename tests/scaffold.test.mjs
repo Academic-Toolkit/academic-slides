@@ -930,3 +930,33 @@ test('CLI: derived PDFs, qa/ and .quarto/ in a template copied from a finished d
   assert.ok(existsSync(path.join(out, 'talking-points.md')));
 });
 
+// ---------- verify round 4 (Codex) ----------
+
+test('CLI: a name starting with another character says so', () => {
+  const s = sandbox();
+  const r = run(['--name', '+abc', '--out', path.join(s.project, 'deck')], s.home);
+  assert.equal(r.code, 2, r.out);
+  assert.match(r.out, /starts with "\+"; start with a letter, a digit, or _/);
+});
+
+test('CLI: template files named talk-… that are not tool outputs, and a file named qa, are kept', () => {
+  const s = sandbox();
+  const tpl = path.join(s.personal, 'templates', 'assets');
+  makeTemplate(tpl, { extra: { 'talk-background.pdf': 'bg', 'qa': 'a file, not a folder', 'talk-notes.pdf': 'derived' } });
+  const out = path.join(s.project, 'deck');
+  assert.equal(run(['--name', 'w07', '--out', out, '--template', 'assets'], s.home).code, 0);
+  assert.ok(existsSync(path.join(out, 'talk-background.pdf')));
+  assert.ok(existsSync(path.join(out, 'qa')));
+  assert.equal(existsSync(path.join(out, 'talk-notes.pdf')), false);
+});
+
+test('CLI: --name Talk still warns about a talk.qmd left under resources', () => {
+  const s = sandbox();
+  const tpl = path.join(s.personal, 'templates', 'res2');
+  makeTemplate(tpl);
+  writeFileSync(path.join(tpl, '_quarto.yml'), 'project:\n  render: [talk.qmd]\nformat:\n  revealjs:\n    theme: [default, _theme/deck.scss]\n    resources: [talk.qmd]\n');
+  const r = run(['--name', 'Talk', '--out', path.join(s.project, 'deck'), '--template', 'res2'], s.home);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /still mentions talk\.qmd/);
+});
+

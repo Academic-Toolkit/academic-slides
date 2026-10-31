@@ -26,7 +26,7 @@ export function nameProblem(name) {
   if (typeof name !== 'string' || name === '') return 'it is empty';
   const refused = [...new Set([...name].filter((c) => !NAME_CHAR.test(c)))];
   if (refused.length) return `it contains ${refused.map((c) => show(c)).join(', ')}`;
-  if (!DECK_NAME.test(name)) return 'it starts with - or .';
+  if (!DECK_NAME.test(name)) return `it starts with ${show(name[0])}; start with a letter, a digit, or _`;
   if (name.endsWith('.')) return 'it ends with a dot';
   if (DEVICE.test(name.split('.')[0])) return `${name.split('.')[0]} is a Windows device name`;
   if (Buffer.byteLength(name) > NAME_BYTES) return `it is longer than ${NAME_BYTES} bytes`;
@@ -282,8 +282,11 @@ export function renameRenderTarget(text, mainFile) {
 
 // A template made by copying a finished deck carries the outputs of rendering talk.qmd; copied into a deck named
 // otherwise they would sit beside <name>.html and make slide-qa's lookup ambiguous, so they are left out (#44).
-// Also the files derived from them (talk-notes.pdf, talk-handout.pdf, …), slide-qa's qa/ and Quarto's .quarto/.
-const RENDER_OUTPUT = /^(talk(-[^/]*)?\.(html|pdf)|talk_files|qa|\.quarto)$/;
+// Also the files derived from them by the plugin's own tools (talk-notes, talk-dual, talk-presenter-notes,
+// talk-handout…, talk-script…), and the folders talk_files/, slide-qa's qa/ and Quarto's .quarto/. Other files
+// named talk-… (talk-background.pdf, say) are template content and are kept.
+const RENDER_OUTPUT_FILE = /^talk(-(notes|dual|presenter-notes|handout[^/]*|script[^/]*))?\.(html|pdf)$/;
+const RENDER_OUTPUT_DIR = /^(talk_files|qa|\.quarto)$/;
 
 // Template files to copy: everything except symbolic links, a top-level _theme/, any deck.scss, and the
 // render outputs of talk.qmd at the top level.
@@ -295,7 +298,7 @@ function templateFiles(dir, warnings, rel = '') {
     const st = lstatSync(full);
     if (st.isSymbolicLink()) {
       warnings.push(`skipped symbolic link ${relPath} in the template`);
-    } else if (rel === '' && RENDER_OUTPUT.test(pathKey(entry))) {
+    } else if (rel === '' && (st.isDirectory() ? RENDER_OUTPUT_DIR : RENDER_OUTPUT_FILE).test(pathKey(entry))) {
       warnings.push(`ignored the template's own ${entry}${st.isDirectory() ? '/' : ''}; it is an output of rendering or checking a deck, not template content`);
     } else if (st.isDirectory()) {
       if (rel === '' && pathKey(entry) === '_theme') warnings.push(`ignored the template's own ${entry}/; the shared theme is used`);
@@ -402,8 +405,9 @@ export function planDeck({ out, home, template, title, deckName, trustProject = 
   }, qmdFile);
   const yml = rewriteQuartoYml(readFileSync(ymlFile, 'utf8'), { theme, footer: fields.footer?.value, mainFile }, ymlFile);
   // A value that is still talk.qmd (not a name such as w07-talk.qmd that merely ends in it), or output-file talk.
-  if (mainFile.toLowerCase() !== 'talk.qmd'
-      && /((^|[\s[,:"'])|\.\/)talk\.qmd(?=["'\s,\]#]|$)|output-file:[ \t]*["']?(\.\/)?talk(\.html)?["']?[ \t]*(#|$)/im.test(yml)) {
+  const leftover = [...yml.matchAll(/(?:^|[\s[,:"']|\.\/)(talk\.qmd)(?=["'\s,\]#]|$)/gim)].some((m) => m[1] !== mainFile)
+    || (stem.toLowerCase() !== 'talk' && /output-file:[ \t]*["']?(\.\/)?talk(\.html)?["']?[ \t]*(#|$)/im.test(yml));
+  if (leftover) {
     warnings.push(`${path.join(resolvedOut, '_quarto.yml')} still mentions talk.qmd or output-file talk after the rewrite; check that the deck renders ${mainFile}`);
   }
   const files = [
