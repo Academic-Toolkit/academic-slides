@@ -155,3 +155,26 @@ The static server in `_lib.mjs` SHALL respond 403 to any request whose `Host` he
 - **WHEN** 維護者依技能說明安裝鎖定依賴與 Chromium 後執行 `npm test`
 - **THEN** 測試涵蓋檔案邊界與實際瀏覽器輸出，且文件不將此防護描述為對本機目錄併發替換的 sandbox
 
+### Requirement: Scripts find the deck file when none is given
+
+When run without its file option — `--qmd` for check-density; `--html` for check-fill, check-layout, check-mathjax, and export-pdf; `--pdf` for handout — each script SHALL use the single file with that extension in the current folder, without searching subfolders; handout SHALL leave out files whose names end in `-handout.pdf`. When there is no such file, or more than one, the script SHALL exit with status 2, name the folder it searched and every candidate, and tell the reader to pass the option. A file given with the option SHALL be used as given. No script SHALL fall back to a fixed name such as `talk.html` (issue #44).
+
+#### Scenario: One deck in the folder
+
+- **WHEN** check-mathjax runs without `--html` in a folder whose only `.html` file is `jscs-imputation.html`
+- **THEN** it checks `jscs-imputation.html`
+
+#### Scenario: Two candidates
+
+- **WHEN** check-density runs without `--qmd` in a folder holding `a.qmd` and `b.qmd`
+- **THEN** it exits with status 2, and its message names both files and the `--qmd` option
+
+#### Scenario: Handout ignores its own output
+
+- **WHEN** handout runs without `--pdf` in a folder holding `deck.pdf` and `deck-handout.pdf`
+- **THEN** it lays out `deck.pdf`
+
+#### Scenario: Existing deck named talk
+
+- **WHEN** export-pdf runs without `--html` in a deck whose only `.html` file is `talk.html`
+- **THEN** it writes `talk.pdf` as before

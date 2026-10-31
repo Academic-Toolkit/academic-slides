@@ -10,8 +10,8 @@ Give an agent a ready-to-copy starting point for a Quarto revealjs deck and a mi
 
 #### Scenario: Template renders cleanly
 
-- **WHEN** `scaffold.mjs` creates a deck from each of the four templates in a temporary directory and `quarto render` runs there
-- **THEN** `talk.html` is produced, and check-layout (screen and PDF print view), check-density, and check-mathjax all exit with status 0 on it
+- **WHEN** `scaffold.mjs` creates a deck with `--name` from each of the four templates in a temporary directory and `quarto render` runs there
+- **THEN** `<name>.html` is produced, and check-layout (screen and PDF print view), check-density, and check-mathjax all exit with status 0 on it
 
 #### Scenario: Full centred slide in the PDF
 
@@ -96,7 +96,7 @@ Every Quarto template SHALL set the revealjs `margin` to 0.18 and include `_them
 
 ### Requirement: Beamer mirror compiles with matching titles
 
-`slide-deck-scaffold/templates/beamer/talk.tex` SHALL compile with XeLaTeX, define the same RGB palette and the macros `\cB`, `\cO`, `\cG`, `\cP`, `\takeaway`, `\sourceline`, `\algobox`, and `\bibent`, and its main-body frame titles SHALL match the main-body slide titles of `research-talk/talk.qmd` one to one. The other three templates have no beamer mirror.
+`slide-deck-scaffold/templates/beamer/talk.tex` SHALL compile with XeLaTeX, define the same RGB palette and the macros `\cB`, `\cO`, `\cG`, `\cP`, `\takeaway`, `\sourceline`, `\algobox`, and `\bibent`, and its main-body frame titles SHALL match the main-body slide titles of `research-talk/talk.qmd` one to one. The other three templates have no beamer mirror. Copied into a deck, the file is named after the deck's main file (`beamer/<name>.tex`, issue #44).
 
 #### Scenario: Beamer compiles and titles match
 
@@ -105,12 +105,12 @@ Every Quarto template SHALL set the revealjs `margin` to 0.18 and include `_them
 
 ### Requirement: Scaffold merges three settings layers
 
-`slide-deck-scaffold/scripts/scaffold.mjs` SHALL build a deck from three layers, merged field by field with precedence project > personal > official. The official layer is the chosen template's own front matter and `_quarto.yml`. The personal layer is `~/.claude/.academic-slides/` (from the home directory reported by the operating system). The project layer is the nearest `.claude/.academic-slides/` folder found by walking up from the deck folder, not checking the home directory itself; only the nearest one is used. In each layer, `local.json` SHALL accept exactly these fields: `template`, `lang`, `author`, `affiliation`, and `footer`, each a string or `null`; `null` removes the field from the deck. `--template` and `--title` on the command line override every layer. `author`, `affiliation` (written as Quarto `institute`), `lang`, and the title are written into the front matter of `talk.qmd`; `footer` into `_quarto.yml`. An unknown field is reported as a warning and ignored; a value of another type, or a `local.json` that is not a JSON object, stops the script with status 1 before anything is written.
+`slide-deck-scaffold/scripts/scaffold.mjs` SHALL build a deck from three layers, merged field by field with precedence project > personal > official. The official layer is the chosen template's own front matter and `_quarto.yml`. The personal layer is `~/.claude/.academic-slides/` (from the home directory reported by the operating system). The project layer is the nearest `.claude/.academic-slides/` folder found by walking up from the deck folder, not checking the home directory itself; only the nearest one is used. In each layer, `local.json` SHALL accept exactly these fields: `template`, `lang`, `author`, `affiliation`, and `footer`, each a string or `null`; `null` removes the field from the deck. `--template` and `--title` on the command line override every layer. `author`, `affiliation` (written as Quarto `institute`), `lang`, and the title are written into the front matter of the deck's main file `<name>.qmd`; `footer` into `_quarto.yml`. An unknown field is reported as a warning and ignored; a value of another type, or a `local.json` that is not a JSON object, stops the script with status 1 before anything is written.
 
 #### Scenario: Project overrides personal, null removes
 
-- **WHEN** the personal `local.json` sets `author` to `"A. Person"` and `affiliation` to `"Some Institute"`, the project `local.json` sets `affiliation` to `null` and `template` to `"results-report"`, and the scaffold runs with `--out` inside the project
-- **THEN** the deck is built from `results-report`, its `talk.qmd` front matter has `author: "A. Person"` and no `institute` line, and the script prints, for each field, the layer it came from
+- **WHEN** the personal `local.json` sets `author` to `"A. Person"` and `affiliation` to `"Some Institute"`, the project `local.json` sets `affiliation` to `null` and `template` to `"results-report"`, and the scaffold runs with `--out` inside the project and `--name report`
+- **THEN** the deck is built from `results-report`, its `report.qmd` front matter has `author: "A. Person"` and no `institute` line, and the script prints, for each field, the layer it came from
 
 #### Scenario: Invalid settings stop before writing
 
@@ -119,7 +119,7 @@ Every Quarto template SHALL set the revealjs `margin` to 0.18 and include `_them
 
 ### Requirement: Same-name templates resolve project, personal, official
 
-When looking up a template name, the scaffold SHALL use `templates/<name>/` of the project layer, else of the personal layer, else the official `templates/quarto/<name>/`, and SHALL print which one it used and which same-name templates it shadowed. A template folder SHALL contain `talk.qmd` and a `_quarto.yml` with a `theme:` line; otherwise the script stops with status 1 naming the folder. A template's own `deck.scss` or `_theme/` folder is not copied: the script prints a warning and copies the plugin's `_theme/deck.scss` instead. Symbolic links inside a template are skipped with a warning. Template names SHALL match `^[a-z0-9][a-z0-9-]*$`. `--list` prints every template name with its layer and marks shadowed ones.
+When looking up a template name, the scaffold SHALL use `templates/<name>/` of the project layer, else of the personal layer, else the official `templates/quarto/<name>/`, and SHALL print which one it used and which same-name templates it shadowed. A template folder SHALL contain `talk.qmd` and a `_quarto.yml` with a `theme:` line; otherwise the script stops with status 1 naming the folder. The template's `talk.qmd` is the source of the deck's main file, whatever name the deck is given. A template's own `deck.scss` or `_theme/` folder is not copied: the script prints a warning and copies the plugin's `_theme/deck.scss` instead. Symbolic links inside a template are skipped with a warning. Template names SHALL match `^[a-z0-9][a-z0-9-]*$`. `--list` prints every template name with its layer and marks shadowed ones.
 
 #### Scenario: Personal template shadows the official one
 
@@ -168,3 +168,27 @@ The project layer is discovered by walking up from the deck folder, so it can co
 
 - **WHEN** a project `local.json` sets `author` to a shortcode spelled with HTML character references for its braces and angle brackets
 - **THEN** the scaffold names the file and the field, exits with status 1, and nothing is written
+
+### Requirement: Scaffold names the deck's main file after its content
+
+`scaffold.mjs` SHALL require `--name <stem>` to create a deck or to print a dry run; `--list` does not need it. The stem SHALL match `^[a-z0-9][a-z0-9-]*$`. Without `--name`, or with a stem that does not match, the script SHALL exit with status 2 before anything is written; without `--name`, its message SHALL tell the reader to name the file after the deck's content and to ask the user when no single name follows. The deck's main file SHALL be `<stem>.qmd`, written from the template's `talk.qmd`, and the deck SHALL hold no `talk.qmd` unless the stem is `talk`. In the written `_quarto.yml`, a `project.render` entry naming `talk.qmd` SHALL name `<stem>.qmd` instead; a `_quarto.yml` without such an entry is written without that change. The resolution report and the closing message SHALL name the main file. `slide-deck-scaffold/SKILL.md` SHALL tell the agent to take the name from what the user said, else from the title, venue, or course when exactly one spelling follows, and otherwise to ask the user (issue #44).
+
+#### Scenario: Deck named after its content
+
+- **WHEN** the scaffold runs with `--out` and `--name jscs-imputation` on the official `research-talk` template
+- **THEN** the deck holds `jscs-imputation.qmd` and no `talk.qmd`, its `_quarto.yml` renders `jscs-imputation.qmd`, and `quarto render` there produces `jscs-imputation.html`
+
+#### Scenario: No name given
+
+- **WHEN** the scaffold runs with `--out` and no `--name`
+- **THEN** it exits with status 2, its message says to name the file after the deck's content or to ask the user, and the deck folder is not created
+
+#### Scenario: Name outside the allowed characters
+
+- **WHEN** the scaffold runs with `--name "My Talk"` or `--name ../x`
+- **THEN** it exits with status 2 naming the allowed pattern, and nothing is written
+
+#### Scenario: Personal template without a render list
+
+- **WHEN** a personal template's `_quarto.yml` has no `project.render` entry and the scaffold runs with `--name w07-memory`
+- **THEN** the deck holds `w07-memory.qmd`, and its `_quarto.yml` differs from the template's only in the theme and footer lines

@@ -51,7 +51,7 @@ academic-slides/
 
 ### D3. 檢查腳本只用 Node，全部參數化
 
-- 共用參數：`--html <path>`（預設 ./talk.html）、`--width 1280 --height 720`、`--footer '.reveal .footer'`、`--out <dir>`。
+- 共用參數：`--html <path>`（沒給時找目前資料夾裡唯一的 `.html`，見 D21）、`--width 1280 --height 720`、`--footer '.reveal .footer'`、`--out <dir>`。
 - check-layout.mjs：合併原 check-overflow.mjs 的四項檢查：頁尾像素帶、DOM 底緣、右緣溢出、標題換行。另有 `--shots` 逐頁截圖。issue #5 起再對 export-pdf 印的列印視圖逐頁做後三項 DOM 檢查，列印視圖量不到投影片頁時以狀態 3 結束。
 - check-fill.mjs：由 scratchpad 的 fill.cjs 正式化，列出填滿度低於 `--threshold`（預設 0.70）的頁，並依 D5 建議 roomy 等級或 .vc。
 - check-density.mjs：移植 density-check.py，邏輯逐條對應。參數為 `--qmd <path>`、選用的 `--tex <path>`、`--words 35`、`--bullets 3`、`--skip-classes notes,hidden,source,sidenote`。
@@ -171,11 +171,32 @@ Quarto 的標題頁由 front matter 產生，放不進版本行或下載鈕；�
 
 `check-layout.mjs` 的頁尾帶像素檢查原本拿視窗 x = 8 當背景色參考；視窗外圈有自己的顏色之後，每一頁都被誤報（實測 16/16 頁）。參考點改取投影片左緣外 14 px，有紙時落在紙的留白、沒有紙時是投影片底色。頁尾移到紙底之後，「內容壓到頁尾」會變寬鬆，所以螢幕上的界線改為頁尾頂端與投影片下緣取較高者；`style-probe --vc-centred` 同樣處理。
 
+### D20. deck 主檔依內容命名：scaffold 必填 `--name`（issue #44）
+
+scaffold 原本把主檔固定寫成 `talk.qmd`，課堂講義、結果報告也叫 talk，跨場合的 deck 在下載資料夾與附件裡同名。`scaffold.mjs` 改為必填 `--name <stem>`，以範本的 `talk.qmd` 寫出 `<stem>.qmd`；寫出的 `_quarto.yml` 裡 `project.render` 列出 `talk.qmd` 的那一項換成 `<stem>.qmd`，沒有這一項的自訂範本照原樣寫出（Quarto 會 render 資料夾裡唯一的 `.qmd`）。
+
+- 沒給 `--name` 時以狀態 2 結束、什麼都不寫，訊息要 agent 依內容取名、推不出唯一名稱時問使用者。不採「預設用 `--out` 資料夾名」：資料夾叫 `slides` 或 `my-talk` 時會安靜地產生不反映內容的檔名，等於換一個預設，而腳本本身無法問人。
+- 名稱規則沿用範本名稱的 `^[a-z0-9][a-z0-9-]*$`：全小寫避開不分大小寫的檔案系統（`pathKey` 的比對），檔名會跟著寄信、上傳與網址走；中文課程由 agent 取英文縮寫（例如 `w07-memory`）。
+- 取名程序寫在 slide-deck-scaffold `SKILL.md`：使用者明說的名稱 → 從標題、場合或課程推得出、而且只有一種寫法的名稱 → 否則問使用者（使用者 2026-10-31 定案）。判斷名稱是否反映內容是 agent 的工作，腳本只驗證與拒絕。
+- 範本來源檔名不改：`templates/quarto/<name>/talk.qmd` 與 `templates/beamer/talk.tex` 是範本內部的名字，使用者看不到；個人與專案層的自訂範本依 spec 也必須有 `talk.qmd`，改名會讓它們失效。beamer 鏡像複製進 deck 時改叫 `beamer/<stem>.tex`。
+- 在範圍內：`scaffold.mjs`、四個範本 `_quarto.yml` 的註解、`tests/scaffold.test.mjs`、`tests/render-templates.sh`、兩份 SKILL 與 README 的指令範例。不在範圍內：既有 deck 的改名工具（使用者定案不做）、scaffold 自動複製 beamer 檔、中文檔名。
+
+### D21. slide-qa 沒給檔名時找資料夾裡唯一的檔案（issue #44）
+
+六支腳本原本沒給檔名時讀 `talk.*`：check-density 的 `--qmd`；check-fill、check-layout、check-mathjax、export-pdf 的 `--html`；handout 的 `--pdf`。改由 `_lib.mjs` 的 `findDeckFile` 在目前資料夾（不往子資料夾找）找唯一一個該副檔名的檔案。取代 D3 的「`--html` 預設 ./talk.html」。
+
+- 找到一個就用它；沒有，或不只一個，以狀態 2 結束（沿用「找不到檔案」的結束碼），印出搜尋的資料夾與所有候選，提示改用參數指定。不只一個時不猜（使用者 2026-10-31 定案）。
+- handout 排除自己產生的 `*-handout.pdf`，否則跑過一次之後，第二次不帶參數就會報「不只一個」。
+- 明確給的參數照舊優先；check-density 的 `--tex` 本來就沒有預設值，維持要明確指定。
+- 檔名叫 `talk.*` 的既有 deck，只要資料夾裡只有它，照常不帶參數就能跑。
+- 在範圍內：`_lib.mjs`、六支腳本與它們的說明文字、slide-qa `SKILL.md` 與 `references/fix-table.md`。不在範圍內：參數缺值的處理（目前的 `args().get` 把下一個參數當成值，`--html` 放在最後得到空值），列為另外的問題。
+
 ## Implementation Contract
 
 **Behavior：**
 - `claude plugin validate --strict plugins/academic-slides` 與 `claude plugin validate --strict .`（marketplace）都通過。
-- 用 `scaffold.mjs` 從每個範本建立投影片、在該資料夾執行 `quarto render`（`tests/render-templates.sh`，D16），產生 talk.html；check-layout、check-density、check-mathjax 都以狀態 0 結束；以 XeLaTeX 編譯 beamer 範本，0 error、0 overfull，check-density 印出「N/N titles match」。
+- 用 `scaffold.mjs --name <名稱>` 從每個範本建立投影片、在該資料夾執行 `quarto render`（`tests/render-templates.sh`，D16、D20），產生 `<名稱>.html`；check-layout、check-density、check-mathjax 都以狀態 0 結束；以 XeLaTeX 編譯 beamer 範本，0 error、0 overfull，check-density 印出「N/N titles match」。
+- slide-qa 腳本在只有一個 deck 檔的資料夾裡不帶檔名參數照常執行；兩個以上時以狀態 2 結束並列出候選（D21）。
 - 在成大投影片上，check-density.mjs 的輸出與 density-check.py 逐行相同（D6）。
 - repo 內 grep 不到 NCKU、ncku、成大、econblue 等專案字串（README 的「來源」說明除外）。
 
