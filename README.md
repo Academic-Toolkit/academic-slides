@@ -25,6 +25,7 @@ This repository is private. Installing requires GitHub access to `Academic-Toolk
 | Node | the scaffold and `slide-qa` scripts | 26.3 (18 or later should work) |
 | Playwright + Chromium | the `slide-qa` scripts: `npm i -D playwright && npx playwright install chromium` | 1.59.1 |
 | XeLaTeX + metropolis | the optional beamer mirror | TeX Live 2026 |
+| XeLaTeX + poppler (`pdfinfo`, `pdftoppm`) | `slide-qa/handout.mjs` A4 handouts, and looking at PDF pages | TeX Live 2026; poppler 26.06 |
 
 ## Quick start
 
@@ -38,6 +39,7 @@ node $SKILLS/slide-qa/scripts/check-mathjax.mjs
 node $SKILLS/slide-qa/scripts/check-density.mjs --qmd talk.qmd
 node $SKILLS/slide-qa/scripts/check-fill.mjs
 node $SKILLS/slide-qa/scripts/export-pdf.mjs
+node $SKILLS/slide-qa/scripts/handout.mjs --pdf talk.pdf      # A4 handout: 2 × 2; --portrait for 3 rows × 2 columns
 ```
 
 In practice you rarely run these by hand. Ask the agent to start a deck, review a slide, or check the deck before a talk, and the matching skill loads.
