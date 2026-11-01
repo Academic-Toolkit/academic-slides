@@ -2,15 +2,18 @@
 // Fill check: how far down each content slide its body reaches, as a fraction of the space between
 // the bottom of the title and the top of the footer. Lists slides below --threshold with a suggested
 // class: roomy-1 (0.58–0.70), roomy-2 (0.45–0.58), roomy-3 (< 0.45), or vc when the slide is already
-// scaled. Informational: always exits 0 unless the HTML is missing.
-import { args, playwright, deckPath, findDeckFile, serve, openDeck } from './_lib.mjs';
+// scaled. Informational: always exits 0 unless the HTML is missing or an option is wrong (exit 2).
+import { options, printable, playwright, deckPath, findDeckFile, serve, openDeck } from './_lib.mjs';
 
-const { get } = args(`Usage: node check-fill.mjs [--html <deck>.html] [--threshold 0.70] [--width 1280] [--height 720]
+const { get } = options(`Usage: node check-fill.mjs [--html <deck>.html] [--threshold 0.70] [--width 1280] [--height 720]
                            [--footer '.reveal .footer']
-Exit status: 0 report printed, 2 HTML not found, or the deck's .html not found in the current folder when --html is not given.`);
-const THRESHOLD = Number(get('threshold', 0.7));
-const WIDTH = Number(get('width', 1280));
-const HEIGHT = Number(get('height', 720));
+Exit status: 0 report printed, 2 HTML not found, the deck's .html not found in the current folder when --html is not given, its Quarto settings cannot be read,
+             or an option error (an option without a value, a value out of range, an unknown option, an argument that belongs to no
+             option, an option given twice).`,
+  { html: 'file', threshold: { min: 0, max: 1 }, width: { min: 1, integer: true }, height: { min: 1, integer: true }, footer: 'text' });
+const THRESHOLD = get('threshold', 0.7);
+const WIDTH = get('width', 1280);
+const HEIGHT = get('height', 720);
 const FOOTER = get('footer', '.reveal .footer');
 const { root, name } = deckPath(findDeckFile(get('html'), '.html', 'html'));
 
@@ -58,5 +61,5 @@ if (!rows.length) {
   console.log(`✓ every content slide fills at least ${THRESHOLD} of its body`);
 } else {
   console.log(`${rows.length} slide(s) fill less than ${THRESHOLD} of the body:\n`);
-  for (const r of rows) console.log(`  #${String(r.index).padStart(2)}  ${r.fill.toFixed(2)}  → ${suggest(r.fill, r.classes)}   ${r.title}`);
+  for (const r of rows) console.log(`  #${String(r.index).padStart(2)}  ${r.fill.toFixed(2)}  → ${suggest(r.fill, r.classes)}   ${printable(r.title)}`);
 }

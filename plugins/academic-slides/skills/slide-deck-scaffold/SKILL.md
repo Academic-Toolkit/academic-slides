@@ -54,6 +54,8 @@ node <this skill>/scripts/scaffold.mjs --list                                   
 cd jscs2026 && quarto render                                                                 # → jscs2026-imputation.html
 ```
 
+A wrong option exits 2 and names it, before anything is written: an unknown option, one given twice, or a valued option given last, followed by another option, or given a blank value. `--help` or `-h` anywhere prints the usage.
+
 The beamer mirror of `research-talk` is not copied by the script; add it by hand when you want one:
 
 ```bash
@@ -115,7 +117,7 @@ Never copy the whole `deck.scss` into a template or a layer. A template's own `d
 
 ### Personal and project templates
 
-`templates/<name>/` in a layer adds a template, or replaces an official one of the same name: project over personal over official, and the script says what it shadowed. Names are lower-case letters, digits, and hyphens. A template needs `talk.qmd` (written into the deck as `<name>.qmd`; a `project.render` entry naming `talk.qmd` is changed to match) and a `_quarto.yml` with one-line `theme:` and `footer:` entries; keep `title`, `author`, `institute`, and `lang` on one line each in the front matter, because the script rewrites those lines. Symbolic links inside a template are skipped, and so is a template file on a path the scaffold writes itself (`theme/personal.scss`, `theme/project.scss`, anything under `_theme`) or on a case variant of one (`Theme/Personal.scss` is the same file on a macOS disk), with a warning — for example a template made by copying a finished deck.
+`templates/<name>/` in a layer adds a template, or replaces an official one of the same name: project over personal over official, and the script says what it shadowed. Names are lower-case letters, digits, and hyphens. A template needs `talk.qmd` (written into the deck as `<name>.qmd`; a `project.render` entry naming `talk.qmd` is changed to match) and a `_quarto.yml` with one-line `theme:` and `footer:` entries, written in block style as the official templates are: when `project`, `format`, `revealjs`, `render`, or `output-file` is written another way (a flow mapping such as `project: {render: [talk.qmd]}`, a quoted key, an anchor or alias, an escape, or a render value with a comma, such as `- my, talk.qmd`), or a merge key is used, or a file that `metadata-files` lists sets `render` or `output-file` or is not kept beside `_quarto.yml` in the template, or a profile file `_quarto-<name>.yml` in the template sets them (or uses `metadata-files` or a merge key), the script stops with status 1 before writing anything and names the file and line (text inside `|` and `>` block scalars does not count); keep `title`, `author`, `institute`, and `lang` on one line each in the front matter, because the script rewrites those lines. Symbolic links inside a template are skipped, and so is a template file on a path the scaffold writes itself (`theme/personal.scss`, `theme/project.scss`, anything under `_theme`) or on a case variant of one (`Theme/Personal.scss` is the same file on a macOS disk), with a warning — for example a template made by copying a finished deck.
 
 ### Trust
 

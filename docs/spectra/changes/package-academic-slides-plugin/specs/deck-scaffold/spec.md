@@ -119,16 +119,21 @@ Every Quarto template SHALL set the revealjs `margin` to 0.18 and include `_them
 
 ### Requirement: Same-name templates resolve project, personal, official
 
-When looking up a template name, the scaffold SHALL use `templates/<name>/` of the project layer, else of the personal layer, else the official `templates/quarto/<name>/`, and SHALL print which one it used and which same-name templates it shadowed. A template folder SHALL contain `talk.qmd` and a `_quarto.yml` with a `theme:` line; otherwise the script stops with status 1 naming the folder. The template's `talk.qmd` is the source of the deck's main file, whatever name the deck is given. A template's own `deck.scss` or `_theme/` folder is not copied: the script prints a warning and copies the plugin's `_theme/deck.scss` instead. Symbolic links inside a template are skipped with a warning. Template names SHALL match `^[a-z0-9][a-z0-9-]*$`. `--list` prints every template name with its layer and marks shadowed ones.
+When looking up a template name, the scaffold SHALL use `templates/<name>/` of the project layer, else of the personal layer, else the official `templates/quarto/<name>/`, and SHALL print which one it used and which same-name templates it shadowed. A template folder SHALL contain `talk.qmd` and a `_quarto.yml` with a `theme:` line; otherwise the script stops with status 1 naming the folder. The template's `_quarto.yml` SHALL write `project`, `format`, `revealjs`, `render`, and `output-file` in block style as the slide-qa scripts read them, without a merge key; a file that its `metadata-files` lists SHALL be kept beside `_quarto.yml` in the template and SHALL NOT set `render` or `output-file`; and a profile file `_quarto-<name>.yml` (in any letter case) in the template SHALL NOT set `render` or `output-file` or use `metadata-files` or a merge key (the contents of `|` and `>` block scalars are text and do not count). An `output-file` under an extension format, `output-ext`, `project.output-dir`, and a project type in those files do not stop the scaffold's rename and are accepted in any form, as before #50 (verify rounds 2 and 3). Otherwise the script stops with status 1 before anything is written, naming the file and line with control characters replaced (issue #46, user decision 2026-11-01). The template's `talk.qmd` is the source of the deck's main file, whatever name the deck is given. A template's own `deck.scss` or `_theme/` folder is not copied: the script prints a warning and copies the plugin's `_theme/deck.scss` instead. Symbolic links inside a template are skipped with a warning. Template names SHALL match `^[a-z0-9][a-z0-9-]*$`. `--list` prints every template name with its layer and marks shadowed ones.
 
 #### Scenario: Personal template shadows the official one
 
 - **WHEN** `~/.claude/.academic-slides/templates/short-talk/` exists with `talk.qmd`, `_quarto.yml`, and its own `theme/deck.scss`, and the scaffold runs with `--template short-talk`
 - **THEN** the deck is built from the personal folder, the output says the official `short-talk` was shadowed, a warning names the ignored `deck.scss`, and the deck's `_theme/deck.scss` is the plugin's
 
+#### Scenario: Template settings in a flow mapping
+
+- **WHEN** a personal template's `_quarto.yml` starts with `project: {type: default, render: [talk.qmd]}`
+- **THEN** the scaffold exits with status 1 naming that file and line 1, and the deck folder is not created
+
 ### Requirement: Scaffold writes only into an empty folder
 
-The scaffold SHALL refuse with status 1 when `--out` names a non-empty folder or a file, and SHALL write nothing with `--dry-run`, which prints the same resolution report. The written `_quarto.yml` SHALL list its theme as `[default, _theme/deck.scss]` followed by `theme/personal.scss` and `theme/project.scss` for the layers that have a `theme.scss`, which are copied there. A template file on a path the scaffold writes itself (one of those overlay paths, or anything under `_theme`), or on a variant of such a path that differs only in letter case or Unicode form, SHALL be skipped with a warning before anything is written, so such a collision never leaves a partly written deck, also on a file system that ignores case.
+The scaffold SHALL refuse with status 1 when `--out` names a non-empty folder or a file, and SHALL write nothing with `--dry-run`, which prints the same resolution report. A valued option (`--out`, `--name`, `--template`, `--title`) given as the last argument, followed by an argument that starts with `--`, or given a blank value, and any option given twice, SHALL make the script exit with status 2 naming the option before anything is written, so `--out --dry-run` never names a folder `--dry-run` (issues #49, #52). `--help` or `-h` anywhere SHALL print the usage and exit with status 0, and `--name=w07` SHALL be refused with status 2 asking for the value after a space, and `--dry-run=1` with status 2 saying the flag takes no value, as in the slide-qa scripts (issue #52, verify rounds 2 and 3). Everything the script prints SHALL have control and bidirectional characters replaced (issue #51); a line break inside a file name or value is replaced too, so a name cannot start a line of its own (verify round 2). The written `_quarto.yml` SHALL list its theme as `[default, _theme/deck.scss]` followed by `theme/personal.scss` and `theme/project.scss` for the layers that have a `theme.scss`, which are copied there. A template file on a path the scaffold writes itself (one of those overlay paths, or anything under `_theme`), or on a variant of such a path that differs only in letter case or Unicode form, SHALL be skipped with a warning before anything is written, so such a collision never leaves a partly written deck, also on a file system that ignores case.
 
 #### Scenario: Existing deck is not overwritten
 
@@ -144,6 +149,21 @@ The scaffold SHALL refuse with status 1 when `--out` names a non-empty folder or
 
 - **WHEN** the scaffold runs with `--dry-run` and an `--out` that does not exist
 - **THEN** it prints the layers, the template, the merged fields, and the theme list, exits with status 0, and the folder still does not exist
+
+#### Scenario: Valued option followed by another option
+
+- **WHEN** the scaffold runs with `--out --dry-run --name w07`
+- **THEN** it exits with status 2 saying that `--out` needs a value, and no folder is created
+
+#### Scenario: Option given twice
+
+- **WHEN** the scaffold runs with `--name a --name b --out deck`
+- **THEN** it exits with status 2 saying that `--name` is given more than once, and no folder is created
+
+#### Scenario: -h as a value
+
+- **WHEN** the scaffold runs with `--out -h --name w07`
+- **THEN** it prints the usage, exits with status 0, and no folder is created
 
 ### Requirement: Settings layers cannot leak local files or run code without consent
 

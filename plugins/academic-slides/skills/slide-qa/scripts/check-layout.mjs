@@ -12,18 +12,21 @@
 // The print view is a different layout (revealjs's print stylesheet, an unscaled slide, the footer
 // placed on the paper), so a slide that is clean on screen can still run into the footer in the PDF.
 import path from 'path';
-import { args, playwright, deckPath, findDeckFile, serve, openDeck, openPrintView, outputDirectory, writeOutput } from './_lib.mjs';
+import { options, printable, playwright, deckPath, findDeckFile, serve, openDeck, openPrintView, outputDirectory, writeOutput } from './_lib.mjs';
 
-const { get, has } = args(`Usage: node check-layout.mjs [--html <deck>.html] [--width 1280] [--height 720]
+const { get, has } = options(`Usage: node check-layout.mjs [--html <deck>.html] [--width 1280] [--height 720]
                              [--footer '.reveal .footer'] [--out <deck folder>/qa] [--shots]
   --out    screenshot folder (default: qa/ next to the deck HTML)
   --shots  save one screenshot per slide as <deck>-NN.png; flagged slides are always saved as <deck>-NN-flagged.png
 Checks every slide on screen at --width x --height, then every page of the print view that export-pdf.mjs
 prints; flagged PDF pages are saved as <deck>-print-NN-flagged.png (NN = PDF page number).
-Exit status: 0 no problems, 1 at least one flagged slide or PDF page, 2 HTML not found, or the deck's .html not found in the current folder when --html is not given,
-             3 the check could not run or the print view showed no slide pages.`);
-const WIDTH = Number(get('width', 1280));
-const HEIGHT = Number(get('height', 720));
+Exit status: 0 no problems, 1 at least one flagged slide or PDF page, 2 HTML not found, or the deck's .html not found in the current folder when --html is not given, its Quarto settings cannot be read,
+             or an option error (an option without a value, a value out of range, an unknown option, an argument that belongs to no
+             option, an option given twice), 3 the check could not run or the print
+             view showed no slide pages.`,
+  { html: 'file', width: { min: 1, integer: true }, height: { min: 1, integer: true }, footer: 'text', out: 'text', shots: 'flag' });
+const WIDTH = get('width', 1280);
+const HEIGHT = get('height', 720);
 const FOOTER = get('footer', '.reveal .footer');
 const SHOTS = has('shots');
 const { root, name } = deckPath(findDeckFile(get('html'), '.html', 'html'));
@@ -199,7 +202,8 @@ if (fatal) {
 }
 if (offenders.length) {
   console.log(`✗ ${offenders.length} slide(s) with layout problems at ${WIDTH}x${HEIGHT}:\n`);
-  for (const o of offenders) console.log(`  #${o.index}  ${o.title}\n      ${reasons(o)}  →  ${o.file}`);
+  // slide titles come from the deck and screenshot names from its file name: printable (#51)
+  for (const o of offenders) console.log(`  #${o.index}  ${printable(o.title)}\n      ${reasons(o)}  →  ${printable(o.file)}`);
 }
 if (printError) {
   if (offenders.length) console.log('');
@@ -210,7 +214,7 @@ if (print.warning) console.log(print.warning);
 if (print.offenders.length) {
   if (offenders.length) console.log('');
   console.log(`✗ ${print.offenders.length} PDF page(s) with layout problems in the print view (${print.paper.width}x${print.paper.height} page):\n`);
-  for (const o of print.offenders) console.log(`  page ${o.page}  ${o.title}\n      ${reasons(o)}  →  ${o.file}`);
+  for (const o of print.offenders) console.log(`  page ${o.page}  ${printable(o.title)}\n      ${reasons(o)}  →  ${printable(o.file)}`);
 }
 if (offenders.length || print.offenders.length) process.exit(1);
 console.log(`✓ no layout problems at ${WIDTH}x${HEIGHT} or in the PDF print view`);

@@ -4,10 +4,13 @@
 //   - undefined macros: MathJax 3's noundefined extension renders them as red text, not mjx-merror,
 //     so they are found as red <mtext> beginning with a backslash in the assistive MathML.
 // Exits 1 when any error exists.
-import { args, playwright, deckPath, findDeckFile, serve } from './_lib.mjs';
+import { options, printable, playwright, deckPath, findDeckFile, serve } from './_lib.mjs';
 
-const { get } = args(`Usage: node check-mathjax.mjs [--html <deck>.html]
-Exit status: 0 no MathJax errors, 1 at least one error, 2 HTML not found, or the deck's .html not found in the current folder when --html is not given.`);
+const { get } = options(`Usage: node check-mathjax.mjs [--html <deck>.html]
+Exit status: 0 no MathJax errors, 1 at least one error, 2 HTML not found, the deck's .html not found in the current folder
+             when --html is not given, its Quarto settings cannot be read, or an option error (--html without a file name, an unknown option, an argument that belongs to
+             no option, an option given twice).`,
+  { html: 'file' });
 const { root, name } = deckPath(findDeckFile(get('html'), '.html', 'html'));
 
 const chromium = await playwright();
@@ -34,7 +37,7 @@ server.close();
 
 if (r.errs.length) {
   console.log(`✗ ${r.errs.length} MathJax error(s) among ${r.math} math nodes:`);
-  for (const e of r.errs) console.log(`  ${e.slide}: ${e.text}`);
+  for (const e of r.errs) console.log(`  ${printable(e.slide)}: ${printable(e.text)}`);   // text from the deck (#51)
   process.exit(1);
 }
 console.log(`✓ 0 MathJax errors among ${r.math} math nodes`);

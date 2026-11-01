@@ -1,0 +1,453 @@
+[
+ {
+  "name": "block render list",
+  "yml": "project:\n  type: default\n  render:\n    - deck.qmd\n",
+  "oracle": {
+   "render": [
+    "deck.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "flow render list, quoted values and ./",
+  "yml": "project:\n  render: ['./deck.qmd', \"b.qmd\"]\n",
+  "oracle": {
+   "render": [
+    "./deck.qmd",
+    "b.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "flow render list over several lines",
+  "yml": "project:\n  render: [\n    deck.qmd,\n    b.qmd\n  ]\n",
+  "oracle": {
+   "render": [
+    "deck.qmd",
+    "b.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "single render value",
+  "yml": "project:\n  render: deck.qmd\n",
+  "oracle": {
+   "render": [
+    "deck.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "unquoted comma in a flow list",
+  "yml": "project:\n  render: [a.qmd, b.qmd]\n",
+  "oracle": {
+   "render": [
+    "a.qmd",
+    "b.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "ampersand in a render value",
+  "yml": "project:\n  render:\n    - Q & A.qmd\n",
+  "oracle": {
+   "render": [
+    "Q & A.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "revealjs output-file",
+  "yml": "format:\n  revealjs:\n    output-file: slides\n",
+  "oracle": {
+   "render": [],
+   "outputFile": "slides"
+  }
+ },
+ {
+  "name": "revealjs output-file after other keys",
+  "yml": "format:\n  html:\n    toc: true\n  revealjs:\n    theme: default\n    output-file: slides\n",
+  "oracle": {
+   "render": [],
+   "outputFile": "slides"
+  }
+ },
+ {
+  "name": "top-level output-file, quoted",
+  "yml": "output-file: \"slides.html\"\n",
+  "oracle": {
+   "render": [],
+   "outputFile": "slides.html"
+  }
+ },
+ {
+  "name": "quoted output-file holding a comma",
+  "yml": "output-file: \"slides, final\"\n",
+  "oracle": {
+   "render": [],
+   "outputFile": "slides, final"
+  }
+ },
+ {
+  "name": "revealjs wins over the top level",
+  "yml": "output-file: top\nformat:\n  revealjs:\n    output-file: inner\n",
+  "oracle": {
+   "render": [],
+   "outputFile": "inner"
+  }
+ },
+ {
+  "name": "another format's output-file",
+  "yml": "format:\n  pdf:\n    output-file: handout\n  revealjs:\n    theme: default\n",
+  "oracle": {
+   "render": [],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "a deeper render key",
+  "yml": "project:\n  preview:\n    render: deck.qmd\n",
+  "oracle": {
+   "render": [],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "pre-render and post-render",
+  "yml": "project:\n  pre-render: prepare.sh\n  post-render: [finish.sh]\n  render: [deck.qmd]\n",
+  "oracle": {
+   "render": [
+    "deck.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "key-like text in a quoted value",
+  "yml": "title: \"the project: render: a demo\"\nproject:\n  render: [deck.qmd]\n",
+  "oracle": {
+   "render": [
+    "deck.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "block scalar quoting settings",
+  "yml": "description: |\n  project: {render: [example.qmd]}\n  output-file: no\nproject:\n  render: [deck.qmd]\n",
+  "oracle": {
+   "render": [
+    "deck.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "block scalar under revealjs",
+  "yml": "format:\n  revealjs:\n    output-file: slides\n    notes: |\n      output-file: wrong\n",
+  "oracle": {
+   "render": [],
+   "outputFile": "slides"
+  }
+ },
+ {
+  "name": "comments",
+  "yml": "# project: {render: [x.qmd]}\nproject:  # here\n  render: [deck.qmd]  # deck\n",
+  "oracle": {
+   "render": [
+    "deck.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "document marker at the top",
+  "yml": "---\nproject:\n  render: [deck.qmd]\n",
+  "oracle": {
+   "render": [
+    "deck.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "CRLF line ends",
+  "yml": "project:\r\n  render:\r\n    - deck.qmd\r\nformat:\r\n  revealjs:\r\n    output-file: slides\r\n",
+  "oracle": {
+   "render": [
+    "deck.qmd"
+   ],
+   "outputFile": "slides"
+  }
+ },
+ {
+  "name": "UTF-8 byte order mark",
+  "yml": "﻿project:\n  render: [deck.qmd]\n",
+  "oracle": {
+   "render": [
+    "deck.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "empty revealjs mapping",
+  "yml": "format:\n  revealjs: {}\n",
+  "oracle": {
+   "render": [],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "website format mapping",
+  "yml": "website:\n  format: {a: b}\nproject:\n  render: [deck.qmd]\n",
+  "oracle": {
+   "render": [
+    "deck.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "metadata-files list",
+  "yml": "metadata-files: [shared.yml]\nproject:\n  render: [deck.qmd]\n",
+  "oracle": {
+   "render": [
+    "deck.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "nothing",
+  "yml": "",
+  "oracle": {
+   "render": [],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "document end marker",
+  "yml": "project:\n  render: [deck.qmd]\n...\n",
+  "oracle": {
+   "render": [
+    "deck.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "one-line format flow without an output name",
+  "yml": "format: {pdf: default, revealjs: {incremental: true}}\n",
+  "oracle": {
+   "render": [],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "one-line project flow without render",
+  "yml": "project: {type: default}\n",
+  "oracle": {
+   "render": [],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "format flow with an output name",
+  "yml": "format: {revealjs: {output-file: slides}}\n",
+  "oracle": {
+   "render": [],
+   "outputFile": "slides"
+  }
+ },
+ {
+  "name": "multi-line format flow",
+  "yml": "format: {\n  revealjs: {\n    output-file: slides\n  }\n}\n",
+  "oracle": {
+   "render": [],
+   "outputFile": "slides"
+  }
+ },
+ {
+  "name": "quoted output-file at the top level",
+  "yml": "\"output-file\": slides\n",
+  "oracle": {
+   "render": [],
+   "outputFile": "slides"
+  }
+ },
+ {
+  "name": "plain scalar continued inside a flow list",
+  "yml": "project:\n  render: [\n    my\n    talk.qmd\n  ]\n",
+  "oracle": {
+   "render": [
+    "my talk.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "flow list continued at the key's indent",
+  "yml": "project:\n  render: [a.qmd,\n  b.qmd]\n",
+  "oracle": {
+   "render": [
+    "a.qmd",
+    "b.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "anchored block scalar under revealjs",
+  "yml": "format:\n  revealjs:\n    output-file: slides\n    notes: &n |\n      output-file: wrong\n",
+  "oracle": {
+   "render": [],
+   "outputFile": "slides"
+  }
+ },
+ {
+  "name": "output-file deeper under revealjs",
+  "yml": "format:\n  revealjs:\n    foo:\n      output-file: x\n",
+  "oracle": {
+   "render": [],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "null output-file",
+  "yml": "output-file: ~\n",
+  "oracle": {
+   "render": [],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "flow list with the comma at the start of the next line",
+  "yml": "project:\n  render: [\n    a.qmd\n    , b.qmd\n  ]\n",
+  "oracle": {
+   "render": [
+    "a.qmd",
+    "b.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "multi-line plain render item",
+  "yml": "project:\n  render:\n    - my\n      talk.qmd\n",
+  "oracle": {
+   "render": [
+    "my talk.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "multi-line plain render value",
+  "yml": "project:\n  render: my\n    talk.qmd\n",
+  "oracle": {
+   "render": [
+    "my talk.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "multi-line quoted render item",
+  "yml": "project:\n  render:\n    - \"my\n      talk.qmd\"\n",
+  "oracle": {
+   "render": [
+    "my talk.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "multi-line plain output-file",
+  "yml": "format:\n  revealjs:\n    output-file: my\n      slides\n",
+  "oracle": {
+   "render": [],
+   "outputFile": "my slides"
+  }
+ },
+ {
+  "name": "multi-line top-level output-file",
+  "yml": "output-file: my\n  slides\n",
+  "oracle": {
+   "render": [],
+   "outputFile": "my slides"
+  }
+ },
+ {
+  "name": "unquoted comma in a block item",
+  "yml": "project:\n  render:\n    - my, talk.qmd\n",
+  "oracle": {
+   "render": [
+    "my, talk.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "quoted comma in a flow value",
+  "yml": "project:\n  render: [\"a.qmd, notes.txt\"]\n",
+  "oracle": {
+   "render": [
+    "a.qmd, notes.txt"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "extension format output-file",
+  "yml": "format:\n  clean-revealjs:\n    output-file: slides\n",
+  "oracle": {
+   "render": [],
+   "outputFile": "slides"
+  }
+ },
+ {
+  "name": "flow mapping for project",
+  "yml": "project: {render: [deck.qmd]}\n",
+  "oracle": {
+   "render": [
+    "deck.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "JSON-style root",
+  "yml": "{\"project\":{\"render\":[\"deck.qmd\"]}}\n",
+  "oracle": {
+   "render": [
+    "deck.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "anchor and alias",
+  "yml": "targets: &t [deck.qmd]\nproject:\n  render: *t\n",
+  "oracle": {
+   "render": [
+    "deck.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "escape in output-file",
+  "yml": "output-file: \"slid\\u0065s\"\n",
+  "oracle": {
+   "render": [],
+   "outputFile": "slides"
+  }
+ }
+]

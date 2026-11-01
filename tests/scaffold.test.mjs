@@ -960,3 +960,66 @@ test('CLI: --name Talk still warns about a talk.qmd left under resources', () =>
   assert.match(r.out, /still mentions talk\.qmd/);
 });
 
+
+// ---------- a valued option followed by another option (issue #49) ----------
+
+// Before #49, `--out --dry-run` took --dry-run as the folder name, so the dry run did not happen and a deck was
+// written into a folder called --dry-run. Each case runs in an empty folder that must stay empty.
+test('a valued option followed by another option exits 2, names the option, and writes nothing', () => {
+  const cases = {
+    '--out': ['--out', '--dry-run', '--name', 'w07'],
+    '--name': ['--name', '--dry-run', '--out', 'deck'],
+    '--template': ['--template', '--dry-run', '--name', 'w07', '--out', 'deck'],
+    '--title': ['--title', '--dry-run', '--name', 'w07', '--out', 'deck'],
+  };
+  for (const [option, args] of Object.entries(cases)) {
+    const s = sandbox();
+    const r = spawnSync(process.execPath, [SCAFFOLD, ...args], { cwd: s.project, env: { ...process.env, HOME: s.home }, encoding: 'utf8' });
+    assert.equal(r.status, 2, `${option}: ${r.stdout}${r.stderr}`);
+    assert.match(r.stdout + r.stderr, new RegExp(`${option} needs a value`), option);
+    assert.deepEqual(readdirSync(s.project), [], `${option}: nothing is written`);
+  }
+});
+
+// ---------- the same option rules as the slide-qa check scripts (issue #52) ----------
+
+test('an option given twice, or a blank value, exits 2 naming the option and writes nothing', () => {
+  const cases = {
+    '--name is given more than once': ['--name', 'a', '--name', 'b', '--out', 'deck'],
+    '--out is given more than once': ['--out', 'a', '--out', 'b', '--name', 'w07'],
+    '--dry-run is given more than once': ['--dry-run', '--dry-run', '--name', 'w07', '--out', 'deck'],
+    '--title needs a value': ['--title', '', '--name', 'w07', '--out', 'deck'],
+    '--out needs a value': ['--out', '  ', '--name', 'w07'],
+  };
+  for (const [message, args] of Object.entries(cases)) {
+    const s = sandbox();
+    const r = spawnSync(process.execPath, [SCAFFOLD, ...args], { cwd: s.project, env: { ...process.env, HOME: s.home }, encoding: 'utf8' });
+    assert.equal(r.status, 2, `${message}: ${r.stdout}${r.stderr}`);
+    assert.match(r.stdout + r.stderr, new RegExp(message), message);
+    assert.deepEqual(readdirSync(s.project), [], `${message}: nothing is written`);
+  }
+});
+
+test('-h or --help anywhere prints the usage and writes nothing, as in the slide-qa scripts', () => {
+  for (const args of [['--out', '-h', '--name', 'w07'], ['--name', 'w07', '--title', '--help', '--out', 'deck'], ['--bogus', '-h']]) {
+    const s = sandbox();
+    const r = spawnSync(process.execPath, [SCAFFOLD, ...args], { cwd: s.project, env: { ...process.env, HOME: s.home }, encoding: 'utf8' });
+    assert.equal(r.status, 0, `${args.join(' ')}: ${r.stdout}${r.stderr}`);
+    assert.match(r.stdout, /Usage/);
+    assert.deepEqual(readdirSync(s.project), [], args.join(' '));
+  }
+});
+
+test('--name=w07 says to write the value after a space, as the slide-qa scripts do', () => {
+  const s = sandbox();
+  const r = spawnSync(process.execPath, [SCAFFOLD, '--name=w07', '--out', 'deck'], { cwd: s.project, env: { ...process.env, HOME: s.home }, encoding: 'utf8' });
+  assert.equal(r.status, 2);
+  assert.match(r.stdout + r.stderr, /--name=w07: write the value after a space \(--name w07\)/);
+});
+
+test('--dry-run=1 says the flag takes no value', () => {
+  const s = sandbox();
+  const r = spawnSync(process.execPath, [SCAFFOLD, '--dry-run=1', '--name', 'w07', '--out', 'deck'], { cwd: s.project, env: { ...process.env, HOME: s.home }, encoding: 'utf8' });
+  assert.equal(r.status, 2);
+  assert.match(r.stdout + r.stderr, /--dry-run takes no value/);
+});

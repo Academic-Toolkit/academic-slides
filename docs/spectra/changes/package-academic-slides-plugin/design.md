@@ -189,11 +189,89 @@ scaffold 原本把主檔固定寫成 `talk.qmd`，課堂講義、結果報告也
 - 先定出 deck 的主檔：`_quarto.yml` 的 `project.render`（`project` 直接底下的鍵，只取完整的值）在這個資料夾裡指名的唯一 `.qmd`；不是剛好一個時，改用資料夾裡唯一的 `.qmd`。從 `_quarto.yml` 讀到的值只接受單純的檔名：含資料夾、`..`、絕對路徑或萬用字元的一律忽略，所以找檔不會離開目前資料夾。定得出來時，讀與主檔同名的那個檔（`format: revealjs:` 底下的 `output-file`，沒有的話是最上層的，與在檔案中的先後無關；有設、且是單純檔名時，`.html` 用它，不以 `.html` 結尾就補上，和 Quarto 一樣；`.pdf` 跟著 `.html` 的名字）：資料夾裡同時有 `talk.pdf`、`talk-notes.pdf`、`talk-dual.pdf` 時讀 `talk.pdf`。那個檔不存在時以狀態 2 結束、說明缺哪個檔並列出找到的其他檔，不改讀別的。
 - 主檔定不出來時（例如只放 PDF 的資料夾），才用資料夾裡唯一的那個檔；handout 在這一步排除自己產生的 `*-handout.pdf`。沒有或不只一個時以狀態 2 結束，列出資料夾與所有候選。
 - Supersedes：本決策第 1 版是「資料夾裡唯一的檔案，不只一個就報錯」（使用者 2026-10-31 的 Clarity 決定）。verify 第 1 輪重建既有 deck 的檔名結構，發現 deck 資料夾通常同時有衍生 PDF（`talk-notes.pdf`、`talk-dual.pdf` 等，#36、#38 還會再加），handout 不帶參數 5/5 失敗，與「既有 deck 照常可用」衝突；使用者 2026-10-31 改定為先挑主檔同名的檔案。兩種做法都不會退回 `talk` 這個固定預設。
-- 只讀範本那種區塊寫法的 `_quarto.yml`；行內 mapping、加引號的鍵、anchor、值裡的逗號等寫法讀不到，這時要明確給檔名參數，完整解析追蹤於 #46。
+- 只讀範本那種區塊寫法的 `_quarto.yml`；行內 mapping、加引號的鍵、anchor、值裡的逗號等寫法讀不到，這時要明確給檔名參數，完整解析追蹤於 #46（D23：讀不懂時拒絕猜）。
 - 副檔名大小寫完全相符（伺服器只把小寫 `.html` 當 HTML 提供）；錯誤訊息裡的檔名把控制字元換成 `?`。
-- 給了 `--html`、`--qmd` 卻沒有檔名（放在最後，或後面接著另一個選項）時以狀態 2 結束，不改為自動找檔；handout 的 `--pdf` 依它在 #34 訂下的規則以 1 結束。其他帶值選項缺值的處理不在這次範圍，追蹤於 #45。
+- 給了 `--html`、`--qmd` 卻沒有檔名（放在最後，或後面接著另一個選項）時以狀態 2 結束，不改為自動找檔；handout 的 `--pdf` 依它在 #34 訂下的規則以 1 結束。其他帶值選項缺值的處理不在這次範圍，追蹤於 #45（已由 D22 處理）。
 - 明確給的參數照舊優先；check-density 的 `--tex` 本來就沒有預設值，維持要明確指定。檔名叫 `talk.*` 的既有 deck 同樣適用。
 - 在範圍內：`_lib.mjs`、六支腳本與它們的說明文字、slide-qa `SKILL.md` 與 `references/fix-table.md`。
+
+### D22. 檢查腳本宣告自己的選項，讀不懂就以狀態 2 結束（issue #45）
+
+check-density、check-fill、check-layout、check-mathjax、export-pdf 原本把「下一個參數」當成選項的值，沒有任何地方知道哪些選項存在：帶值選項放在最後得到 `undefined`，後面接另一個選項就把它當成值，數值不是數字得到 `NaN`，打錯的選項名被忽略。`NaN` 門檻讓 `fill < NaN`、`words > NaN` 永遠為假，檢查在使用者以為設了門檻時靜默通過（check-fill 印出「fills at least NaN」並以 0 結束）。
+
+- 每支腳本以 `_lib.mjs` 的 `options(help, spec)` 宣告選項，`spec` 標出每個選項的種類：`file`（檔名，缺值時沿用 #44 的「needs a file name」）、`text`、`list`（逗號分隔，可以是空字串，表示不略過任何 class 或 macro）、`flag`，或數值規則 `{ min, max, integer }`。`parseOptions` 依序讀參數，下列情況以狀態 2 結束並點名選項，而且在找 deck 檔、載入 Playwright 之前回報：帶值選項缺值（放最後，或下一個參數以 `--` 開頭）；空值（`list` 除外）；數值不是數字或超出範圍；不認得的選項（含 `--threshold=0.7` 的寫法）；不屬於任何選項的參數（例如漏寫 `--html` 直接給檔名）；同一個選項給兩次。
+- 數值範圍：`--threshold` 0 到 1（0 等於不標任何頁，仍接受）；`--width`、`--height` 至少 1 的整數；`--words`、`--bullets` 至少 0 的整數（上限 0 是合法的設定）。
+- 以單一 `-` 開頭的值（`--width -5`）當作值讀，再由範圍檢查拒絕；以 `--` 開頭的一律當作下一個選項。`--help`、`-h` 出現在任何位置都印出用法並以 0 結束，與先前相同。
+- handout 不改：它在 #34 已經用同樣的方式檢查自己的選項，錯誤以 1 結束。`args()` 保留給 handout 與測試用的探針。
+- 使用者 2026-11-01 定案「全部比照 handout」：缺值、不是數字的數值、不認得的選項都擋。不屬於任何選項的參數在 diagnose 時一併列入；重複的選項是實作時依同一個讀參數的迴圈加進來的，理由同樣是「不猜」：先前取第一個值，使用者可能以為生效的是後一個。
+- 在範圍內：`_lib.mjs`、五支腳本與它們的說明文字、slide-qa `SKILL.md`、`tests/options.test.mjs`。scaffold 的同類問題開為 #49。
+- verify 第 1 輪之後：Devil's Advocate 指出「拒絕重複選項」不是使用者定的，使用者 2026-11-01 改定為「拒絕，三處一致」：slide-qa 檢查腳本、scaffold（#52）、handout 都拒絕同一個選項給兩次，handout 依 #34 以 1 結束。另外：只有空白的值算缺值；`--threshold=0.5` 的訊息改為請使用者用空格隔開；空字串參數在訊息裡印成 `""`；各腳本的 `--help` 寫出全部的狀態 2 情形，含 Quarto 設定讀不懂。
+
+### D23. 讀不懂的 Quarto 設定寫法：拒絕猜，不解析（issue #46）
+
+slide-qa 的 `readQuartoYml` 與 scaffold 的 `renameRenderTarget` 是兩支逐行掃描器，只認範本那種區塊寫法。行內 mapping、加引號的鍵、冒號前有空白的鍵、anchor、alias、merge key、值裡的逗號與跳脫都是合法 YAML，卻會讓 slide-qa 退回資料夾裡唯一的候選（可能是比真正輸出舊的檔），也會讓 scaffold 寫出 render 仍指向 `talk.qmd` 的 deck，只印一行警告。
+
+- 使用者 2026-11-01 定案：認不出就拒絕猜，維持只用 Node 內建模組（D10 不變）。不採 `quarto inspect`：實測讀得對，但每次多約 1.5 秒，而且 scaffold 要改寫文字，用不上它。不加 YAML 套件：要改 D10，scaffold 解析後再寫回會丟掉範本的註解與排版。
+- `unreadQuartoLines(yml)` 以和掃描器相同的縮排狀態，列出寫法超出掃描器的行（行號與原文）：
+  - 行首的 flow mapping 或 flow sequence（含 JSON 寫法 `{"project":{…}}`；加引號的鍵後面緊接冒號也算鍵）、顯式鍵（`? key`）、第二份 YAML 文件（開頭以外的 `---`、`...`）、任何地方的 merge key（`<<`）。
+  - `project`、`format`、`revealjs`、`render`、`output-file`、`metadata-files` 加了引號、冒號前有空白、位在行內 mapping 裡或列表破折號之後。
+  - 最上層的 `project`、`format` 與 `format` 底下的 `revealjs`，值是 flow mapping、anchor、alias、tag 或 block scalar（空的 `{}` 可以；其他鍵底下同名的 `format: {…}` 不算）。
+  - `project.render` 裡：開頭的 flow mapping 或 block scalar，anchor（`&a`）、alias（`*a`）、tag（`!t`）（`Q & A.qmd` 這種前後有空白的 `&` 不算），跳脫，以及含逗號的值：引號內的逗號，與 flow list 以外沒加引號的逗號（`- my, talk.qmd` 在 YAML 是一個值，掃描器卻依逗號切成兩個；issue #46 點名的寫法）。
+  - 掃描器採用的 `output-file`：anchor、alias、tag、flow 值、跳脫（`"a\"b"`、`'it''s'`）。`output-file` 是單一值，掃描器整個讀進來，引號內的逗號不影響。
+  - block scalar（`|`、`>`）的內容是文字不是設定，偵測器與兩支掃描器都略過它。掃描器刻意不採用的區塊寫法（其他 format 的 `output-file`、更深一層的 `render`、`pre-render`、`post-render`）、引號值裡像鍵的文字、註解，都不算。
+  - slide-qa 的 `_lib.mjs` 與 scaffold 各有一份相同的函式（沿用兩邊各有一份 `splitComment` 的做法，兩個 skill 不互相 import），測試檢查兩份對每種寫法的結果一致。
+- `metadata-files`：Quarto 把它列的檔合併進設定。依 #46 的 Diagnosis，讀它列的檔，其中設了 `render` 或 `output-file`（或再用 `metadata-files`、merge key）才拒絕；列的不是同一資料夾裡的單純檔名、檔案不存在，或清單不是 flow list、區塊清單、單一值這三種寫法，也拒絕。第 1 版一律拒絕，verify 第 1 輪指出它比 Diagnosis 寬，並擋下 0.7.0 能用的 deck（例如用 `metadata-files` 放作者或書目資料）。
+- slide-qa：設定檔照 Quarto 的做法取 `_quarto.yml`，沒有時取 `_quarto.yaml`（實測兩者都在時 Quarto 用 `_quarto.yml`）。設定檔有讀不懂的行，`metadata-files` 列的檔如上，或資料夾裡的 profile 檔 `_quarto-<name>.yml`（不分大小寫，macOS 上 Quarto 也會載入 `_QUARTO-p.yml`）以任何寫法設了 `render` 或 `output-file`，或用了 `metadata-files`、merge key（引號內的文字與 block scalar 不算；Quarto 只在那個 profile 啟用時合併它，腳本無從得知 render 時用了哪個；沒有設定檔時 Quarto 不用 profile，這時不檢查），沒給檔名參數的腳本以狀態 2 結束，列出檔名、行號與原文（最多三筆），請使用者給檔名參數，或把 `project.render` 與 `output-file` 以區塊寫法寫在設定檔本身；給了檔名參數就照用，不讀設定。設定檔是符號連結時照舊跟隨讀取（與 0.7.0 相同），但拒絕訊息只列檔名與行號、不印內容，免得把資料夾外檔案的內容印出來（verify 第 1 輪 security）。
+- scaffold：範本的 `_quarto.yml` 有讀不懂的行；`metadata-files` 列的檔不在範本資料夾裡，或設了 `render`、`output-file`；或範本裡的 profile 檔設了（或可能間接設了）它們（這些檔照原樣複製，改寫不到）：在寫入任何東西之前以狀態 1 結束，列出檔名與行號，印出的文字把控制字元（含 DEL 與 C1）換成 `?`。D20 的殘留警告保留給區塊寫法裡改寫不到的 `talk.qmd`（例如列在 `resources` 底下）。
+- 來源：profile 檔與 `metadata-files` 是 diagnose #46 時發現的同類來源（寫在 Diagnosis）。`_quarto.yaml` 是實作時實測 Quarto 的選檔順序後加入的，Diagnosis 沒有列，使用者也沒有另外決定；它只讓 deck 多一種讀得到的設定檔。
+- 不涵蓋（開為 #50，見 D24）：`clean-revealjs` 這類擴充格式的 `output-file`、`.qmd` front matter 的 `output-file`、`_metadata.yml`、`project: output-dir`、`output-ext`。
+- 在範圍內：`_lib.mjs`、`scaffold.mjs`、兩份 SKILL.md、`tests/quarto-settings.test.mjs`。
+- verify 第 1 輪 Devil's Advocate 之後：
+  - 偵測器原本是黑名單，與 Diagnosis 說的「認得的才算」不符，而且偵測器、掃描器、profile 檢查各有一套判斷。改為一個 `scanSettings` 掃過每一行並標上種類（讀不懂、render、掃描器採用的 output-file、metadata-files、其他輸出名稱來源），設定檔、profile 檔、`metadata-files` 列的檔都用它判斷，profile 檔裡 `format: pdf: output-file` 不再被擋。
+  - 跨行的值（純量或沒關上的引號）在 YAML 是一個值，掃描器卻讀成兩個，一律拒絕：render 的區塊清單項目、單一值與 `output-file` 都是。
+  - 檔案開頭的 UTF-8 BOM 先去掉再讀（原本第一行的區塊寫法會被誤擋，scaffold 也是）。
+  - 新增 oracle 測試：`tests/fixtures/make-quarto-oracle.py` 用 PyYAML 算出每個案例的 render 與 output-file，寫成 `quarto-settings-oracle.json`；測試要求偵測器接受的設定，掃描器讀出的結果與 PyYAML 相同，讀錯的案例必須被拒。執行期仍只用 Node 內建模組（D10 不變），產生器只在案例改變時手動執行。
+- verify 第 2 輪（Codex）之後：
+  - 讀不懂的行分成兩類：牽涉 deck 由哪些檔組成的（`project`、`render`、`metadata-files`、merge key、文件結構）每種查找都拒絕；只牽涉輸出檔名的（`format`、`revealjs`、`output-file`、`output-ext`、`output-dir`）只在找 `.html`、`.pdf` 時拒絕。原本加引號的 `"output-ext":` 會連 check-density 都擋，裸鍵卻不會。
+  - 一行內關得起來、沒提到掃描器會讀的鍵的 flow mapping（`format: {pdf: default}`、`project: {type: default}`）照讀，設定檔與 profile 檔都是；跨行的 flow mapping 仍然拒絕。
+  - 文件結尾 `...` 本身合法；之後還有內容，或內容之後出現 `---`，才算第二份文件。
+  - verify 第 2 輪的對抗式審查又找到幾種讀錯又放行的寫法，一律改成拒絕：跨行 render flow list 裡沒有逗號隔開的續行（YAML 把兩行接成一個值）、縮排沒超過 `render:` 的 flow 續行、`revealjs:` 底下更深一層的 `output-file`（Quarto 不採用）、`output-file: ~` 或空值。帶 anchor 或 tag 的 block scalar（`notes: &n |`）原本沒被認出來，內容被當成設定讀；現在和其他 block scalar 一樣當文字略過，不是拒絕。
+  - verify 第 3 輪：flow list 裡逗號寫在下一行開頭（`, b.qmd`）是合法的兩個項目，照讀，不再誤擋；PyYAML oracle 加了這個案例。
+  - 限制（照實寫明）：oracle 測試只保證 fixture 裡列出的案例被讀對或被拒；讀取器、scaffold 的改寫器與偵測器仍是各自維護的狀態機，這不是對所有 YAML 寫法的證明。新發現的寫法要加進 `make-quarto-oracle.py` 的案例。
+
+### D24. 其他決定輸出檔名的來源：找 `.html`、`.pdf` 時拒絕猜（issue #50）
+
+D23 只讀 `project.render` 與 `format: revealjs:`（或最上層）的 `output-file`。issue #50 列出 Quarto 另外五個決定輸出檔名的地方（verify 第 2 輪又找到兩個，見本節最後一點）：擴充格式（例如 `clean-revealjs:`）自己的 `output-file`、主 `.qmd` front matter 的 `output-file` 或 `output-ext`、資料夾裡的 `_metadata.yml`（或 `.yaml`）、`project: output-dir`、`_quarto.yml` 的 `output-ext`。原本這些都不讀也不拒，腳本去找 `<stem>.html`，可能是比真正輸出舊的檔。
+
+- 決定：沿用使用者在 #46 的決定（2026-11-01：認不出就拒絕猜，只用 Node 內建模組），五個來源一律拒絕，不新增讀法：沒給檔名參數時以狀態 2 結束，列出檔名與行號。
+- 它們只改變 `.html`（以及跟著它的 `.pdf`）的名字，所以只在需要輸出檔名的查找（check-fill、check-layout、check-mathjax、export-pdf 的 `.html`，handout 的 `.pdf`）才拒絕；check-density 找 `.qmd` 不受影響。
+- front matter 與 `_metadata.yml` 只看會決定輸出檔名的設定：掃描器會讀的 `output-file`、擴充格式的 `output-file`、`output-ext`，不論寫法（加引號的鍵也算），以及可能間接帶進它們的 `metadata-files` 與 merge key（verify 第 2 輪）；`format: pdf: output-file` 這類其他格式的設定不算，免得誤擋常見寫法。
+- scaffold 照原樣複製範本的 front matter；自訂範本若在那裡設了 `output-file`，deck 會以那個名字 render。官方範本沒有，記在 #50 的 Diagnosis，不另開 issue。
+- verify 第 2 輪（對抗式審查）之後：
+  - `project.type` 不是 `default` 時也拒絕：website、book、manuscript 不寫 `output-dir` 也會輸出到 `_site/`、`_book/`、`_manuscript/`。本機實測 9 個 Quarto book 與 website 資料夾，找 `.html` 全部被擋、找 `.qmd` 都照常。
+  - front matter 前面有空白行、文件後面另一段 YAML 區塊也會改輸出檔名，所以都檢查（第 3 輪改照 Quarto 的規則找區塊，見下）。
+  - `output-ext` 只看最上層與 revealjs 格式底下；`format: pdf: output-ext: tex` 不改 `.html` 的名字，不擋。
+  - scaffold 的範本檢查不再拒絕只改輸出位置或副檔名的設定（擴充格式的 `output-file`、`output-ext`、`output-dir`、project type）：改名照常生效，main 與 #50 之前都接受這種範本，拒絕它是 #50 帶進來的回歸。
+  - deck 放在上層 Quarto 專案的子資料夾時，上層的 `_quarto.yml` 與 `_metadata.yml` 也會影響輸出，這裡不讀也不拒，由 #54 追蹤。
+- verify 第 3 輪（Codex）之後：
+  - project type 不論寫法都看：一行內的 flow mapping（`project: {type: website}`）、加引號的鍵、冒號前有空白；`type: "default"` 加引號、`type: ~` 都算 default。
+  - 雙引號鍵裡有跳脫字元（`"ren\u0064er"`）可以拼出任何鍵，一律拒絕。
+  - 決定輸出檔名的是 Quarto 自己讀 metadata 的方式（`readYamlFromMarkdown`），不是 Pandoc 的規則（對抗式審查以 Quarto 1.10.19 實測）。所以照它的規則找區塊：先去掉 HTML 註解與反引號 fenced code，之後每個行首的 `---` 只要下一行不是空行，就讀到下一個 `---` 或 `...` 行；前一行不必是空行，第一行也不必是 ASCII 鍵；`~~~` 圍起來的內容 Quarto 照讀，這裡也讀；以空行開頭的區塊略過。Quarto 會逐段 parse，不是 YAML 的區塊會讓 render 失敗，所以照讀不會擋到能 render 的 deck。註解與 fence 改用逐行掃描找，保留每一行在原檔的行號；Quarto 的 regex 碰到大量沒結尾的註解或 fence 是平方時間，不適合用在別處來的資料夾（#51）。本機 67 個含 `.qmd` 的資料夾新舊版結果完全相同。
+  - 其他格式（`pdf`、`docx`）底下的 `output-file`、`output-ext`，加引號也不算。
+  - 讀不懂的輸出設定分兩種：只改輸出位置或副檔名的（`output-dir`、`output-ext`、project type），找 `.html`、`.pdf` 時拒絕，scaffold 接受，不論寫法，和裸寫的鍵一致；scaffold 要改寫的（`format`、`revealjs`、`output-file`），scaffold 照舊拒絕。
+
+### D25. 從別處來的資料夾：印出的文字與 render 值的 trim（issue #51）
+
+- slide-qa 的 `printable` 另外把雙向控制字元（U+061C、U+200E、U+200F、U+202A–U+202E、U+2066–U+2069）換成 `?`，並用在既有的 `HTML not found`、`qmd not found`、`tex not found` 訊息。
+- scaffold 印出的所有文字經過 `screen()`：逐行套用同樣的替換，多行訊息保留換行。`show()`（`JSON.stringify`）也用來寫 YAML 值，所以不改它。
+- `readQuartoYml` 去掉 render 值兩端的括號與空白，改用線性的迴圈；原本的 regex 遇到一長串空白會回溯，15 萬字元要 18 秒。
+- verify 第 2 輪之後：check-density 從資料夾找到的檔名、各腳本報表裡的投影片標題與 MathJax 錯誤原文、handout 與 export-pdf 的「✓ wrote」也經過 `printable`。替換的只有控制字元與雙向控制字元，中英日文字照原樣印出。scaffold 在 warning 與錯誤訊息裡印的檔名先經過 `printable`，名字裡的換行也換掉，不能偽造一行 `warning:`。第 3 輪起 handout 也一樣：命令列的值、檔名、標題在放進訊息時先經過 `printable`；scaffold 的 `--list`、`Dry run`、`Wrote` 行裡的資料夾路徑也是。
+
+### D26. scaffold 的選項規則比照 slide-qa 檢查腳本（issue #52）
+
+- `--help` 或 `-h` 出現在任何位置都印出用法並以 0 結束（`--out -h` 不再建出名為 `-h` 的資料夾）；同一個選項（含旗標）給兩次、帶值選項放最後、後面接另一個選項（#49）、值只有空白，都以狀態 2 結束並點名選項，什麼都不寫。
+- 重複選項的拒絕依使用者 2026-11-01 的決定（見 D22）。
+- `--旗標=值`（`--shots=1`、`--dry-run=1`、`--landscape=1`）在檢查腳本、scaffold、handout 都回「不接受值」；帶值選項寫成 `--x=值`，三處都提示改用空格（verify 第 3 輪）。
 
 ## Implementation Contract
 

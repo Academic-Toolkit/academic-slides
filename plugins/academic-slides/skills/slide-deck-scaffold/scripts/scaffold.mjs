@@ -72,13 +72,19 @@ control character (U+0000-U+001F, U+007F); lang must be a language tag such as e
 template file on a path the scaffold writes itself, or on a case variant of one, is skipped with a
 warning. A project settings folder must belong to you (where ownership cannot be checked, the whole
 project layer needs --trust-project).
-Exit status: 0 done, 1 refused (settings, template, or folder problem), 2 usage error.`;
+Exit status: 0 done, 1 refused (settings, template, or folder problem), 2 usage error (an unknown option, one given
+             twice, a valued option given last, followed by another option, or given a blank value). --help or -h
+             anywhere prints this text.`;
 
 export class ScaffoldError extends Error {}
 
 const isDir = (p) => existsSync(p) && statSync(p).isDirectory();
 const isFile = (p) => existsSync(p) && statSync(p).isFile();
-const show = (v) => JSON.stringify(v);
+const show = (v) => JSON.stringify(v);   // also writes YAML values: never change it to clean text for the terminal
+// Everything the scaffold prints goes through screen(): control characters (C0, DEL, C1) and bidirectional controls in
+// names, paths and template lines become '?', line by line, so a multi-line message keeps its lines (#51).
+const printable = (s) => String(s).replace(/[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '?');
+const screen = (s) => String(s).split('\n').map(printable).join('\n');
 const isLink = (p) => lstatSync(p, { throwIfNoEntry: false })?.isSymbolicLink() ?? false;
 const inside = (child, parent) => child === parent || child.startsWith(parent + path.sep);
 // How a file system that ignores case and Unicode form sees a path (the macOS default): two names with
@@ -89,7 +95,7 @@ const LANG = /^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$/;
 // A file read from a settings layer is never followed through a symbolic link: a cloned project could
 // otherwise point talk.qmd or theme.scss at a private file and have it copied into the new deck.
 function refuseLink(p, what) {
-  if (isLink(p)) throw new ScaffoldError(`${p} is a symbolic link; ${what} is never read through a link`);
+  if (isLink(p)) throw new ScaffoldError(`${printable(p)} is a symbolic link; ${what} is never read through a link`);
 }
 
 export function personalDir(home) {
@@ -121,9 +127,9 @@ export function readSettings(dir) {
   try {
     data = JSON.parse(readFileSync(file, 'utf8'));
   } catch (e) {
-    throw new ScaffoldError(`${file}: not valid JSON (${e.message})`);
+    throw new ScaffoldError(`${printable(file)}: not valid JSON (${e.message})`);
   }
-  if (data === null || typeof data !== 'object' || Array.isArray(data)) throw new ScaffoldError(`${file}: must be a JSON object`);
+  if (data === null || typeof data !== 'object' || Array.isArray(data)) throw new ScaffoldError(`${printable(file)}: must be a JSON object`);
   const settings = {};
   const warnings = [];
   for (const [key, value] of Object.entries(data)) {
@@ -131,17 +137,17 @@ export function readSettings(dir) {
       warnings.push(`${file}: unknown field ${show(key)} ignored (known fields: ${FIELDS.join(', ')})`);
       continue;
     }
-    if (value !== null && typeof value !== 'string') throw new ScaffoldError(`${file}: field ${show(key)} must be a string or null`);
+    if (value !== null && typeof value !== 'string') throw new ScaffoldError(`${printable(file)}: field ${show(key)} must be a string or null`);
     // Quarto reads these values as markdown: brackets would allow links and images (which fetch a
     // remote address when the deck is opened), <, {, and backticks HTML, shortcodes, spans, and code.
     // & and the backslash are refused too: Pandoc decodes character references (&#123; is "{") and
     // backslash escapes after this check has run, so they would rebuild any refused character (#8).
     if (typeof value === 'string' && /[<{`[\]&\\\u0000-\u001f\u007f]/.test(value)) {
-      throw new ScaffoldError(`${file}: field ${show(key)} contains <, {, [, ], &, a backslash, a backtick, or a control character; settings values are plain text (no HTML, character references, links, images, Quarto shortcodes, or code)`);
+      throw new ScaffoldError(`${printable(file)}: field ${show(key)} contains <, {, [, ], &, a backslash, a backtick, or a control character; settings values are plain text (no HTML, character references, links, images, Quarto shortcodes, or code)`);
     }
     // Quarto looks lang up as a file name (_language-<lang>.yml), so it must be a language tag, not a path
     if (key === 'lang' && typeof value === 'string' && !LANG.test(value)) {
-      throw new ScaffoldError(`${file}: field "lang" must be a language tag such as en or zh-TW, not ${show(value)}`);
+      throw new ScaffoldError(`${printable(file)}: field "lang" must be a language tag such as en or zh-TW, not ${show(value)}`);
     }
     settings[key] = value;
   }
@@ -191,11 +197,11 @@ export function resolveTemplate(name, dirs) {
   const [chosen, ...rest] = found;
   const layerRoot = layerDirs(dirs).find((d) => d.layer === chosen.layer).root;
   if (!inside(realpathSync(chosen.dir), realpathSync(layerRoot))) {
-    throw new ScaffoldError(`template folder ${chosen.dir} resolves outside ${layerRoot} through a symbolic link`);
+    throw new ScaffoldError(`template folder ${printable(chosen.dir)} resolves outside ${printable(layerRoot)} through a symbolic link`);
   }
   for (const required of ['talk.qmd', '_quarto.yml']) {
     refuseLink(path.join(chosen.dir, required), `a template's ${required}`);
-    if (!isFile(path.join(chosen.dir, required))) throw new ScaffoldError(`template folder ${chosen.dir} has no ${required}`);
+    if (!isFile(path.join(chosen.dir, required))) throw new ScaffoldError(`template folder ${printable(chosen.dir)} has no ${required}`);
   }
   return { ...chosen, shadowed: rest.map((c) => c.layer) };
 }
@@ -207,12 +213,12 @@ function continues(next) {
 // Replace, remove (null), or add single-line `key: value` fields in the front matter.
 export function rewriteFrontMatter(text, edits, where = 'talk.qmd') {
   const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
-  if (!m) throw new ScaffoldError(`${where} has no front matter block at the top`);
+  if (!m) throw new ScaffoldError(`${printable(where)} has no front matter block at the top`);
   const lines = m[1].split(/\r?\n/);
   for (const [key, value] of Object.entries(edits)) {
     if (value === undefined) continue;
     const i = lines.findIndex((l) => l.startsWith(`${key}:`));
-    if (i >= 0 && continues(lines[i + 1])) throw new ScaffoldError(`${where}: front-matter field ${show(key)} must be on one line`);
+    if (i >= 0 && continues(lines[i + 1])) throw new ScaffoldError(`${printable(where)}: front-matter field ${show(key)} must be on one line`);
     if (value === null) {
       if (i >= 0) lines.splice(i, 1);
     } else if (i >= 0) {
@@ -227,8 +233,8 @@ export function rewriteFrontMatter(text, edits, where = 'talk.qmd') {
 export function rewriteQuartoYml(text, { theme, footer, mainFile }, where = '_quarto.yml') {
   const themeLine = /^([ \t]*)theme:[ \t]*(\S.*)?$/m;
   const t = text.match(themeLine);
-  if (!t) throw new ScaffoldError(`${where} has no theme: line`);
-  if (!t[2]) throw new ScaffoldError(`${where}: theme must be a one-line list such as [default, _theme/deck.scss]`);
+  if (!t) throw new ScaffoldError(`${printable(where)} has no theme: line`);
+  if (!t[2]) throw new ScaffoldError(`${printable(where)}: theme must be a one-line list such as [default, _theme/deck.scss]`);
   let out = text.replace(themeLine, (_, indent) => `${indent}theme: [${theme.join(', ')}]`);
   if (mainFile !== undefined) out = renameRenderTarget(out, mainFile);
   if (footer === undefined) return out;
@@ -260,11 +266,14 @@ export function renameRenderTarget(text, mainFile) {
   let childIndent = -1;      // indent of that key's direct children
   let renderIndent = -1;     // indent of project.render while inside its value
   let fmtIndent = -1;        // indent of format.revealjs while inside it
+  let scalarIndent = -1;     // indent of the key whose | or > block scalar is being passed over (#46)
   return text.split(/(?<=\n)/).map((line) => {
     const nl = line.match(/\r?\n$/)?.[0] ?? '';
     const [code, comment] = splitComment(line.slice(0, line.length - nl.length));
     if (/^\s*$/.test(code)) return line;
     const indent = code.match(/^[ \t]*/)[0].length;
+    if (scalarIndent >= 0 && indent > scalarIndent) return line;   // block scalar contents are text, not settings
+    scalarIndent = BLOCK_SCALAR.test(maskQuoted(code).masked) ? indent : -1;
     if (indent === 0) { top = code.match(/^([^:\s]+):/)?.[1] ?? null; childIndent = -1; renderIndent = -1; fmtIndent = -1; }
     else {
       if (childIndent < 0) childIndent = indent;
@@ -278,6 +287,259 @@ export function renameRenderTarget(text, mainFile) {
     return code.replace(/^([ \t]*output-file:[ \t]*)(["']?)(\.\/)?talk(\.html)?\2([ \t]*)$/i,
       (_, lead, q, dot, ext, tail) => `${lead}${q}${dot ?? ''}${stem}${ext ?? ''}${q}${tail}`) + comment + nl;
   }).join('');
+}
+
+// Forms of _quarto.yml that the line scanner does not read (issue #46). The scanner reads project, format, revealjs,
+// render and output-file only as plain block keys (unquoted, no space before the colon, first on the line), render
+// as a block or flow list of plain or simply quoted values, and output-file as one plain or simply quoted value.
+// scanSettings tags every line that bears on the deck's files; `unread` lines write these settings another way, so
+// the caller refuses instead of guessing: a flow mapping or sequence at the root, an explicit key (? key), a second
+// YAML document, a merge key (<<); one of those keys (or metadata-files, output-ext) quoted, with a space before
+// the colon, inside a flow mapping, or after a list dash; root project or format, or format's revealjs, given a flow
+// mapping (other than {}), anchor, alias, tag, or block scalar; in project.render or the output-file the scanner
+// uses, an anchor, alias or tag, an escape, a quoted value left open, or a value continued on the next line (YAML
+// joins it, the scanner does not); and in project.render a value holding a comma, quoted or outside a flow list
+// (the scanner splits render values at commas; it reads an output-file value whole). The contents of block scalars
+// (| and >) are text, not settings, and are skipped here and by the scanner; a byte order mark is dropped. The same
+// code is in slide-qa's _lib.mjs; tests/quarto-settings.test.mjs checks that the two agree, and that
+// whatever is accepted is read as a YAML reader reads it.
+// Keys that decide which files the deck is made of (an unread one stops every lookup), and keys that decide only the
+// output name (an unread one stops the .html and .pdf lookups; #50, verify round 2).
+const FILE_KEYS = ['project', 'render', 'metadata-files'];
+const OUTPUT_KEYS = ['format', 'revealjs', 'output-file', 'output-ext', 'output-dir'];
+const RENAME_KEYS = ['format', 'revealjs', 'output-file'];   // the scaffold rewrites the name these set
+const REVEALJS_FORMAT = /^(revealjs|.+-revealjs)$/;
+const DEFAULT_TYPE = /^(?:"default"|'default'|default|~|null|Null|NULL)?$/;   // project.type default, quoted or not, or null
+const KEY_MENTION = /(^|[\s{,[])(project|format|revealjs|render|output-file|output-ext|output-dir|metadata-files)([ \t]*):(?=[\s{["']|$)/g;
+const MERGE_KEY = /(^|[\s{,[-])<<[ \t]*:/;
+const SCANNED_OUTPUT_FILE = /^[ \t]*output-file:[ \t]*(?:"([^"]*)"|'([^']*)'|(\S+))[ \t]*$/;
+const BLOCK_SCALAR = /(?:^[ \t]*-|:)[ \t]+(?:[&!]\S*[ \t]+)*[|>][-+1-9]*[ \t]*$/;   // a value that starts a | or > block scalar, anchor or tag first
+
+// The line with every quoted string replaced by "", the quoted keys (a quoted string followed by a colon, with or
+// without a space, as JSON-style YAML writes them), the other quoted strings with their quote character, and whether
+// a quoted string is left open at the end of the line.
+function maskQuoted(code) {
+  let masked = '';
+  const keys = [];
+  const values = [];
+  let open = false;
+  for (let i = 0; i < code.length; i++) {
+    const q = code[i];
+    if (q !== '"' && q !== "'") { masked += q; continue; }
+    let j = i + 1;
+    let body = '';
+    while (j < code.length) {
+      if (code[j] === q) {
+        if (q === "'" && code[j + 1] === "'") { body += "''"; j += 2; continue; }   // '' is a quote inside '…'
+        break;
+      }
+      if (q === '"' && code[j] === '\\') body += code[j++];                         // \x is an escape inside "…"
+      body += code[j++] ?? '';
+    }
+    if (j >= code.length) open = true;
+    if (/^[ \t]*:/.test(code.slice(j + 1))) keys.push(body); else values.push({ q, body });
+    masked += '""';
+    i = j;
+  }
+  return { masked, keys, values, open };
+}
+
+// The lines of a YAML text that can hold settings, as { line, raw, code, indent, masked, keys, values, open }: blank
+// lines, comments, and the contents of block scalars are left out, so text that only quotes a setting is not read
+// as one. A byte order mark at the start is dropped.
+function settingLines(yml) {
+  const lines = [];
+  let scalarIndent = -1;
+  yml.replace(/^\uFEFF/, '').split(/\r?\n/).forEach((raw, n) => {
+    const [code] = splitComment(raw);
+    if (/^\s*$/.test(code)) return;
+    const indent = code.match(/^[ \t]*/)[0].length;
+    if (scalarIndent >= 0 && indent > scalarIndent) return;
+    scalarIndent = -1;
+    const masked = maskQuoted(code);
+    lines.push({ line: n + 1, raw, code, indent, ...masked });
+    if (BLOCK_SCALAR.test(masked.masked)) scalarIndent = indent;
+  });
+  return lines;
+}
+
+// Every line that bears on the deck's files, as { line, text, kind }:
+//   unread         written in a form the scanner does not read, about the deck's files: refused by every lookup
+//   unread-output  the same, about the output name only: refused when the lookup needs that name (.html, .pdf)
+//   render         project.render, read by the scanner
+//   output-file    the output-file the scanner reads (the top level, or under format: revealjs:)
+//   metadata       metadata-files whose list the callers read
+//   output         another source of the output name the scanner does not read (#50), in any form, that changes only
+//                  where the deck is written or its extension: output-file under an extension format such as
+//                  clean-revealjs, output-ext, project.output-dir, a project type other than default; refused when the
+//                  name is needed, and no obstacle to the scaffold's rename (verify round 3)
+function scanSettings(yml) {
+  const found = [];
+  let top = null; let childIndent = -1; let renderIndent = -1; let fmtIndent = -1; let fmtChild = null; let revChild = -1;
+  let seen = false; let ended = false;
+  let renderFlow = false;    // inside a render flow list spread over several lines
+  let flowItemOpen = false;  // the last line of that list ended in a value with no comma after it
+  let continued = -1;        // indent of a plain output-file value that a deeper line without a key would continue
+  for (const { line, raw, code, indent, masked, keys, values, open } of settingLines(yml)) {
+    const own = masked.match(/^[ \t]*([A-Za-z_][\w.-]*):(?=[ \t]|$)[ \t]*(.*)$/);
+    const key = own?.[1];
+    const value = (own?.[2] ?? '').trim();
+    const kinds = [];
+    let files = false;
+    let output = continued >= 0 && indent > continued && !own && !/^[ \t]*-/.test(code);   // continues an output-file value
+    let renames = output;      // the unread output setting is one the scaffold would have to rewrite (verify round 3)
+    continued = -1;
+    // a render flow list left open must go on deeper than its key: YAML would read a line at or left of it otherwise
+    if (renderFlow && indent <= renderIndent && !/^[ \t]*\]/.test(masked)) files = true;   // the closing ] may sit there
+    if (indent === 0) { top = key ?? null; childIndent = -1; renderIndent = -1; fmtIndent = -1; fmtChild = null; revChild = -1; renderFlow = false; }
+    else {
+      if (childIndent < 0) childIndent = indent;
+      if (indent <= childIndent && !(renderIndent === indent && /^\s*-/.test(code))) { renderIndent = -1; renderFlow = false; if (indent < childIndent || key !== 'revealjs') { fmtIndent = -1; revChild = -1; } }
+      if (top === 'format' && indent === childIndent) fmtChild = key ?? null;
+      if (top === 'project' && indent === childIndent && key === 'render') renderIndent = indent;
+      if (top === 'format' && indent === childIndent && key === 'revealjs') { fmtIndent = indent; revChild = -1; }
+      else if (fmtIndent >= 0 && indent > fmtIndent && revChild < 0) revChild = indent;   // revealjs's direct children
+    }
+    // the shape of the document: a flow collection at the root, an explicit key (? key), a merge key, a second document
+    // (--- after content, or anything after the end marker ...; the marker itself ends one document and is fine)
+    if ((indent === 0 && /^[{[]/.test(masked)) || /^[ \t]*\?(?=[ \t]|$)/.test(masked) || MERGE_KEY.test(masked) || ended
+      || (seen && /^---(?=[ \t]|$)/.test(code))) files = true;
+    if (/^\.\.\.(?=[ \t]|$)/.test(code)) ended = true;
+    seen = true;
+    // output-file and output-ext under another format (pdf, docx) do not name the deck's .html, in any form (round 3)
+    const otherFormat = top === 'format' && indent > childIndent && fmtChild !== null && !REVEALJS_FORMAT.test(fmtChild);
+    const outputKey = (k) => {
+      if (otherFormat && (k === 'output-file' || k === 'output-ext')) return;
+      output = true; if (RENAME_KEYS.includes(k)) renames = true;
+    };
+    for (const k of keys) { if (FILE_KEYS.includes(k)) files = true; else if (OUTPUT_KEYS.includes(k)) outputKey(k); }
+    if (keys.some((k) => k.includes('\\'))) files = true;   // "ren\u0064er": an escape in a key could spell any key (round 3)
+    for (const m of masked.matchAll(KEY_MENTION)) {
+      if (m[3] === '' && m.index + m[1].length === indent) continue;   // a plain block key, first on its line
+      // format and revealjs named inside a one-line flow mapping set nothing on their own; an output key named there is
+      // caught by itself. A space before the colon is never read.
+      if (m[3] === '' && (m[2] === 'format' || m[2] === 'revealjs')) continue;
+      if (FILE_KEYS.includes(m[2])) files = true; else outputKey(m[2]);
+    }
+    // project.type other than default, in any form: block, quoted key, space before the colon, one-line flow mapping
+    const type = top === 'project' && indent === childIndent ? code.match(/^[ \t]*(["']?)type\1[ \t]*:[ \t]*(.*?)[ \t]*$/)
+      : key === 'project' && indent === 0 ? code.match(/[{,][ \t]*(["']?)type\1[ \t]*:[ \t]*([^,}]*?)[ \t]*(?=[,}])/) : null;
+    if (type && !DEFAULT_TYPE.test(type[2])) output = true;
+    // project and format at the root, and revealjs under format, hold the scanned keys: a flow mapping there is read only
+    // when it closes on its line (what it names is checked above); an anchor, alias, tag, block scalar or sequence never
+    const scannedParent = ((key === 'project' || key === 'format') && indent === 0) || (key === 'revealjs' && top === 'format' && indent === childIndent);
+    if (scannedParent && value !== '{}'
+      && (/^[&*!|>[]/.test(value) || (value.startsWith('{') && !/\}[ \t]*$/.test(value)) || /(^|[\s,[{])[&*][^\s,[\]{}]/.test(value))) {
+      if (key === 'project') files = true; else { output = true; renames = true; }
+    }
+    if (renderIndent >= 0) {
+      const keyLine = key === 'render' && indent === renderIndent;
+      const text = keyLine ? value : masked.trim().replace(/^-[ \t]*/, '');
+      // a flow mapping or block scalar, an anchor (&a), alias (*a) or tag (!t) at the start of a value (not `Q & A.qmd`)
+      if (/^[{|>]/.test(text) || /(^|[\s,[])[&*!][^\s,[\]{}]/.test(text) || /[[,][ \t]*\{/.test(text)) files = true;
+      // Outside a flow list an unquoted comma is part of one value (`- my, talk.qmd`), which the scanner splits.
+      if ((keyLine || /^[ \t]*-/.test(code)) && !/^\[/.test(text) && text.includes(',')) files = true;
+      if (open || values.some((v) => v.body.includes(',') || (v.q === '"' && v.body.includes('\\')) || (v.q === "'" && v.body.includes("''")))) files = true;
+      if (keyLine) {
+        renderFlow = /^\[/.test(text) && !/\][ \t]*$/.test(text);
+        flowItemOpen = renderFlow && !/[[,][ \t]*$/.test(text);
+        kinds.push('render');
+      } else if (renderFlow) {
+        // in a flow list a value runs on until a comma: a line after one that ended without a comma continues it,
+        // unless it starts with the comma or the closing ] (verify round 3)
+        if (flowItemOpen && !/^[ \t]*[\],]/.test(masked)) files = true;
+        if (/\]/.test(masked)) renderFlow = false;
+        flowItemOpen = !/[[,][ \t]*$/.test(masked.trim());
+      } else if (!/^[ \t]*-/.test(code)) files = true;   // a line continuing a value: YAML joins it, the scanner splits it
+    }
+    if (key === 'output-file' && (indent === 0 || (fmtIndent >= 0 && indent > fmtIndent))) {
+      const o = code.match(SCANNED_OUTPUT_FILE);
+      // not matched, an anchor, alias, tag or flow value, a quoted value with '' or \" the quoted forms could not take, an
+      // escape, a null or empty value, or a key deeper than revealjs's own (Quarto does not take it; verify round 2)
+      if (!o || /^[&*!|>{["']/.test(o[3] ?? '') || (o[1] ?? '').includes('\\') || /^(~|null|Null|NULL)$/.test(o[3] ?? '')
+        || o[1] === '' || o[2] === '' || (indent > 0 && indent > revChild)) { output = true; renames = true; }
+      else { kinds.push('output-file'); if (o[3] !== undefined) continued = indent; }
+    } else if (key === 'output-file' && top === 'format' && indent > childIndent && /.-revealjs$/.test(fmtChild ?? '')) kinds.push('output');
+    // output-ext at the top level or under a revealjs format; an output folder, set or implied by a project type other
+    // than default (website, book, manuscript write to _site, _book, _manuscript)
+    if ((key === 'output-ext' && (indent === 0 || (top === 'format' && indent > childIndent && REVEALJS_FORMAT.test(fmtChild ?? ''))))
+      || (top === 'project' && indent === childIndent && key === 'output-dir')) kinds.push('output');
+    if (files) found.push({ line, text: raw.trim(), kind: 'unread' });
+    else if (output) found.push({ line, text: raw.trim(), kind: renames ? 'unread-output' : 'output' });
+    else for (const kind of kinds) found.push({ line, text: raw.trim(), kind });
+  }
+  for (const l of metadataFileLists(yml)) {
+    if (!found.some((f) => f.line === l.line && f.kind.startsWith('unread'))) found.push({ line: l.line, text: l.text, kind: l.names === null ? 'unread' : 'metadata' });
+  }
+  return found.sort((a, b) => a.line - b.line);
+}
+
+const pick = (found) => found.map(({ line, text }) => ({ line, text }));
+const OUTPUT_KINDS = ['output-file', 'output', 'unread-output'];
+
+// The lines of a settings file the scanner cannot read; outputOnly marks those about the output name only.
+export function unreadQuartoLines(yml) {
+  return scanSettings(yml).filter((f) => f.kind.startsWith('unread')).map(({ line, text, kind }) => ({ line, text, outputOnly: kind === 'unread-output' }));
+}
+
+// The lines of a settings file that set the output name where the scanner does not read it (#50).
+export function outputSourceLines(yml) {
+  return pick(scanSettings(yml).filter((f) => f.kind === 'output'));
+}
+
+// The lines of a document's front matter or a _metadata.yml that set, or may set, the output name (#50): every line
+// scanSettings tags there except render, which means nothing in those files. That covers an output name set directly,
+// in any form, and one that may come through metadata-files or a merge key (verify round 2).
+export function outputNameLines(yml) {
+  return pick(scanSettings(yml).filter((f) => f.kind !== 'render'));
+}
+
+// The lines of a profile file (_quarto-<name>.yml) or of a file metadata-files lists that bear on the deck's files,
+// judged by the same rules as the settings file; outputOnly marks those that change only the output name.
+export function profileSettingLines(yml) {
+  return scanSettings(yml).map(({ line, text, kind }) => ({ line, text, kind, outputOnly: OUTPUT_KINDS.includes(kind) }));
+}
+
+// A plain or simply quoted YAML scalar ('…' without '', "…" without escapes), else null.
+function simpleScalar(s) {
+  s = s.trim();
+  const q = s.match(/^"([^"\\]*)"$|^'([^']*)'$/);
+  if (q) return q[1] ?? q[2];
+  return s === '' || /^[&*!|>{[\]}"'@`%#,?:-]/.test(s) || /: |[ \t]#/.test(s) ? null : s;
+}
+
+// The files each metadata-files key lists (verify round 1): Quarto merges them into the settings, so the callers
+// read them and refuse only one that sets render or output-file (#46 Diagnosis). Returned as { line, text, names };
+// names is null when the list is written in a form not covered here (a flow list on the key's line, a block list of
+// simple scalars, or one simple scalar).
+export function metadataFileLists(yml) {
+  const lists = [];
+  let open = null;   // the block list being read: the key's indent and its entry
+  for (const { line, raw, code, indent, masked } of settingLines(yml)) {
+    if (open && /^[ \t]*-(?=[ \t]|$)/.test(masked) && indent >= open.indent) {
+      const name = simpleScalar(code.replace(/^[ \t]*-/, ''));
+      if (name === null) open.entry.names = null; else open.entry.names?.push(name);
+      continue;
+    }
+    open = null;
+    const m = masked.match(/^[ \t]*metadata-files:(?=[ \t]|$)[ \t]*(.*)$/);
+    if (!m) continue;
+    const entry = { line, text: raw.trim(), names: [] };
+    lists.push(entry);
+    const value = code.replace(/^[ \t]*metadata-files:[ \t]*/, '').trim();
+    if (m[1].trim() === '') { open = { indent, entry }; continue; }
+    if (!value.startsWith('[')) { const name = simpleScalar(value); entry.names = name === null ? null : [name]; continue; }
+    if (!value.endsWith(']')) { entry.names = null; continue; }
+    const items = [];
+    let cur = ''; let q = null;
+    for (const c of value.slice(1, -1)) {
+      if (q) { cur += c; if (c === q) q = null; } else if (c === '"' || c === "'") { q = c; cur += c; } else if (c === ',') { items.push(cur); cur = ''; } else cur += c;
+    }
+    items.push(cur);
+    const names = items.length === 1 && items[0].trim() === '' ? [] : items.map(simpleScalar);
+    entry.names = q || names.includes(null) ? null : names;
+  }
+  return lists;
 }
 
 // A template made by copying a finished deck carries the outputs of rendering talk.qmd; copied into a deck named
@@ -314,8 +576,8 @@ function templateFiles(dir, warnings, rel = '') {
 
 function checkOut(out) {
   if (!existsSync(out)) return;
-  if (!statSync(out).isDirectory()) throw new ScaffoldError(`${out} is a file, not a folder`);
-  if (readdirSync(out).length) throw new ScaffoldError(`${out} is not empty; choose a new folder (existing decks are never overwritten)`);
+  if (!statSync(out).isDirectory()) throw new ScaffoldError(`${printable(out)} is a file, not a folder`);
+  if (readdirSync(out).length) throw new ScaffoldError(`${printable(out)} is not empty; choose a new folder (existing decks are never overwritten)`);
 }
 
 // true when the folder belongs to the current user, false when it does not, null when this system
@@ -329,9 +591,9 @@ function settingsLayers(home, out, trustProject) {
   const project = findProjectDir(out, home);
   if (project) {
     const owned = ownedByUser(project);
-    if (owned === false) throw new ScaffoldError(`${project} belongs to another user; a project settings folder must be yours`);
+    if (owned === false) throw new ScaffoldError(`${printable(project)} belongs to another user; a project settings folder must be yours`);
     if (owned === null && !trustProject) {
-      throw new ScaffoldError(`cannot check who owns ${project} on this system; ask the user before passing --trust-project to use the project layer`);
+      throw new ScaffoldError(`cannot check who owns ${printable(project)} on this system; ask the user before passing --trust-project to use the project layer`);
     }
   }
   const layers = [{ layer: 'personal', dir: personal, ...readSettings(personal) }];
@@ -359,6 +621,15 @@ function untrustedProjectFiles(tpl, themeFiles, project) {
 }
 
 // Everything the deck will contain, computed without writing anything.
+// Template settings the scaffold cannot rewrite (issue #46) stop it before anything is written.
+const PROFILE_FILE = /^_quarto-[^/\\]+\.ya?ml$/i;   // any letter case, as Quarto finds it on a case-insensitive disk
+function refuseUnreadSettings(file, unread, why) {
+  if (!unread.length) return;
+  const lines = unread.slice(0, 3).map((u) => `line ${u.line} (${show(printable(u.text))})`);
+  if (unread.length > 3) lines.push(`and ${unread.length - 3} more`);
+  throw new ScaffoldError(`${printable(file)} ${lines.join('; ')} ${why}`);
+}
+
 export function planDeck({ out, home, template, title, deckName, trustProject = false }) {
   const stem = deckStem(deckName);
   const problem = nameProblem(stem);
@@ -394,7 +665,7 @@ export function planDeck({ out, home, template, title, deckName, trustProject = 
   }
   const untrusted = untrustedProjectFiles(tpl, themeFiles, project);
   if (untrusted.length && !trustProject) {
-    throw new ScaffoldError(`these come from the project layer, found by walking up from the deck folder:\n  ${untrusted.join('\n  ')}\nRendering a template runs whatever it contains. Show these files to the user and ask the user whether to use them; pass --trust-project only with the user's approval.`);
+    throw new ScaffoldError(`these come from the project layer, found by walking up from the deck folder:\n  ${untrusted.map(printable).join('\n  ')}\nRendering a template runs whatever it contains. Show these files to the user and ask the user whether to use them; pass --trust-project only with the user's approval.`);
   }
   warnings.push(...untrusted.map((f) => `using from the project layer (--trust-project): ${f}`));
   const theme = ['default', '_theme/deck.scss', ...themeFiles.map((f) => f.rel.split(path.sep).join('/'))];
@@ -403,7 +674,29 @@ export function planDeck({ out, home, template, title, deckName, trustProject = 
   const qmd = rewriteFrontMatter(readFileSync(qmdFile, 'utf8'), {
     title: fields.title?.value, author: fields.author?.value, institute: fields.affiliation?.value, lang: fields.lang?.value,
   }, qmdFile);
-  const yml = rewriteQuartoYml(readFileSync(ymlFile, 'utf8'), { theme, footer: fields.footer?.value, mainFile }, ymlFile);
+  const templateYml = readFileSync(ymlFile, 'utf8').replace(/^\uFEFF/, '');   // a byte order mark is not part of the first key
+  refuseUnreadSettings(ymlFile, unreadQuartoLines(templateYml), 'sets project, format, render or output-file in a form the scaffold '
+    + 'cannot rewrite; write them in block style in the template\'s _quarto.yml itself, without metadata-files or merge keys, as the official templates do');
+  // A file metadata-files lists, and a profile file, are copied unchanged, so one that sets render or output-file would
+  // still point at talk.qmd (#46). metadata-files must list files kept beside _quarto.yml, or they cannot be checked.
+  for (const { line, names } of metadataFileLists(templateYml)) {
+    for (const name of names ?? []) {
+      const copy = copies.find((c) => c.rel === name);
+      if (!copy) {
+        refuseUnreadSettings(ymlFile, [{ line, text: `metadata-files lists ${name}` }], 'but that file is not in the template folder, so '
+          + 'the scaffold cannot check it; list only files kept beside _quarto.yml');
+      }
+      refuseUnreadSettings(copy.src, profileSettingLines(readFileSync(copy.src, 'utf8')).filter((l) => l.kind !== 'output'),
+        'sets render or the output name, or may (through metadata-files, a merge key, or a form the scaffold cannot read), but the scaffold rewrites only _quarto.yml; move those settings there');
+    }
+  }
+  // A profile file is copied unchanged, so one that sets render or output-file would still point at talk.qmd (#46).
+  for (const { src, rel } of copies.filter((c) => PROFILE_FILE.test(c.rel))) {
+    // output-dir, output-ext and an extension format's output-file do not stop the scaffold's rename (verify round 2)
+    refuseUnreadSettings(src, profileSettingLines(readFileSync(src, 'utf8')).filter((l) => l.kind !== 'output'),
+      'sets render or the output name, or may (through metadata-files, a merge key, or a form the scaffold cannot read), but the scaffold rewrites only _quarto.yml; move those settings there');
+  }
+  const yml = rewriteQuartoYml(templateYml, { theme, footer: fields.footer?.value, mainFile }, ymlFile);
   // A value that is still talk.qmd (not a name such as w07-talk.qmd that merely ends in it), or output-file talk.
   const leftover = [...yml.matchAll(/(?:^|[\s[,:"']|\.\/)(talk\.qmd)(?=["'\s,\]#]|$)/gim)].some((m) => m[1] !== mainFile)
     || (stem.toLowerCase() !== 'talk' && /output-file:[ \t]*["']?(\.\/)?talk(\.html)?["']?[ \t]*(#|$)/im.test(yml));
@@ -437,31 +730,41 @@ function fieldLine(key, entry) {
 }
 
 export function report(plan) {
-  const lines = [`Main file ${plan.mainFile}`, `Template  ${plan.name}  (${plan.tpl.layer}: ${plan.tpl.dir})`];
+  const lines = [`Main file ${plan.mainFile}`, `Template  ${plan.name}  (${plan.tpl.layer}: ${printable(plan.tpl.dir)})`];
   if (plan.tpl.shadowed.length) lines.push(`          shadows the ${plan.tpl.shadowed.join(' and ')} template of the same name`);
   lines.push('Settings');
-  for (const l of plan.layers) lines.push(`  ${l.layer.padEnd(9)} ${path.join(l.dir, 'local.json')}${existsSync(path.join(l.dir, 'local.json')) ? '' : ' (not found)'}`);
+  for (const l of plan.layers) lines.push(`  ${l.layer.padEnd(9)} ${printable(path.join(l.dir, 'local.json'))}${existsSync(path.join(l.dir, 'local.json')) ? '' : ' (not found)'}`);
   if (!plan.project) lines.push('  project   (no .claude/.academic-slides/ above the deck folder)');
   lines.push('Fields');
   for (const key of [...FIELDS, 'title']) lines.push(fieldLine(key, plan.fields[key]));
   lines.push(`Theme     ${plan.theme.join(', ')}`);
-  for (const w of plan.warnings) lines.push(`warning: ${w}`);
+  // A warning names template files: printable, so a line break in a name cannot forge a line (verify round 2)
+  for (const w of plan.warnings) lines.push(`warning: ${printable(w)}`);
   return lines.join('\n');
 }
 
+// The same rules as the slide-qa check scripts (#52): --help or -h anywhere asks for the usage; an option given twice,
+// a valued option given last, followed by another option (#49), or given a blank value, exits 2 naming the option.
 function parseArgs(argv) {
+  if (argv.includes('--help') || argv.includes('-h')) return { help: true };
   const opts = {};
   const valued = { '--out': 'out', '--name': 'name', '--template': 'template', '--title': 'title' };
+  const flags = { '--dry-run': 'dryRun', '--list': 'list', '--trust-project': 'trustProject' };
+  const given = new Set();
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === '--help' || a === '-h') opts.help = true;
-    else if (a === '--dry-run') opts.dryRun = true;
-    else if (a === '--list') opts.list = true;
-    else if (a === '--trust-project') opts.trustProject = true;
-    else if (valued[a]) {
-      if (i + 1 >= argv.length) throw new UsageError(`${a} needs a value`);
-      opts[valued[a]] = argv[++i];
-    } else throw new UsageError(`unknown argument ${show(a)}`);
+    const eq = a.indexOf('=');
+    if (!valued[a] && !flags[a] && eq > 0 && flags[a.slice(0, eq)]) throw new UsageError(`${a.slice(0, eq)} takes no value (got ${printable(a)})`);
+    if (!valued[a] && !flags[a] && eq > 0 && valued[a.slice(0, eq)]) {   // --name=w07: a known option, another form
+      throw new UsageError(`${printable(a)}: write the value after a space (${a.slice(0, eq)} ${printable(a.slice(eq + 1))})`);
+    }
+    if (!valued[a] && !flags[a]) throw new UsageError(`unknown argument ${show(a)}`);
+    if (given.has(a)) throw new UsageError(`${a} is given more than once`);
+    given.add(a);
+    if (flags[a]) { opts[flags[a]] = true; continue; }
+    // Followed by another option counts as no value (#49): `--out --dry-run` must not name a folder --dry-run.
+    if (i + 1 >= argv.length || argv[i + 1].startsWith('--') || argv[i + 1].trim() === '') throw new UsageError(`${a} needs a value`);
+    opts[valued[a]] = argv[++i];
   }
   return opts;
 }
@@ -473,7 +776,7 @@ function printList(opts, home) {
   const dirs = { projectDir: findProjectDir(out, home), personalDir: personalDir(home), officialDir: OFFICIAL_DIR };
   for (const t of listTemplates(dirs)) {
     const note = t.shadowedBy ? `shadowed by ${t.shadowedBy}` : '';
-    console.log(`${t.name.padEnd(18)} ${t.layer.padEnd(9)} ${note.padEnd(20)} ${t.dir}`);
+    console.log(screen(`${t.name.padEnd(18)} ${t.layer.padEnd(9)} ${note.padEnd(20)} ${printable(t.dir)}`));
   }
 }
 
@@ -482,30 +785,30 @@ export function main(argv, home = os.homedir()) {
   try {
     opts = parseArgs(argv);
   } catch (e) {
-    console.error(`${e.message}\n\n${HELP}`);
+    console.error(screen(`${e.message}\n\n${HELP}`));
     return 2;
   }
-  if (opts.help) { console.log(HELP); return 0; }
+  if (opts.help) { console.log(screen(HELP)); return 0; }
   try {
     if (opts.list) { printList(opts, home); return 0; }
-    if (!opts.out) { console.error(`--out is required\n\n${HELP}`); return 2; }
-    if (opts.name === undefined) { console.error(`--name is required: ${NAME_HINT}\n\n${HELP}`); return 2; }
+    if (!opts.out) { console.error(screen(`--out is required\n\n${HELP}`)); return 2; }
+    if (opts.name === undefined) { console.error(screen(`--name is required: ${NAME_HINT}\n\n${HELP}`)); return 2; }
     const problem = nameProblem(deckStem(opts.name));
     if (problem) {
-      console.error(`--name ${show(opts.name)} is invalid: ${problem}; use ${NAME_RULE}`);
+      console.error(screen(`--name ${show(opts.name)} is invalid: ${problem}; use ${NAME_RULE}`));
       return 2;
     }
     const plan = planDeck({ out: opts.out, home, template: opts.template, title: opts.title, deckName: opts.name, trustProject: opts.trustProject });
-    console.log(report(plan));
+    console.log(screen(report(plan)));
     if (opts.dryRun) {
-      console.log(`Dry run: nothing written (${plan.files.length} files would go to ${plan.out})`);
+      console.log(screen(`Dry run: nothing written (${plan.files.length} files would go to ${printable(plan.out)})`));
       return 0;
     }
     writeDeck(plan);
-    console.log(`Wrote ${plan.files.length} files to ${plan.out}\nMain file ${plan.mainFile} (quarto render writes ${plan.mainFile.replace(/\.qmd$/, '.html')})\nNext: cd ${show(plan.out)} && quarto render`);
+    console.log(screen(`Wrote ${plan.files.length} files to ${printable(plan.out)}\nMain file ${plan.mainFile} (quarto render writes ${plan.mainFile.replace(/\.qmd$/, '.html')})\nNext: cd ${show(plan.out)} && quarto render`));
     return 0;
   } catch (e) {
-    console.error(`scaffold: ${e.message}`);
+    console.error(screen(`scaffold: ${e.message}`));
     return 1;
   }
 }

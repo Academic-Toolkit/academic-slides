@@ -157,7 +157,7 @@ The static server in `_lib.mjs` SHALL respond 403 to any request whose `Host` he
 
 ### Requirement: Scripts find the deck file when none is given
 
-When run without its file option — `--qmd` for check-density; `--html` for check-fill, check-layout, check-mathjax, and export-pdf; `--pdf` for handout — each script SHALL read the deck's own file in the current folder, without searching subfolders. The deck's main file is the single `.qmd` that `project.render` of the folder's `_quarto.yml` names in this folder, else, when that is not exactly one, the folder's only `.qmd`. A value read from `_quarto.yml` SHALL be used only when it is a plain file name: one with a folder, `..`, an absolute path, or a wildcard is ignored, so the script never reads outside the current folder. When the main file can be told, the script SHALL use the file named after it (`<stem>.qmd`; `<stem>.html`, or the `output-file` under `format: revealjs:` (else the top-level one, regardless of order) with `.html` added unless it ends in `.html`; and the `.pdf` under the `.html`'s stem); when that file is missing, the script SHALL exit with status 2, name the missing file, and list the other candidates, without reading another file. When the main file cannot be told, the script SHALL use the folder's only file with that extension (handout leaving out files whose names end in `-handout.pdf`), and with none or more than one it SHALL exit with status 2, naming the folder and every candidate. Extensions SHALL match exactly, and file names in its error messages SHALL have control characters replaced. A file option given without a file name, or followed by another option, SHALL make the script exit with status 2 (handout: 1, its status for a bad option since #34). A file given with the option SHALL be used as given. No script SHALL fall back to a fixed name such as `talk.html` (issue #44; deck's-own-file rule by user decision 2026-10-31, after verify round 1).
+When run without its file option — `--qmd` for check-density; `--html` for check-fill, check-layout, check-mathjax, and export-pdf; `--pdf` for handout — each script SHALL read the deck's own file in the current folder, without searching subfolders. The deck's main file is the single `.qmd` that `project.render` of the folder's Quarto settings file (`_quarto.yml`, else `_quarto.yaml`, as Quarto chooses) names in this folder, else, when that is not exactly one, the folder's only `.qmd`. A value read from `_quarto.yml` SHALL be used only when it is a plain file name: one with a folder, `..`, an absolute path, or a wildcard is ignored, so the script never reads outside the current folder. When the main file can be told, the script SHALL use the file named after it (`<stem>.qmd`; `<stem>.html`, or the `output-file` under `format: revealjs:` (else the top-level one, regardless of order) with `.html` added unless it ends in `.html`; and the `.pdf` under the `.html`'s stem); when that file is missing, the script SHALL exit with status 2, name the missing file, and list the other candidates, without reading another file. When the main file cannot be told, the script SHALL use the folder's only file with that extension (handout leaving out files whose names end in `-handout.pdf`), and with none or more than one it SHALL exit with status 2, naming the folder and every candidate. Extensions SHALL match exactly, and the file names, settings lines, slide titles, and other text from the deck folder that a script prints, in its messages and its report, SHALL have control and bidirectional characters replaced (issue #51, verify round 2). When that settings file starts a line at the root with a flow mapping or sequence, uses an explicit key (`?`) or a second YAML document, writes `project`, `format`, `revealjs`, `render`, `output-file`, or `metadata-files` in a form other than block style (quoted, with a space before the colon, in a flow mapping or after a list dash), gives root `project` or `format`, or `revealjs` under `format`, a flow-mapping (other than `{}`), anchor, alias, tag, or block-scalar value, uses a merge key, has a `project.render` or `output-file` value with an anchor, alias, tag, or escape, or continued on the next line (plain or in an open quote), or, inside a `project.render` flow list spread over several lines, a value continued without a comma or a line at or left of the `render:` key, or an `output-file` value that is null or empty, or an `output-file` deeper under `revealjs:` than its own keys, or a `project.render` value holding a comma that is quoted or outside a flow list, or lists in `metadata-files` a file that is not a plain file name in the folder, cannot be read, or sets `render` or `output-file`, or when the folder has a settings file and a profile file `_quarto-<name>.yml` (in any letter case) that sets `render` or `output-file` or uses `metadata-files` or a merge key, the script SHALL exit with status 2 naming the file and line, without choosing a file (issue #46, user decision 2026-11-01). Where such a line concerns only the output name (an `output-file` in a profile file or a listed file, or one of the keys named below), only the lookups that need the output name stop. The contents of `|` and `>` block scalars, also after an anchor or a tag, are text and do not count, for this check and for the scanner. When a settings file is a symbolic link, the message SHALL give its line numbers without its contents. A byte order mark at the start of a file SHALL be ignored. A profile file and a file that `metadata-files` lists SHALL be judged by the same rules as the settings file. When the lookup needs the output name (the `.html`, and handout's `.pdf`), the script SHALL also exit with status 2, naming the file and line, when the output name is set where the scanner does not read it: an `output-file` under an extension format whose name ends in `-revealjs`, `output-ext` at the top level or under a revealjs format, `project.output-dir`, or a `project.type` other than `default` in any form (website, book, and manuscript write to their own output folder) in the settings, or an `output-file` or `output-ext` that the folder's `_metadata.yml` or a YAML block of the main `.qmd` sets, the blocks found as Quarto finds them (outside HTML comments and backtick-fenced code, every line-start `---` followed by a line that is not blank, up to the next `---` or `...` line) at the top level or under `format: revealjs:` or an extension format, in any form, or `metadata-files` or a merge key there (issue #50). An unread line that concerns only the output name (`format`, `revealjs`, `output-file`, `output-ext`, `output-dir`) SHALL stop only the lookups that need the output name; check-density's `.qmd` lookup is not affected by it. An `output-file` or `output-ext` under another format, such as `pdf`, SHALL NOT count, in any form, and a double-quoted key with an escape SHALL be refused like the forms above (verify round 3). A flow mapping that closes on its line and names none of the keys above SHALL be read, and the document end marker `...` SHALL NOT count as a second document unless content follows it (verify round 2). A file option given without a file name, or followed by another option, SHALL make the script exit with status 2 (handout: 1, its status for a bad option since #34). A file given with the option SHALL be used as given. No script SHALL fall back to a fixed name such as `talk.html` (issue #44; deck's-own-file rule by user decision 2026-10-31, after verify round 1).
 
 #### Scenario: One deck in the folder
 
@@ -188,3 +188,47 @@ When run without its file option — `--qmd` for check-density; `--html` for che
 
 - **WHEN** export-pdf runs without `--html` in a deck whose main file is `talk.qmd` and which holds `talk.html`
 - **THEN** it writes `talk.pdf` as before
+
+#### Scenario: Settings written as a flow mapping
+
+- **WHEN** check-density runs without `--qmd` in a folder whose `_quarto.yml` is `project: {render: [deck.qmd]}`
+- **THEN** it exits with status 2 naming `_quarto.yml` line 1 and the `--qmd` option
+
+#### Scenario: A profile file sets the output file
+
+- **WHEN** check-mathjax runs without `--html` in a folder holding a `_quarto-print.yml` that sets `output-file`
+- **THEN** it exits with status 2 naming `_quarto-print.yml` and the line
+
+#### Scenario: A project type with its own output folder
+
+- **WHEN** check-fill runs without `--html` in a folder whose `_quarto.yml` sets `project: type: website`
+- **THEN** it exits with status 2 naming `_quarto.yml` and the line, while check-density in the same folder reads the deck's `.qmd`
+
+#### Scenario: Output name set by an extension format
+
+- **WHEN** check-mathjax runs without `--html` in a folder whose `_quarto.yml` sets `output-file: slides` under `format: clean-revealjs:`
+- **THEN** it exits with status 2 naming `_quarto.yml` and the line, while check-density in the same folder reads the deck's `.qmd`
+
+### Requirement: Check scripts refuse options they cannot read
+
+check-density, check-fill, check-layout, check-mathjax, and export-pdf SHALL each declare the options they take, and SHALL exit with status 2, naming the option, before looking up the deck file when: a valued option is given without a value (as the last argument, or followed by an argument that starts with `--`); a value is empty (except for `--skip-classes` and `--skip-macros`, where an empty list skips nothing); a number option's value is not a number in its range (`--threshold` from 0 to 1; `--width` and `--height` whole numbers of at least 1; `--words` and `--bullets` whole numbers of at least 0); an option is not one the script takes; an argument belongs to no option; or an option is given twice. A value that starts with a single `-` is read as a value. `--help` or `-h` anywhere prints the usage and exits with status 0. An option written as `--name=value` SHALL be refused with a message that shows the form with a space, and a flag written that way with a message that it takes no value (verify round 3). handout keeps its own checks, which exit with status 1 (#34), gives the same two messages for `--name=value`, and also refuses an option given twice (issue #45, user decision 2026-11-01; an option given twice is refused by every entry point, user decision after verify round 1).
+
+#### Scenario: Threshold without a value
+
+- **WHEN** check-fill runs with `--threshold` as its last argument
+- **THEN** it exits with status 2 saying that `--threshold` needs a value, without checking any slide
+
+#### Scenario: Option followed by another option
+
+- **WHEN** check-layout runs with `--out --shots`
+- **THEN** it exits with status 2 saying that `--out` needs a value
+
+#### Scenario: Value that is not a number
+
+- **WHEN** check-density runs with `--words abc`
+- **THEN** it exits with status 2 naming `--words` and the value `abc`
+
+#### Scenario: Misspelled option
+
+- **WHEN** check-fill runs with `--treshold 0.5`
+- **THEN** it exits with status 2 naming `--treshold` as an unknown option, instead of running with the default threshold
