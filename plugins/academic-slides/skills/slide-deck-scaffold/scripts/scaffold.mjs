@@ -753,19 +753,20 @@ function staleRenderLines(yml, templateLines, copies, mainFile) {
   };
   // A value as Quarto reads it: ./ and // inside a path do not change it (verify round 1). Outside the deck is checked
   // first, globs included ("../*.qmd" left the deck); a glob inside it is Quarto's; "." is the whole deck.
-  const norm = (v) => path.posix.normalize(v.replace(/\\/g, '/'));
+  const norm = (v) => path.posix.normalize(v.replace(/\\/g, '/')).replace(/(.)\/+$/, '$1');   // chapters/../ is ./, the deck (verify round 2)
   const glob = (v) => /[*?[\]{}!]/.test(v);
   const outside = (v) => path.isAbsolute(v) || path.win32.isAbsolute(v) || norm(v) === '..' || norm(v).startsWith('../');
   const entries = renderEntries(yml);
   const pick = (test) => [...new Set(entries.filter(({ value }) => test(value)).map(({ line }) => line))]
     .map((line) => ({ line, text: templateLines[line - 1] ?? '' }));
-  // A render list that names neither the main file, nor ".", nor a glob never renders the deck itself (verify round 1).
+  // A render list that names neither the main file, nor ".", nor a glob never renders the deck itself (verify round 1);
+  // an empty one renders nothing, and Quarto exits 0 (verify round 2).
   const renderKey = scanSettings(yml).find((f) => f.kind === 'render');
   const covers = (v) => glob(v) || norm(v) === '.' || pathKey(norm(v)) === pathKey(mainFile);
   return {
     outside: pick(outside),
     missing: pick((v) => !outside(v) && !glob(v) && norm(v) !== '.' && !has(norm(v))),
-    noMain: entries.length && renderKey && !entries.some(({ value }) => covers(value))
+    noMain: renderKey && !entries.some(({ value }) => covers(value))
       ? [{ line: renderKey.line, text: templateLines[renderKey.line - 1] ?? '' }] : [],
   };
 }
@@ -863,7 +864,7 @@ export function planDeck({ out, home, template, title, deckName, trustProject = 
   }
   // A profile file is copied unchanged, so one that sets render or output-file would still point at talk.qmd (#46).
   for (const { src, rel } of copies.filter((c) => PROFILE_FILE.test(c.rel))) {
-    // output-dir, output-ext and an extension format's output-file do not stop the scaffold's rename (verify round 2)
+    // output-dir, output-ext and a project type are accepted; an extension format's output-file is not (placeOnlyAccepted)
     refuseUnreadSettings(src, profileSettingLines(readFileSync(src, 'utf8')).filter(placeOnlyAccepted),
       'sets render or the output name, or may (through metadata-files, a merge key, or a form the scaffold cannot read), but the scaffold rewrites only _quarto.yml; move those settings there');
   }

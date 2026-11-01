@@ -787,3 +787,23 @@ test('#53 verify: the two copies of the detector block are the same text, but fo
   };
   assert.deepEqual(block(SCAFFOLD), block(path.join(QA, '_lib.mjs')));
 });
+
+// verify round 2 of #53 (Codex)
+test('#53 verify r2: a render path that comes back to the deck folder is the deck, and an empty render list is refused', () => {
+  let s = sandbox();
+  personalTemplate(s, 'back', `project:\n  render: [talk.qmd, "chapters/../"]\n${THEME}`);
+  mkdirSync(path.join(s.templates, 'back', 'chapters'));
+  writeFileSync(path.join(s.templates, 'back', 'chapters', 'intro.qmd'), OLD_DECK);
+  let r = runScaffold(s, ['--template', 'back', '--name', 'w08', '--out', 'deck']);
+  assert.equal(r.code, 0, r.out);
+  s = sandbox();
+  personalTemplate(s, 'empty', `project:\n  render: []\n${THEME}`);
+  r = runScaffold(s, ['--template', 'empty', '--name', 'w08', '--out', 'deck']);
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /_quarto\.yml line 2\b/);
+});
+
+test('#53 verify r2: renameRenderTarget keeps the line count, so the lines named are the template\'s', () => {
+  const all = [...Object.values(UNREAD).map(([yml]) => yml), ...Object.values(READ), ...Object.values(STALE_TEMPLATES).map(([yml]) => yml)];
+  for (const yml of all) assert.equal(scaffold.renameRenderTarget(yml, 'w08.qmd').split('\n').length, yml.split('\n').length, yml);
+});
