@@ -294,7 +294,8 @@ D23 只讀 `project.render` 與 `format: revealjs:`（或最上層）的 `output
   - 行號一律是範本的：檢查改在「只做改名」的範本文字上跑；個人或專案設定刪掉或加上 footer 那一行時，寫出的檔案行數會變。
   - 範本裡 `talk.qmd` 旁邊的 `_metadata.yml`／`_metadata.yaml` 也原樣複製，比照 profile 檔判斷：Quarto 實測會以裡面的 `output-file` 輸出（預設，沿用本 issue「範本帶著原 deck 的名字就拒絕」的原則；審查者請使用者決定範圍，這裡先取這個預設，PR 審閱時可推翻）。
   - render 清單既沒有主檔、也沒有 `.` 或 glob 時拒絕：主檔永遠不會被 render（原 deck 的 `.qmd` 還留在範本裡時就會這樣）。
-  - render 值照 Quarto 的讀法先正規化：`.`、路徑中的 `./`、`//` 照收。
+  - render 值照 Quarto 的讀法先正規化：`.`、路徑中的 `./`、`//` 照收；verify 第 2 輪起，回到 deck 資料夾本身的路徑（`chapters/../`）也算 `.`。
+  - 空的 render 清單（`render: []`）也拒絕：Quarto 1.10.19 實測什麼都不輸出，並以 0 結束（verify 第 2 輪）。
   - 帶舊名的 glob（`w07*.qmd`）照收：scaffold 不比對 glob，這是刻意的限制。
 - 實作：`readQuartoYml`（連同 `trimList`、`unquote`）與 `metadataBlocks` 移進 `_lib.mjs` 與 `scaffold.mjs` 逐字相同的偵測器區塊。`readQuartoYml` 與保留行號的 `renderEntries` 都由同一個 `readSettingsValues` 組成，兩邊只有一份讀法；測試比對兩份 `readQuartoYml` 的結果，也比對兩份偵測器區塊的原始碼（只差互相指引的那一行）。slide-qa 的行為不變。
 
