@@ -249,13 +249,14 @@ D23 只讀 `project.render` 與 `format: revealjs:`（或最上層）的 `output
 - scaffold 照原樣複製範本的 front matter；自訂範本若在那裡設了 `output-file`，deck 會以那個名字 render。官方範本沒有，記在 #50 的 Diagnosis，不另開 issue。
 - verify 第 2 輪（對抗式審查）之後：
   - `project.type` 不是 `default` 時也拒絕：website、book、manuscript 不寫 `output-dir` 也會輸出到 `_site/`、`_book/`、`_manuscript/`。本機實測 9 個 Quarto book 與 website 資料夾，找 `.html` 全部被擋、找 `.qmd` 都照常。
-  - front matter 前面有空白行、文件後面另一段以鍵開頭的 YAML 區塊，Pandoc 都會讀，所以都檢查；revealjs 分頁用的 `---`（下一行是標題）與 fenced code 不算。
+  - front matter 前面有空白行、文件後面另一段 YAML 區塊也會改輸出檔名，所以都檢查（第 3 輪改照 Quarto 的規則找區塊，見下）。
   - `output-ext` 只看最上層與 revealjs 格式底下；`format: pdf: output-ext: tex` 不改 `.html` 的名字，不擋。
   - scaffold 的範本檢查不再拒絕只改輸出位置或副檔名的設定（擴充格式的 `output-file`、`output-ext`、`output-dir`、project type）：改名照常生效，main 與 #50 之前都接受這種範本，拒絕它是 #50 帶進來的回歸。
   - deck 放在上層 Quarto 專案的子資料夾時，上層的 `_quarto.yml` 與 `_metadata.yml` 也會影響輸出，這裡不讀也不拒，由 #54 追蹤。
 - verify 第 3 輪（Codex）之後：
-  - project type 不論寫法都看：一行內的 flow mapping（`project: {type: website}`）、加引號的鍵、冒號前有空白；`type: "default"` 加引號也算 default。
-  - 文件後面的區塊要讀起來是 YAML mapping 才算 metadata：左邊界上除了空白行與註解，每一行都以鍵或 merge key 開頭。開頭是註解或 merge key 的區塊照樣檢查；分頁用的 `---` 後面接標題與內文，不算。fenced code 只在一整行只有 fence 字元時才結束，所以程式碼裡的 `` ```yaml `` 不會把 fence 關掉。
+  - project type 不論寫法都看：一行內的 flow mapping（`project: {type: website}`）、加引號的鍵、冒號前有空白；`type: "default"` 加引號、`type: ~` 都算 default。
+  - 雙引號鍵裡有跳脫字元（`"ren\u0064er"`）可以拼出任何鍵，一律拒絕。
+  - 決定輸出檔名的是 Quarto 自己讀 metadata 的方式（`readYamlFromMarkdown`），不是 Pandoc 的規則（對抗式審查以 Quarto 1.10.19 實測）。所以照它的規則找區塊：先去掉 HTML 註解與反引號 fenced code，之後每個行首的 `---` 只要下一行不是空行，就讀到下一個 `---` 或 `...` 行；前一行不必是空行，第一行也不必是 ASCII 鍵；`~~~` 圍起來的內容 Quarto 照讀，這裡也讀；以空行開頭的區塊略過。Quarto 會逐段 parse，不是 YAML 的區塊會讓 render 失敗，所以照讀不會擋到能 render 的 deck。註解與 fence 改用逐行掃描找，保留每一行在原檔的行號；Quarto 的 regex 碰到大量沒結尾的註解或 fence 是平方時間，不適合用在別處來的資料夾（#51）。本機 67 個含 `.qmd` 的資料夾新舊版結果完全相同。
   - 其他格式（`pdf`、`docx`）底下的 `output-file`、`output-ext`，加引號也不算。
   - 讀不懂的輸出設定分兩種：只改輸出位置或副檔名的（`output-dir`、`output-ext`、project type），找 `.html`、`.pdf` 時拒絕，scaffold 接受，不論寫法，和裸寫的鍵一致；scaffold 要改寫的（`format`、`revealjs`、`output-file`），scaffold 照舊拒絕。
 
@@ -264,12 +265,13 @@ D23 只讀 `project.render` 與 `format: revealjs:`（或最上層）的 `output
 - slide-qa 的 `printable` 另外把雙向控制字元（U+061C、U+200E、U+200F、U+202A–U+202E、U+2066–U+2069）換成 `?`，並用在既有的 `HTML not found`、`qmd not found`、`tex not found` 訊息。
 - scaffold 印出的所有文字經過 `screen()`：逐行套用同樣的替換，多行訊息保留換行。`show()`（`JSON.stringify`）也用來寫 YAML 值，所以不改它。
 - `readQuartoYml` 去掉 render 值兩端的括號與空白，改用線性的迴圈；原本的 regex 遇到一長串空白會回溯，15 萬字元要 18 秒。
-- verify 第 2 輪之後：check-density 從資料夾找到的檔名、各腳本報表裡的投影片標題與 MathJax 錯誤原文、handout 與 export-pdf 的「✓ wrote」也經過 `printable`。替換的只有控制字元與雙向控制字元，中英日文字照原樣印出。scaffold 在 warning 與錯誤訊息裡印的檔名先經過 `printable`，名字裡的換行也換掉，不能偽造一行 `warning:`。第 3 輪起 handout 也一樣：命令列的值、檔名、標題在放進訊息時先經過 `printable`。
+- verify 第 2 輪之後：check-density 從資料夾找到的檔名、各腳本報表裡的投影片標題與 MathJax 錯誤原文、handout 與 export-pdf 的「✓ wrote」也經過 `printable`。替換的只有控制字元與雙向控制字元，中英日文字照原樣印出。scaffold 在 warning 與錯誤訊息裡印的檔名先經過 `printable`，名字裡的換行也換掉，不能偽造一行 `warning:`。第 3 輪起 handout 也一樣：命令列的值、檔名、標題在放進訊息時先經過 `printable`；scaffold 的 `--list`、`Dry run`、`Wrote` 行裡的資料夾路徑也是。
 
 ### D26. scaffold 的選項規則比照 slide-qa 檢查腳本（issue #52）
 
 - `--help` 或 `-h` 出現在任何位置都印出用法並以 0 結束（`--out -h` 不再建出名為 `-h` 的資料夾）；同一個選項（含旗標）給兩次、帶值選項放最後、後面接另一個選項（#49）、值只有空白，都以狀態 2 結束並點名選項，什麼都不寫。
 - 重複選項的拒絕依使用者 2026-11-01 的決定（見 D22）。
+- `--旗標=值`（`--shots=1`、`--dry-run=1`、`--landscape=1`）在檢查腳本、scaffold、handout 都回「不接受值」；帶值選項寫成 `--x=值`，三處都提示改用空格（verify 第 3 輪）。
 
 ## Implementation Contract
 
