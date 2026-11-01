@@ -8,7 +8,8 @@ import { options, playwright, deckPath, findDeckFile, serve, openDeck } from './
 const { get } = options(`Usage: node check-fill.mjs [--html <deck>.html] [--threshold 0.70] [--width 1280] [--height 720]
                            [--footer '.reveal .footer']
 Exit status: 0 report printed, 2 HTML not found, the deck's .html not found in the current folder when --html is not given,
-             or an option error (a value missing or out of range, an unknown option).`,
+             or an option error (an option without a value, a value out of range, an unknown option, an argument that belongs to no
+             option, an option given twice).`,
   { html: 'file', threshold: { min: 0, max: 1 }, width: { min: 1, integer: true }, height: { min: 1, integer: true }, footer: 'text' });
 const THRESHOLD = get('threshold', 0.7);
 const WIDTH = get('width', 1280);

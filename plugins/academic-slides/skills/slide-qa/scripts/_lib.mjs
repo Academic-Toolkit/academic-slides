@@ -2,7 +2,7 @@
 // file server rooted at the folder that holds the rendered deck (revealjs needs http, not file://).
 import { createServer } from 'http';
 import { readFile, realpath, stat, lstat, mkdir, mkdtemp, writeFile, rename, rm } from 'fs/promises';
-import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
+import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from 'fs';
 import path from 'path';
 
 // The unchecked reader: the value is whatever argument follows the option. handout (which checks its own
@@ -225,8 +225,11 @@ export function unreadQuartoLines(yml) {
       || [...masked.matchAll(KEY_MENTION)].some((m) => m[2] === 'metadata-files' || m[3] !== '' || m.index + m[1].length !== indent);
     if (['project', 'format', 'revealjs'].includes(key) && /^[{[&*!|>]/.test(value)) bad = true;
     if (renderIndent >= 0) {
-      const text = key === 'render' && indent === renderIndent ? value : masked.trim().replace(/^-[ \t]*/, '');
+      const keyLine = key === 'render' && indent === renderIndent;
+      const text = keyLine ? value : masked.trim().replace(/^-[ \t]*/, '');
       if (/(^|[\s,[])[&*!|>{]/.test(text)) bad = true;
+      // Outside a flow list an unquoted comma is part of one value (`- my, talk.qmd`), which the scanner splits.
+      if ((keyLine || /^[ \t]*-/.test(code)) && !/^\[/.test(text) && text.includes(',')) bad = true;
       if (values.some((v) => v.body.includes(',') || (v.q === '"' && v.body.includes('\\')) || (v.q === "'" && v.body.includes("''")))) bad = true;
     }
     if (key === 'output-file' && (indent === 0 || (fmtIndent >= 0 && indent > fmtIndent))) {
@@ -251,17 +254,22 @@ export function profileSettingLines(yml) {
 // The deck's Quarto settings (issue #46): _quarto.yml, else _quarto.yaml (the file Quarto uses), and the settings the
 // scanner cannot read: the lines unreadQuartoLines reports in that file, and every line of a profile file
 // (_quarto-<name>.yml) that profileSettingLines reports, since Quarto merges a profile file only while that profile
-// is active, which these scripts cannot know. A file that cannot be read counts as unread.
-const PROFILE_FILE = /^_quarto-.+\.ya?ml$/;
+// is active, which these scripts cannot know. A file that cannot be read counts as unread. A settings file that is a
+// symbolic link is followed, as before, but its lines are reported by number only: printing them could show the
+// contents of a file outside the deck folder (verify round 1). Profile names match in any letter case, as Quarto
+// finds them on a case-insensitive disk.
+const PROFILE_FILE = /^_quarto-.+\.ya?ml$/i;
 export function quartoSettings(dir = process.cwd()) {
   const read = (name) => { try { return readFileSync(path.join(dir, name), 'utf8'); } catch { return null; } };
+  const isLink = (name) => { try { return lstatSync(path.join(dir, name)).isSymbolicLink(); } catch { return false; } };
+  const shown = (name, list) => (isLink(name) ? list.map((u) => ({ ...u, text: 'not shown: the file is a symbolic link' })) : list);
   const file = ['_quarto.yml', '_quarto.yaml'].find((name) => isFileIn(dir, name)) ?? null;
   const yml = file ? read(file) : '';
-  const unread = yml === null ? [{ file, line: 0, text: 'could not be read' }] : unreadQuartoLines(yml).map((u) => ({ file, ...u }));
+  const unread = yml === null ? [{ file, line: 0, text: 'could not be read' }] : shown(file, unreadQuartoLines(yml)).map((u) => ({ file, ...u }));
   for (const name of readdirSync(dir).filter((f) => PROFILE_FILE.test(f) && isFileIn(dir, f)).sort()) {
     const text = read(name);
     if (text === null) { unread.push({ file: name, line: 0, text: 'could not be read' }); continue; }
-    unread.push(...profileSettingLines(text).map((u) => ({ file: name, ...u })));
+    unread.push(...shown(name, profileSettingLines(text)).map((u) => ({ file: name, ...u })));
   }
   return { file, yml: yml ?? '', unread };
 }
@@ -323,7 +331,7 @@ export function findDeckFile(given, ext, option, { exclude = null } = {}) {
     if (r.unread.length > 3) lines.push(`and ${r.unread.length - 3} more`);
     console.error(`The deck's file could not be told from its Quarto settings in ${where}: ${lines.join('; ')}. These scripts read `
       + 'project.render and output-file only in block style, as the templates write them, and not from profile files '
-      + `(_quarto-<name>.yml) or metadata-files; pass ${flag} <file>, or write those settings in block style.`);
+      + `(_quarto-<name>.yml), metadata-files or merge keys; pass ${flag} <file>, or write project.render and output-file in block style in the settings file itself.`);
   } else if (r.reason === 'missing') {
     console.error(`The deck's main file is ${printable(r.main)}, but there is no ${printable(r.expected)} in ${where}`
       + `${list ? ` (found: ${list})` : ''}; ${NEXT[ext]}, or pass ${flag} <file>.`);

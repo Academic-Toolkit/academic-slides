@@ -187,3 +187,24 @@ test('every option listed in slide-qa SKILL.md is accepted by its script', () =>
     assert.equal(r.code, 2, `${script} stops at the missing deck: ${r.out}`);
   }
 });
+
+// verify round 1 (requirements): each script's --help lists every option error that exits 2
+for (const script of Object.keys(SCRIPT_OPTIONS)) {
+  test(`${script} --help names every kind of option error`, () => {
+    const r = runIn(emptyFolder(), script, ['--help']);
+    assert.equal(r.code, 0);
+    for (const kind of [/without a (value|file name)/, /unknown option/, /argument that belongs to\s+no\s+option/, /given twice/]) assert.match(r.out, kind, `${script}: ${kind}`);
+  });
+}
+
+// verify round 1 (requirements): the commands written in slide-qa SKILL.md and README.md pass the option reader
+test('the slide-qa commands in SKILL.md and README.md pass the option reader', () => {
+  const docs = [readFileSync(path.join(SKILL, 'SKILL.md'), 'utf8'), readFileSync(path.join(ROOT, 'README.md'), 'utf8')].join('\n');
+  const commands = [...docs.matchAll(/^node \S*?scripts\/((?:check-[a-z]+|export-pdf)\.mjs)([^#\n]*)/gm)];
+  assert.ok(commands.length >= 9, `found ${commands.length} commands`);
+  for (const [, script, rest] of commands) {
+    const args = rest.trim().split(/\s+/).filter(Boolean).map((a) => a.replace(/<deck>/g, 'deck'));
+    const r = runIn(emptyFolder(), script, args);
+    assert.doesNotMatch(r.out, OPTION_ERROR, `${script} ${args.join(' ')}`);
+  }
+});

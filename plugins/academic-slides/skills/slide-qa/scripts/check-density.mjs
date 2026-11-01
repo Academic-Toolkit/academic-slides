@@ -19,7 +19,8 @@ const HELP = `Usage: node check-density.mjs [--qmd <deck>.qmd] [--tex beamer/<de
   --skip-classes  fenced-div / span classes whose text is not counted
   --skip-macros   beamer macros whose argument text is not counted
 Exit status: 0 all within limits and titles match, 1 otherwise, 2 file not found, the deck's .qmd not found in the current folder
-             when --qmd is not given, or an option error (a value missing or out of range, an unknown option).`;
+             when --qmd is not given, or an option error (an option without a value, a value out of range, an unknown option, an argument that belongs to no
+             option, an option given twice).`;
 
 const { get } = options(HELP, {
   qmd: 'file', tex: 'text', words: { min: 0, integer: true }, bullets: { min: 0, integer: true },

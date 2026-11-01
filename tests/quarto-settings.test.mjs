@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, realpathSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, realpathSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -47,6 +47,9 @@ const UNREAD = {
   'flow mapping at the root': ['{project: {render: [deck.qmd]}}', 1],
   'quoted key followed directly by its value': ['project:\n  "render":["deck.qmd"]', 2],
   'unquoted key followed directly by a flow value': ['format:\n  revealjs:{output-file: slides}', 2],
+  // verify round 1 (requirements): an unquoted comma outside a flow list is part of one value, which the scanner splits
+  'unquoted comma in a block list item': ['project:\n  render:\n    - my, talk.qmd', 3],
+  'unquoted comma in a single render value': ['project:\n  render: my, talk.qmd', 2],
 };
 
 // Forms that are read, or deliberately not used, and must not be refused.
@@ -240,4 +243,54 @@ test('readQuartoYml and renameRenderTarget leave block scalar contents alone', (
   assert.equal(lib.readQuartoYml(yml).outputFile, 'slides');
   const tpl = 'format:\n  revealjs:\n    notes: >\n      output-file: talk\n    output-file: talk\n';
   assert.equal(scaffold.renameRenderTarget(tpl, 'w07.qmd'), 'format:\n  revealjs:\n    notes: >\n      output-file: talk\n    output-file: w07\n');
+});
+
+// verify round 1 (requirements): every form, end to end. slide-qa without its file option exits 2 naming the line and
+// uses the file option when it is given; the scaffold refuses a template with that _quarto.yml and writes nothing.
+test('every unread form is refused on the command line by slide-qa and by the scaffold', () => {
+  for (const [name, [yml, line]] of Object.entries(UNREAD)) {
+    const dir = folder({ 'deck.qmd': QMD, '_quarto.yml': `${yml}\n` });
+    let r = runQa(dir, 'check-density.mjs');
+    assert.equal(r.code, 2, `${name}: ${r.out}`);
+    assert.match(r.out, new RegExp(`_quarto\\.yml line ${line}\\b`), name);
+    r = runQa(dir, 'check-density.mjs', ['--qmd', 'deck.qmd']);
+    assert.equal(r.code, 0, `${name} with --qmd: ${r.out}`);
+    const s = sandbox();
+    personalTemplate(s, 'odd', `${yml}\n${THEME}`);
+    r = runScaffold(s, ['--template', 'odd', '--name', 'w07', '--out', 'deck']);
+    assert.equal(r.code, 1, `${name} (scaffold): ${r.out}`);
+    assert.match(r.out, new RegExp(`line ${line}\\b`), `${name} (scaffold)`);
+    assert.equal(existsSync(path.join(s.project, 'deck')), false, `${name}: no deck folder`);
+  }
+});
+
+// verify round 1 (security): a settings file that is a symbolic link is still followed to choose the deck's file, as
+// before, but its contents are never printed; profile file names match in any letter case, as Quarto finds them on a
+// case-insensitive disk
+test('a symbolic-link settings file is reported by name and line only, without its contents', () => {
+  const outside = realpathSync(mkdtempSync(path.join(tmpdir(), 'quarto-settings-outside-')));
+  writeFileSync(path.join(outside, 'secret.yml'), 'api render: SECRET-TOKEN\n');
+  const dir = folder({ 'deck.qmd': QMD, '_quarto.yml': 'project:\n  render: [deck.qmd]\n' });
+  symlinkSync(path.join(outside, 'secret.yml'), path.join(dir, '_quarto-leak.yml'));
+  const r = runQa(dir, 'check-density.mjs');
+  assert.equal(r.code, 2, r.out);
+  assert.match(r.out, /_quarto-leak\.yml line 1/);
+  assert.doesNotMatch(r.out, /SECRET-TOKEN/);
+});
+
+test('a profile file whose name differs only in letter case is checked too', () => {
+  const dir = folder({ 'deck.qmd': QMD, '_quarto.yml': 'project:\n  render: [deck.qmd]\n', '_QUARTO-print.yml': 'project:\n  render: [other.qmd]\n' });
+  assert.equal(lib.chooseDeckFile('.qmd', { dir }).reason, 'unread');
+  const s = sandbox();
+  personalTemplate(s, 'cased', `project:\n  render: [talk.qmd]\n${THEME}`, { '_Quarto-Print.yml': 'project:\n  render: [talk.qmd]\n' });
+  const out = runScaffold(s, ['--template', 'cased', '--name', 'w07', '--out', 'deck']);
+  assert.equal(out.code, 1, out.out);
+});
+
+test('the scaffold strips control characters, DEL and C1 included, from a refused line and file name', () => {
+  const s = sandbox();
+  personalTemplate(s, 'noisy', `project: {render: [talk.qmd]} \u007f\u009b31m\n${THEME}`);
+  const r = runScaffold(s, ['--template', 'noisy', '--name', 'w07', '--out', 'deck']);
+  assert.equal(r.code, 1, r.out);
+  assert.doesNotMatch(r.out, /[\u007f-\u009f]/);
 });

@@ -364,8 +364,11 @@ export function unreadQuartoLines(yml) {
       || [...masked.matchAll(KEY_MENTION)].some((m) => m[2] === 'metadata-files' || m[3] !== '' || m.index + m[1].length !== indent);
     if (['project', 'format', 'revealjs'].includes(key) && /^[{[&*!|>]/.test(value)) bad = true;
     if (renderIndent >= 0) {
-      const text = key === 'render' && indent === renderIndent ? value : masked.trim().replace(/^-[ \t]*/, '');
+      const keyLine = key === 'render' && indent === renderIndent;
+      const text = keyLine ? value : masked.trim().replace(/^-[ \t]*/, '');
       if (/(^|[\s,[])[&*!|>{]/.test(text)) bad = true;
+      // Outside a flow list an unquoted comma is part of one value (`- my, talk.qmd`), which the scanner splits.
+      if ((keyLine || /^[ \t]*-/.test(code)) && !/^\[/.test(text) && text.includes(',')) bad = true;
       if (values.some((v) => v.body.includes(',') || (v.q === '"' && v.body.includes('\\')) || (v.q === "'" && v.body.includes("''")))) bad = true;
     }
     if (key === 'output-file' && (indent === 0 || (fmtIndent >= 0 && indent > fmtIndent))) {
@@ -467,12 +470,14 @@ function untrustedProjectFiles(tpl, themeFiles, project) {
 
 // Everything the deck will contain, computed without writing anything.
 // Template settings the scaffold cannot rewrite (issue #46) stop it before anything is written.
-const PROFILE_FILE = /^_quarto-[^/\\]+\.ya?ml$/;
+const PROFILE_FILE = /^_quarto-[^/\\]+\.ya?ml$/i;   // any letter case, as Quarto finds it on a case-insensitive disk
 function refuseUnreadSettings(file, unread, why) {
   if (!unread.length) return;
-  const lines = unread.slice(0, 3).map((u) => `line ${u.line} (${show(u.text)})`);
+  // Template text and file names are printed: control characters, DEL and C1 included, become '?' (verify round 1).
+  const printable = (s) => String(s).replace(/[\u0000-\u001f\u007f-\u009f]/g, '?');
+  const lines = unread.slice(0, 3).map((u) => `line ${u.line} (${show(printable(u.text))})`);
   if (unread.length > 3) lines.push(`and ${unread.length - 3} more`);
-  throw new ScaffoldError(`${file} ${lines.join('; ')} ${why}`);
+  throw new ScaffoldError(`${printable(file)} ${lines.join('; ')} ${why}`);
 }
 
 export function planDeck({ out, home, template, title, deckName, trustProject = false }) {
@@ -521,7 +526,7 @@ export function planDeck({ out, home, template, title, deckName, trustProject = 
   }, qmdFile);
   const templateYml = readFileSync(ymlFile, 'utf8');
   refuseUnreadSettings(ymlFile, unreadQuartoLines(templateYml), 'sets project, format, render or output-file in a form the scaffold '
-    + 'cannot rewrite; write these settings in block style, as the official templates do');
+    + 'cannot rewrite; write them in block style in the template\'s _quarto.yml itself, without metadata-files or merge keys, as the official templates do');
   // A profile file is copied unchanged, so one that sets render or output-file would still point at talk.qmd (#46).
   for (const { src, rel } of copies.filter((c) => PROFILE_FILE.test(c.rel))) {
     refuseUnreadSettings(src, profileSettingLines(readFileSync(src, 'utf8')),

@@ -21,7 +21,8 @@ const { get, has } = options(`Usage: node check-layout.mjs [--html <deck>.html] 
 Checks every slide on screen at --width x --height, then every page of the print view that export-pdf.mjs
 prints; flagged PDF pages are saved as <deck>-print-NN-flagged.png (NN = PDF page number).
 Exit status: 0 no problems, 1 at least one flagged slide or PDF page, 2 HTML not found, or the deck's .html not found in the current folder when --html is not given,
-             or an option error (a value missing or out of range, an unknown option), 3 the check could not run or the print
+             or an option error (an option without a value, a value out of range, an unknown option, an argument that belongs to no
+             option, an option given twice), 3 the check could not run or the print
              view showed no slide pages.`,
   { html: 'file', width: { min: 1, integer: true }, height: { min: 1, integer: true }, footer: 'text', out: 'text', shots: 'flag' });
 const WIDTH = get('width', 1280);
