@@ -231,6 +231,11 @@ slide-qa 的 `readQuartoYml` 與 scaffold 的 `renameRenderTarget` 是兩支逐�
   - 跨行的值（純量或沒關上的引號）在 YAML 是一個值，掃描器卻讀成兩個，一律拒絕：render 的區塊清單項目、單一值與 `output-file` 都是。
   - 檔案開頭的 UTF-8 BOM 先去掉再讀（原本第一行的區塊寫法會被誤擋，scaffold 也是）。
   - 新增 oracle 測試：`tests/fixtures/make-quarto-oracle.py` 用 PyYAML 算出每個案例的 render 與 output-file，寫成 `quarto-settings-oracle.json`；測試要求偵測器接受的設定，掃描器讀出的結果與 PyYAML 相同，讀錯的案例必須被拒。執行期仍只用 Node 內建模組（D10 不變），產生器只在案例改變時手動執行。
+- verify 第 2 輪（Codex）之後：
+  - 讀不懂的行分成兩類：牽涉 deck 由哪些檔組成的（`project`、`render`、`metadata-files`、merge key、文件結構）每種查找都拒絕；只牽涉輸出檔名的（`format`、`revealjs`、`output-file`、`output-ext`、`output-dir`）只在找 `.html`、`.pdf` 時拒絕。原本加引號的 `"output-ext":` 會連 check-density 都擋，裸鍵卻不會。
+  - 一行內關得起來、沒提到掃描器會讀的鍵的 flow mapping（`format: {pdf: default}`、`project: {type: default}`）照讀，設定檔與 profile 檔都是；跨行的 flow mapping 仍然拒絕。
+  - 文件結尾 `...` 本身合法；之後還有內容，或內容之後出現 `---`，才算第二份文件。
+  - 限制（照實寫明）：oracle 測試只保證 fixture 裡列出的案例被讀對或被拒；讀取器、scaffold 的改寫器與偵測器仍是各自維護的狀態機，這不是對所有 YAML 寫法的證明。新發現的寫法要加進 `make-quarto-oracle.py` 的案例。
 
 ### D24. 其他決定輸出檔名的來源：找 `.html`、`.pdf` 時拒絕猜（issue #50）
 
@@ -238,7 +243,7 @@ D23 只讀 `project.render` 與 `format: revealjs:`（或最上層）的 `output
 
 - 決定：沿用使用者在 #46 的決定（2026-11-01：認不出就拒絕猜，只用 Node 內建模組），五個來源一律拒絕，不新增讀法：沒給檔名參數時以狀態 2 結束，列出檔名與行號。
 - 它們只改變 `.html`（以及跟著它的 `.pdf`）的名字，所以只在需要輸出檔名的查找（check-fill、check-layout、check-mathjax、export-pdf 的 `.html`，handout 的 `.pdf`）才拒絕；check-density 找 `.qmd` 不受影響。
-- front matter 與 `_metadata.yml` 只看會決定輸出檔名的鍵（掃描器會讀的 `output-file`、擴充格式的 `output-file`、`output-ext`），`format: pdf: output-file` 這類其他格式的設定不算，免得誤擋常見寫法。
+- front matter 與 `_metadata.yml` 只看會決定輸出檔名的設定：掃描器會讀的 `output-file`、擴充格式的 `output-file`、`output-ext`，不論寫法（加引號的鍵也算），以及可能間接帶進它們的 `metadata-files` 與 merge key（verify 第 2 輪）；`format: pdf: output-file` 這類其他格式的設定不算，免得誤擋常見寫法。
 - scaffold 照原樣複製範本的 front matter；自訂範本若在那裡設了 `output-file`，deck 會以那個名字 render。官方範本沒有，記在 #50 的 Diagnosis，不另開 issue。
 
 ### D25. 從別處來的資料夾：印出的文字與 render 值的 trim（issue #51）
