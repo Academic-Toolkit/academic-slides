@@ -556,8 +556,11 @@ function projectAbove(dir) {
   for (let up = path.dirname(at); up !== at; at = up, up = path.dirname(at)) {
     const name = ['_quarto.yml', '_quarto.yaml'].find((n) => existsSync(path.join(up, n)));
     if (name) {
-      let onDisk = name;
-      try { onDisk = readdirSync(up).find((n) => n.toLowerCase() === name) ?? name; } catch { /* unreadable folder: keep the name */ }
+      let onDisk = name;   // the exact name first: a case-sensitive disk can hold _Quarto.yml beside it (verify round 2)
+      try {
+        const names = readdirSync(up);
+        if (!names.includes(name)) onDisk = names.find((n) => n.toLowerCase() === name) ?? name;
+      } catch { /* unreadable folder: keep the name */ }
       return path.join(up, onDisk);
     }
   }

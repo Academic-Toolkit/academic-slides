@@ -904,7 +904,8 @@ test('#54 verify: a folder reached through a symbolic link and .. is searched wh
 
 test('#54 verify: the file option is used as given, and a parent folder name is printed without control characters', () => {
   const base = nested({ '_quarto.yml': 'project:\n  output-dir: _out\n' });
-  const deckDir = path.join(base, 'x\u001b[2J‮sub');
+  // Windows does not allow control characters in a folder name (verify round 2); a bidirectional mark it does
+  const deckDir = path.join(base, process.platform === 'win32' ? 'x‮sub' : 'x\u001b[2J‮sub');
   mkdirSync(deckDir);
   writeFileSync(path.join(deckDir, 'deck.qmd'), QMD);
   writeFileSync(path.join(deckDir, 'deck.html'), '<html></html>');
@@ -913,6 +914,8 @@ test('#54 verify: the file option is used as given, and a parent folder name is 
   assert.doesNotMatch(r.out, /[\u0000-\u0009\u000b-\u001f\u007f-\u009f‪-‮⁦-⁩]/);
   r = runQa(deckDir, 'check-density.mjs', ['--qmd', 'deck.qmd']);
   assert.equal(r.code, 0, r.out);
+  r = runQa(deckDir, 'check-mathjax.mjs', ['--html', 'deck.html']);   // the option the refusal names gets past it
+  assert.equal(r.code, 0, r.out);
 });
 
 // verify round 1 of #54 (adversarial): tests that fail when the feature is broken
@@ -920,7 +923,7 @@ test('#54 verify: the message says why, a deck folder with only _quarto.yaml is 
   let dir = path.join(nested({ '_quarto.yml': 'project:\n  output-dir: _out\n', 'sub/deck.qmd': QMD, 'sub/deck.html': '<html></html>' }), 'sub');
   const r = runQa(dir, 'check-fill.mjs');
   assert.equal(r.code, 2, r.out);
-  assert.match(r.out, /no Quarto settings file of its own/);
+  assert.match(r.out, /no Quarto settings file of its own, so when the deck is one of the inputs of the Quarto project there/);
   dir = path.join(nested({ '_quarto.yml': 'project:\n  output-dir: _out\n', 'sub/_quarto.yaml': 'project:\n  render: [deck.qmd]\n', 'sub/deck.qmd': QMD, 'sub/deck.html': '<html></html>' }), 'sub');
   assert.deepEqual(lib.chooseDeckFile('.html', { dir }), { file: 'deck.html' });
   dir = path.join(nested({ '_quarto.yml': 'project:\n  output-dir: _out\n', 'a/b/c/deck.qmd': QMD, 'a/b/c/deck.html': '<html></html>' }), 'a', 'b', 'c');
@@ -942,4 +945,13 @@ test('#54 verify: the message gives the settings file name as it is on disk', ()
   if (!existsSync(path.join(base, '_quarto.yml'))) return;   // a case-sensitive disk: Quarto does not see _Quarto.yml either
   const r = lib.chooseDeckFile('.html', { dir: path.join(base, 'sub') });
   assert.deepEqual(r.unread.map((u) => u.file), [path.join('..', '_Quarto.yml')]);
+});
+
+// verify round 2 of #54 (Codex)
+test('#54 verify r2: when both spellings are on a case-sensitive disk, the one Quarto reads is named', (t) => {
+  const base = nested({ '_Quarto.yml': 'x: 1\n', 'sub/deck.qmd': QMD, 'sub/deck.html': '<html></html>' });
+  if (existsSync(path.join(base, '_quarto.yml'))) return t.skip('a case-insensitive disk holds only one of the two names');
+  writeFileSync(path.join(base, '_quarto.yml'), 'project:\n  output-dir: _out\n');
+  const r = lib.chooseDeckFile('.html', { dir: path.join(base, 'sub') });
+  assert.deepEqual(r.unread.map((u) => u.file), [path.join('..', '_quarto.yml')]);
 });
