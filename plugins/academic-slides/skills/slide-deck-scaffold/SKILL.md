@@ -14,7 +14,7 @@ description: Start a new deck from one of four Quarto revealjs templates on one 
 | `results-report` | Traditional Chinese | results built on tables, no mathematics: data and rating method, main result, agreement, limits, next steps |
 | `lecture` | Traditional Chinese | outline, learning objectives, a definition, a worked example, an in-class question, a recap |
 
-`templates/quarto/_theme/deck.scss` is the only stylesheet. Each template folder holds just `_quarto.yml` and `talk.qmd`; the scaffold copies the current theme into every new deck, so a fix to the theme reaches every template. `templates/beamer/talk.tex` mirrors `research-talk`. The repository root has a `templates` link to this skill's `templates/` folder for browsing.
+`templates/quarto/_theme/deck.scss` is the only stylesheet. Each template folder holds just `_quarto.yml` and `talk.qmd` (written into a new deck as `<name>.qmd`, see [Name the deck](#name-the-deck)); the scaffold copies the current theme into every new deck, so a fix to the theme reaches every template. `templates/beamer/talk.tex` mirrors `research-talk`. The repository root has a `templates` link to this skill's `templates/` folder for browsing.
 
 The demo content is neutral (textbook models, made-up placeholders such as `x.xx`). Replace it, and keep a pattern's structure only where the talk needs it. For the reasoning behind the patterns, see the `academic-slide-design` skill.
 
@@ -24,7 +24,8 @@ Turn the steps below into a task list before starting. If the session provides `
 
 ```
 TaskCreate(subject="Choose the template", description="scaffold.mjs --list; --dry-run shows what would be written")
-TaskCreate(subject="Scaffold the deck", description="scaffold.mjs --out <folder>, exit 0; quarto render produces the .html")
+TaskCreate(subject="Name the deck", description="the main file is <name>.qmd: the name the user gave; else one that follows from the title, venue, or course with only one spelling; else ask the user")
+TaskCreate(subject="Scaffold the deck", description="scaffold.mjs --out <folder> --name <name>, exit 0; quarto render produces <name>.html")
 TaskCreate(subject="Front matter", description="After scaffolding, item 1: title, subtitle, author, institute, date, footer")
 TaskCreate(subject="Palette", description="After scaffolding, item 2: the five $deck-* values in the right layer")
 TaskCreate(subject="Macros", description="After scaffolding, item 3: every macro in the MathJax block and, with a mirror, the beamer preamble")
@@ -33,23 +34,33 @@ TaskCreate(subject="Beamer mirror", description="only with a mirror: titles matc
 TaskCreate(subject="Run slide-qa", description="the slide-qa skill, with its own task list")
 ```
 
+## Name the deck
+
+The deck's main file is `<name>.qmd`, and it renders to `<name>.html`; the PDF, the handout, and the screenshots take the same name. Name it after what the deck is, so that two decks in a downloads folder, a cloud drive, or an email never share a name:
+
+1. The name the user gave, if they gave one.
+2. Otherwise a name that follows from the title, the venue, or the course **and has only one reasonable spelling**: `jscs2026-imputation` for a JSCS 2026 talk on imputation, `W07_記憶` for week 7 of a course whose decks are already named that way.
+3. Otherwise ask the user. Two plausible names (the venue or the topic first, an English or a romanised form) count as not knowing; do not pick one.
+
+Use the name as given (a trailing `.qmd` may be included or left out). A name may use letters of any script, digits, `_ - + ( ) @`, full-width parentheses `（ ）`, the middle dots `・ ·`, and dots inside the name, starting with a letter, a digit, or `_` (`W07_記憶`, `W07・記憶（上）`, `JSCS2026-imputation`). Everything else is refused, because it is unsafe in a file name or changes the meaning of `_quarto.yml` (`# , [ ] & ' "` among others): spaces, path separators, a leading `-` or `.`, a trailing dot, Windows device names such as `CON` or `NUL`, and names over 200 bytes. `scaffold.mjs` also refuses to run without `--name` (exit 2) rather than fall back to a default. A refused name's message says which characters were refused; show the user a corrected name and ask before using it. Decks made earlier keep their `talk.*` files and need no renaming; the slide-qa scripts find them the same way.
+
 ## Start a deck
 
 ```bash
-node <this skill>/scripts/scaffold.mjs --out my-talk                       # your default template (research-talk if none)
-node <this skill>/scripts/scaffold.mjs --out my-talk --template lecture --title "第 3 講：信度"
-node <this skill>/scripts/scaffold.mjs --out my-talk --dry-run             # print what would be written; write nothing
-node <this skill>/scripts/scaffold.mjs --list                              # every template and the layer it comes from
-cd my-talk && quarto render                                                # → talk.html
+node <this skill>/scripts/scaffold.mjs --out jscs2026 --name jscs2026-imputation             # your default template (research-talk if none)
+node <this skill>/scripts/scaffold.mjs --out w03 --name w03-reliability --template lecture --title "第 3 講：信度"
+node <this skill>/scripts/scaffold.mjs --out jscs2026 --name jscs2026-imputation --dry-run   # print what would be written; write nothing
+node <this skill>/scripts/scaffold.mjs --list                                                # every template and the layer it comes from
+cd jscs2026 && quarto render                                                                 # → jscs2026-imputation.html
 ```
 
 The beamer mirror of `research-talk` is not copied by the script; add it by hand when you want one:
 
 ```bash
-mkdir my-talk/beamer && cp <this skill>/templates/beamer/talk.tex my-talk/beamer/
+mkdir jscs2026/beamer && cp <this skill>/templates/beamer/talk.tex jscs2026/beamer/jscs2026-imputation.tex
 ```
 
-The script prints which settings files it read, each field's value and the layer it came from, and the theme list. It writes only into a folder that does not exist or is empty, and needs only Node. Exit status: 0 done, 1 refused (settings, template, or folder problem), 2 usage error.
+The script prints the main file, which settings files it read, each field's value and the layer it came from, and the theme list. It writes only into a folder that does not exist or is empty, and needs only Node. Exit status: 0 done, 1 refused (settings, template, or folder problem), 2 usage error (including a missing or invalid `--name`).
 
 ## Settings: official, personal, project
 
@@ -64,7 +75,7 @@ Fields merge one by one: project over personal over official, with `--template` 
 | Field | Becomes |
 |---|---|
 | `template` | the template to start from |
-| `lang` | `lang:` in `talk.qmd` (`en`, `zh-TW`, …) |
+| `lang` | `lang:` in the main file `<name>.qmd` (`en`, `zh-TW`, …) |
 | `author` | `author:` |
 | `affiliation` | `institute:` |
 | `footer` | `footer:` in `_quarto.yml` |
@@ -104,7 +115,7 @@ Never copy the whole `deck.scss` into a template or a layer. A template's own `d
 
 ### Personal and project templates
 
-`templates/<name>/` in a layer adds a template, or replaces an official one of the same name: project over personal over official, and the script says what it shadowed. Names are lower-case letters, digits, and hyphens. A template needs `talk.qmd` and a `_quarto.yml` with one-line `theme:` and `footer:` entries; keep `title`, `author`, `institute`, and `lang` on one line each in the front matter, because the script rewrites those lines. Symbolic links inside a template are skipped, and so is a template file on a path the scaffold writes itself (`theme/personal.scss`, `theme/project.scss`, anything under `_theme`) or on a case variant of one (`Theme/Personal.scss` is the same file on a macOS disk), with a warning — for example a template made by copying a finished deck.
+`templates/<name>/` in a layer adds a template, or replaces an official one of the same name: project over personal over official, and the script says what it shadowed. Names are lower-case letters, digits, and hyphens. A template needs `talk.qmd` (written into the deck as `<name>.qmd`; a `project.render` entry naming `talk.qmd` is changed to match) and a `_quarto.yml` with one-line `theme:` and `footer:` entries; keep `title`, `author`, `institute`, and `lang` on one line each in the front matter, because the script rewrites those lines. Symbolic links inside a template are skipped, and so is a template file on a path the scaffold writes itself (`theme/personal.scss`, `theme/project.scss`, anything under `_theme`) or on a case variant of one (`Theme/Personal.scss` is the same file on a macOS disk), with a warning — for example a template made by copying a finished deck.
 
 ### Trust
 
@@ -112,7 +123,7 @@ The project layer is found by walking up from the deck folder, so it can come fr
 
 ## After scaffolding
 
-1. **Front matter**: `title`, `subtitle`, `author`, `institute`, `date` in `talk.qmd`; `footer` in `_quarto.yml`. The settings above fill the ones you set; edit the rest by hand. In the beamer file: `\title`, `\author`, `\date`, and the `frame footer`.
+1. **Front matter**: `title`, `subtitle`, `author`, `institute`, `date` in `<name>.qmd`; `footer` in `_quarto.yml`. The settings above fill the ones you set; edit the rest by hand. In the beamer file: `\title`, `\author`, `\date`, and the `frame footer`.
 2. **Palette**: for every deck, put the five `$deck-*` values in your personal `theme.scss`; for one deck, edit the deck's `theme/personal.scss` (or `theme/project.scss`) when it has one, because a layer override wins over `deck.scss`; otherwise change the five values at the top of the deck's own `_theme/deck.scss` (that copy belongs to the deck). Formulas follow the palette through the colour macros; only the beamer file needs its four `\definecolor{deck?}{RGB}{…}` lines changed to the same RGB values.
 3. **Macros**: add any macro the talk uses to the hidden MathJax block and to the beamer preamble under the same name. Never write `#hex` inside a `\newcommand` body; `#` is the parameter character, and every formula that uses the macro breaks.
 4. **Slides**: one `##` per slide, `#` for section dividers, and a final `# Backup` section. Everything after `# Backup` (Quarto) or `\appendix` (beamer) is excluded from the density limits and the title comparison. Keep that divider in English in Chinese decks too: `check-density` recognises only `Backup` (issue #9).
@@ -176,8 +187,8 @@ The minutes across all slides should add up to the time slot minus a buffer (for
 
 ## Keeping the beamer mirror in sync
 
-- Quarto is the content master. Edit `talk.qmd` (from `research-talk`) first, then mirror the change in the beamer file.
-- Main-body titles must match one to one in order. `check-density.mjs --qmd talk.qmd --tex beamer/talk.tex` reports the first mismatch.
+- Quarto is the content master. Edit the deck's `<name>.qmd` (built from `research-talk`) first, then mirror the change in the beamer file.
+- Main-body titles must match one to one in order. `check-density.mjs --tex beamer/<name>.tex`, run in the deck folder, reports the first mismatch.
 - Compile with XeLaTeX twice (the second run fixes page numbers). Require 0 errors and 0 overfull boxes. Fix overfull frames with `\small`, `\footnotesize`, or `\resizebox{\linewidth}{!}{…}` on tables, never by deleting content that the Quarto deck has.
 - If the project lives in a cloud-synced folder (Dropbox, iCloud), copy it to a local temporary folder, compile there, and copy the PDF back. Sync clients can corrupt auxiliary files mid-compile.
 - The beamer template uses the metropolis theme. If it is not installed, `\usetheme{metropolis}` fails; install it (`tlmgr install beamertheme-metropolis`) or switch to another theme and keep the macros.

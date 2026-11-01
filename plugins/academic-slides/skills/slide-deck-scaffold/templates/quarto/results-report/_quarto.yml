@@ -1,4 +1,4 @@
-# Quarto revealjs project for one results report. Render with `quarto render`; the output is talk.html.
+# Quarto revealjs project for one results report. Render with `quarto render`; the output is the main file's name with .html.
 project:
   title: "成果報告"
   render:

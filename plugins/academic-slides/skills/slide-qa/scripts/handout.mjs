@@ -8,17 +8,17 @@ import { spawnSync } from 'child_process';
 import { mkdtempSync, copyFileSync, writeFileSync, existsSync, readFileSync, rmSync, statSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
-import { args, writeOutput } from './_lib.mjs';
+import { args, findDeckFile, writeOutput } from './_lib.mjs';
 import { PRESETS, A4, geometry, texFor, pdfTitle } from './_handout.mjs';
 
-const { get: rawGet, has } = args(`Usage: node handout.mjs --pdf talk.pdf [--out talk-handout.pdf] [--landscape | --portrait]
+const { get: rawGet, has } = args(`Usage: node handout.mjs [--pdf <deck>.pdf] [--out <deck>-handout.pdf] [--landscape | --portrait]
          [--rows R --cols C] [--margin 12] [--gap 8] [--no-frame] [--frame-width 0.4]
          [--title "text"] [--no-header] [--no-page-numbers] [--cjk-font "PingFang TC"]
 Presets: --landscape (the default) is 2 rows × 2 columns; --portrait is 3 rows × 2 columns.
 --rows and --cols replace the preset grid. Margin and gap are in mm, the frame width in pt.
 The header is the PDF's title (else the file name) unless --title or --no-header is given.
 Needs XeLaTeX (TeX Live) and pdfinfo (poppler).
-Exit status: 0 handout written, 1 failed (bad option, missing tool, LaTeX error), 2 PDF not found.`);
+Exit status: 0 handout written, 1 failed (bad option, missing tool, LaTeX error), 2 PDF not found, or the deck's .pdf not found in the current folder when --pdf is not given.`);
 
 function fail(message, code = 1) {
   console.error(message);
@@ -70,7 +70,7 @@ const frameWidth = number('frame-width', 0.4, { min: 0.05 });
 const cjkFont = get('cjk-font', '');
 if (cjkFont && !/^[\p{L}\p{N} ._-]+$/u.test(cjkFont)) fail(`--cjk-font takes a font name (letters, digits, spaces, . _ -); got "${cjkFont}"`);
 
-const PDF = path.resolve(get('pdf', 'talk.pdf'));
+const PDF = path.resolve(findDeckFile(get('pdf'), '.pdf', 'pdf', { exclude: /-handout\.pdf$/i }));
 if (!existsSync(PDF)) fail(`PDF not found: ${PDF} (export or compile the deck first)`, 2);
 const stem = path.basename(PDF, path.extname(PDF));
 const OUT = path.resolve(get('out', path.join(path.dirname(PDF), `${stem}-handout.pdf`)));

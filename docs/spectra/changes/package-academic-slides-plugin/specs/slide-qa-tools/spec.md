@@ -155,3 +155,36 @@ The static server in `_lib.mjs` SHALL respond 403 to any request whose `Host` he
 - **WHEN** 維護者依技能說明安裝鎖定依賴與 Chromium 後執行 `npm test`
 - **THEN** 測試涵蓋檔案邊界與實際瀏覽器輸出，且文件不將此防護描述為對本機目錄併發替換的 sandbox
 
+### Requirement: Scripts find the deck file when none is given
+
+When run without its file option — `--qmd` for check-density; `--html` for check-fill, check-layout, check-mathjax, and export-pdf; `--pdf` for handout — each script SHALL read the deck's own file in the current folder, without searching subfolders. The deck's main file is the single `.qmd` that `project.render` of the folder's `_quarto.yml` names in this folder, else, when that is not exactly one, the folder's only `.qmd`. A value read from `_quarto.yml` SHALL be used only when it is a plain file name: one with a folder, `..`, an absolute path, or a wildcard is ignored, so the script never reads outside the current folder. When the main file can be told, the script SHALL use the file named after it (`<stem>.qmd`; `<stem>.html`, or the `output-file` under `format: revealjs:` (else the top-level one, regardless of order) with `.html` added unless it ends in `.html`; and the `.pdf` under the `.html`'s stem); when that file is missing, the script SHALL exit with status 2, name the missing file, and list the other candidates, without reading another file. When the main file cannot be told, the script SHALL use the folder's only file with that extension (handout leaving out files whose names end in `-handout.pdf`), and with none or more than one it SHALL exit with status 2, naming the folder and every candidate. Extensions SHALL match exactly, and file names in its error messages SHALL have control characters replaced. A file option given without a file name, or followed by another option, SHALL make the script exit with status 2 (handout: 1, its status for a bad option since #34). A file given with the option SHALL be used as given. No script SHALL fall back to a fixed name such as `talk.html` (issue #44; deck's-own-file rule by user decision 2026-10-31, after verify round 1).
+
+#### Scenario: One deck in the folder
+
+- **WHEN** check-mathjax runs without `--html` in a folder whose only `.qmd` is `jscs-imputation.qmd` and whose `.html` file is `jscs-imputation.html`
+- **THEN** it checks `jscs-imputation.html`
+
+#### Scenario: Deck with derived PDFs
+
+- **WHEN** handout runs without `--pdf` in a folder whose `_quarto.yml` renders `talk.qmd` and which holds `talk.pdf`, `talk-notes.pdf`, and `talk-dual.pdf`
+- **THEN** it lays out `talk.pdf`
+
+#### Scenario: The deck's own file is missing
+
+- **WHEN** handout runs without `--pdf` in a folder holding `talk.qmd` and `talk-notes.pdf` but no `talk.pdf`
+- **THEN** it exits with status 2, names `talk.pdf` as missing, and lists `talk-notes.pdf`
+
+#### Scenario: Two candidates and no main file
+
+- **WHEN** check-density runs without `--qmd` in a folder holding `a.qmd` and `b.qmd` and no `_quarto.yml`
+- **THEN** it exits with status 2, and its message names both files and the `--qmd` option
+
+#### Scenario: Option without a file name
+
+- **WHEN** check-mathjax runs with `--html` as its last argument
+- **THEN** it exits with status 2 saying that `--html` needs a file name
+
+#### Scenario: Existing deck named talk
+
+- **WHEN** export-pdf runs without `--html` in a deck whose main file is `talk.qmd` and which holds `talk.html`
+- **THEN** it writes `talk.pdf` as before

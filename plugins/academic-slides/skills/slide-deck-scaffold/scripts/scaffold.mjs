@@ -9,13 +9,41 @@ import { fileURLToPath } from 'node:url';
 export const FIELDS = ['template', 'lang', 'author', 'affiliation', 'footer'];
 export const DEFAULT_TEMPLATE = 'research-talk';
 const NAME = /^[a-z0-9][a-z0-9-]*$/;
+// The deck's main file is <name>.qmd, named after the deck's content (issue #44). The name the user gives is
+// used exactly as given, not normalised: letters of any script (W07_記憶), digits, _ - + ( ) @ （ ）, and dots inside
+// the name (user decision 2026-10-31, after verify round 1). Refused, because they are unsafe or not portable as a file
+// name: whitespace, path separators, a leading - or ., a trailing dot, control characters, : * ? " < > |, and the
+// Windows device names (CON, NUL, COM1, COM¹, …), which stay reserved with any extension. Characters that YAML or
+// a shell treats specially (# , [ ] { } & * ! | > ' % `) are not in the set, so the name is safe to write into _quarto.yml.
+export const DECK_NAME = /^[\p{L}\p{N}_][\p{L}\p{M}\p{N}_.+()@（）・·-]*$/u;
+const NAME_CHAR = /[\p{L}\p{M}\p{N}_.+()@（）・·-]/u;
+const DEVICE = /^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])$/i;
+const NAME_BYTES = 200;   // with .qmd, _files, -handout.pdf added, a file name stays under the usual 255-byte limit
+export const NAME_RULE = 'letters of any script, digits, _ - + ( ) @ （ ） ・ ·, and dots inside the name; no spaces, path separators, '
+  + 'leading - or ., trailing dot, : * ? " < > |, or a Windows device name such as CON or NUL';
+// What is wrong with a deck name, in words, or null when it is usable; the message names the characters refused.
+export function nameProblem(name) {
+  if (typeof name !== 'string' || name === '') return 'it is empty';
+  const refused = [...new Set([...name].filter((c) => !NAME_CHAR.test(c)))];
+  if (refused.length) return `it contains ${refused.map((c) => show(c)).join(', ')}`;
+  if (!DECK_NAME.test(name)) return `it starts with ${show(name[0])}; start with a letter, a digit, or _`;
+  if (name.endsWith('.')) return 'it ends with a dot';
+  if (DEVICE.test(name.split('.')[0])) return `${name.split('.')[0]} is a Windows device name`;
+  if (Buffer.byteLength(name) > NAME_BYTES) return `it is longer than ${NAME_BYTES} bytes`;
+  return null;
+}
+export const deckNameOk = (name) => nameProblem(name) === null;
+// A name given with its .qmd ending names the same file: w07.qmd means the main file w07.qmd.
+export const deckStem = (name) => (typeof name === 'string' ? name.replace(/\.qmd$/i, '') : name);
+export const NAME_HINT = 'name the main file after the deck\'s content (for example <venue>-<topic>, or W07_<topic> for a lecture); '
+  + 'when no single name follows from what the user said or from the title, venue, or course, ask the user';
 const SETTINGS_DIR = path.join('.claude', '.academic-slides');
 const SKILL_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const OFFICIAL_DIR = path.join(SKILL_DIR, 'templates', 'quarto');
 const OFFICIAL_THEME = path.join(OFFICIAL_DIR, '_theme', 'deck.scss');
 const OFFICIAL_FRAME = path.join(OFFICIAL_DIR, '_theme', 'frame.html');   // places footer, slide number, menu on the page (#23)
 
-const HELP = `Usage: node scaffold.mjs --out <folder> [--template <name>] [--title <title>] [--dry-run]
+const HELP = `Usage: node scaffold.mjs --out <folder> --name <name> [--template <name>] [--title <title>] [--dry-run]
        node scaffold.mjs --list [--out <folder>]
 
 Creates a deck folder from a template and the shared theme, merging three settings layers
@@ -26,8 +54,10 @@ field by field (project > personal > official):
 local.json fields (string, or null to remove): ${FIELDS.join(', ')}
 
   --out       deck folder to create; must not exist or be empty
+  --name      the main file is <name>.qmd (rendered as <name>.html): ${NAME_RULE}.
+              Required: ${NAME_HINT}
   --template  template name (overrides every layer; default ${DEFAULT_TEMPLATE})
-  --title     title written into talk.qmd
+  --title     title written into the main file
   --dry-run   print the resolution, write nothing
   --list      list templates with their layer; shadowed ones are marked
   --trust-project  use a template or theme.scss from the project layer. That layer is found by walking
@@ -194,12 +224,13 @@ export function rewriteFrontMatter(text, edits, where = 'talk.qmd') {
   return `---\n${lines.join('\n')}\n---\n${text.slice(m[0].length)}`;
 }
 
-export function rewriteQuartoYml(text, { theme, footer }, where = '_quarto.yml') {
+export function rewriteQuartoYml(text, { theme, footer, mainFile }, where = '_quarto.yml') {
   const themeLine = /^([ \t]*)theme:[ \t]*(\S.*)?$/m;
   const t = text.match(themeLine);
   if (!t) throw new ScaffoldError(`${where} has no theme: line`);
   if (!t[2]) throw new ScaffoldError(`${where}: theme must be a one-line list such as [default, _theme/deck.scss]`);
   let out = text.replace(themeLine, (_, indent) => `${indent}theme: [${theme.join(', ')}]`);
+  if (mainFile !== undefined) out = renameRenderTarget(out, mainFile);
   if (footer === undefined) return out;
   const footerLine = /^([ \t]*)footer:.*$/m;
   if (footer === null) return out.replace(/^[ \t]*footer:.*(\r?\n)?/m, '');
@@ -207,7 +238,58 @@ export function rewriteQuartoYml(text, { theme, footer }, where = '_quarto.yml')
   return out.replace(themeLine, (line, indent) => `${line}\n${indent}footer: ${show(footer)}`);
 }
 
-// Template files to copy: everything except symbolic links, a top-level _theme/, and any deck.scss.
+// Point the deck's _quarto.yml at its own main file (issue #44). In the render list that is a direct child of
+// project:, a value that is exactly talk.qmd (quoted or not, with or without ./) becomes <name>.qmd, in a block
+// list, a flow list, or a single value; a value that only contains talk.qmd ("my talk.qmd"), a comment, and a
+// talk.qmd listed anywhere else (under resources, say) are left alone. An output-file of talk or talk.html,
+// at the top level or under format: revealjs:, becomes <name> or <name>.html.
+export function splitComment(body) {   // YAML: '#' after whitespace, outside quotes, starts a comment
+  let quote = null;
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (quote) { if (c === quote) quote = null; }
+    else if (c === '"' || c === "'") quote = c;
+    else if (c === '#' && (i === 0 || /\s/.test(body[i - 1]))) return [body.slice(0, i), body.slice(i)];
+  }
+  return [body, ''];
+}
+const WHOLE_TALK = /(^|[[,:]|-[ \t])([ \t]*)(["']?)(\.\/)?talk\.qmd\3(?=[ \t]*(?:,|\]|$))/gi;
+export function renameRenderTarget(text, mainFile) {
+  const stem = mainFile.replace(/\.qmd$/, '');
+  let top = null;            // the current top-level key
+  let childIndent = -1;      // indent of that key's direct children
+  let renderIndent = -1;     // indent of project.render while inside its value
+  let fmtIndent = -1;        // indent of format.revealjs while inside it
+  return text.split(/(?<=\n)/).map((line) => {
+    const nl = line.match(/\r?\n$/)?.[0] ?? '';
+    const [code, comment] = splitComment(line.slice(0, line.length - nl.length));
+    if (/^\s*$/.test(code)) return line;
+    const indent = code.match(/^[ \t]*/)[0].length;
+    if (indent === 0) { top = code.match(/^([^:\s]+):/)?.[1] ?? null; childIndent = -1; renderIndent = -1; fmtIndent = -1; }
+    else {
+      if (childIndent < 0) childIndent = indent;
+      if (indent <= childIndent && !(renderIndent === indent && /^\s*-/.test(code))) { renderIndent = -1; if (indent < childIndent || !/^\s*revealjs:/.test(code)) fmtIndent = -1; }
+      if (top === 'project' && indent === childIndent && /^\s*render:/.test(code)) renderIndent = indent;
+      if (top === 'format' && indent === childIndent && /^\s*revealjs:/.test(code)) fmtIndent = indent;
+      if (renderIndent >= 0) return code.replace(WHOLE_TALK, (_, d, sp, q, dot) => `${d}${sp}${q}${dot ?? ''}${mainFile}${q}`) + comment + nl;
+    }
+    const outputFile = indent === 0 || (fmtIndent >= 0 && indent > fmtIndent);
+    if (!outputFile) return line;
+    return code.replace(/^([ \t]*output-file:[ \t]*)(["']?)(\.\/)?talk(\.html)?\2([ \t]*)$/i,
+      (_, lead, q, dot, ext, tail) => `${lead}${q}${dot ?? ''}${stem}${ext ?? ''}${q}${tail}`) + comment + nl;
+  }).join('');
+}
+
+// A template made by copying a finished deck carries the outputs of rendering talk.qmd; copied into a deck named
+// otherwise they would sit beside <name>.html and make slide-qa's lookup ambiguous, so they are left out (#44).
+// Also the files derived from them by the plugin's own tools (talk-notes, talk-dual, talk-presenter-notes,
+// talk-handout…, talk-script…), and the folders talk_files/, slide-qa's qa/ and Quarto's .quarto/. Other files
+// named talk-… (talk-background.pdf, say) are template content and are kept.
+const RENDER_OUTPUT_FILE = /^talk(-(notes|dual|presenter-notes|handout[^/]*|script[^/]*))?\.(html|pdf)$/;
+const RENDER_OUTPUT_DIR = /^(talk_files|qa|\.quarto)$/;
+
+// Template files to copy: everything except symbolic links, a top-level _theme/, any deck.scss, and the
+// render outputs of talk.qmd at the top level.
 function templateFiles(dir, warnings, rel = '') {
   const files = [];
   for (const entry of readdirSync(path.join(dir, rel)).sort()) {
@@ -216,6 +298,8 @@ function templateFiles(dir, warnings, rel = '') {
     const st = lstatSync(full);
     if (st.isSymbolicLink()) {
       warnings.push(`skipped symbolic link ${relPath} in the template`);
+    } else if (rel === '' && (st.isDirectory() ? RENDER_OUTPUT_DIR : RENDER_OUTPUT_FILE).test(pathKey(entry))) {
+      warnings.push(`ignored the template's own ${entry}${st.isDirectory() ? '/' : ''}; it is an output of rendering or checking a deck, not template content`);
     } else if (st.isDirectory()) {
       if (rel === '' && pathKey(entry) === '_theme') warnings.push(`ignored the template's own ${entry}/; the shared theme is used`);
       else files.push(...templateFiles(dir, warnings, relPath));
@@ -275,7 +359,11 @@ function untrustedProjectFiles(tpl, themeFiles, project) {
 }
 
 // Everything the deck will contain, computed without writing anything.
-export function planDeck({ out, home, template, title, trustProject = false }) {
+export function planDeck({ out, home, template, title, deckName, trustProject = false }) {
+  const stem = deckStem(deckName);
+  const problem = nameProblem(stem);
+  if (problem) throw new ScaffoldError(`deck name ${show(deckName)} is invalid: ${problem}; use ${NAME_RULE}`);
+  const mainFile = `${stem}.qmd`;
   const resolvedOut = path.resolve(out);
   checkOut(resolvedOut);
   const { personal, project, layers } = settingsLayers(home, resolvedOut, trustProject);
@@ -290,14 +378,14 @@ export function planDeck({ out, home, template, title, trustProject = false }) {
   // Paths the scaffold writes itself. A template file on one of them, on a folder above one, or on a case
   // or Unicode variant of one would stop the write half-way, so it is skipped before anything is written,
   // and so is a second file whose name differs from an earlier one only in case (#8 verify).
-  const generated = [path.join('_theme', 'deck.scss'), path.join('_theme', 'frame.html'), ...themeFiles.map((f) => f.rel)].map(pathKey);
+  const generated = [path.join('_theme', 'deck.scss'), path.join('_theme', 'frame.html'), mainFile, ...themeFiles.map((f) => f.rel)].map(pathKey);
   const clashes = (k) => generated.some((g) => g === k || g.startsWith(k + path.sep) || k.startsWith(g + path.sep));
   const copies = [];
   const taken = new Set();
   for (const rel of templateFiles(tpl.dir, warnings)) {
     const k = pathKey(rel);
     if (k === 'talk.qmd' || k === '_quarto.yml') {   // rewritten from the template's own copy below
-      if (rel !== k) warnings.push(`ignored the template's own ${rel}; the scaffold writes ${k} itself`);
+      if (rel !== k) warnings.push(`ignored the template's own ${rel}; the scaffold reads the template's ${k} itself`);
       continue;
     }
     if (clashes(k)) warnings.push(`ignored the template's own ${rel}; the scaffold writes that path itself`);
@@ -315,16 +403,22 @@ export function planDeck({ out, home, template, title, trustProject = false }) {
   const qmd = rewriteFrontMatter(readFileSync(qmdFile, 'utf8'), {
     title: fields.title?.value, author: fields.author?.value, institute: fields.affiliation?.value, lang: fields.lang?.value,
   }, qmdFile);
-  const yml = rewriteQuartoYml(readFileSync(ymlFile, 'utf8'), { theme, footer: fields.footer?.value }, ymlFile);
+  const yml = rewriteQuartoYml(readFileSync(ymlFile, 'utf8'), { theme, footer: fields.footer?.value, mainFile }, ymlFile);
+  // A value that is still talk.qmd (not a name such as w07-talk.qmd that merely ends in it), or output-file talk.
+  const leftover = [...yml.matchAll(/(?:^|[\s[,:"']|\.\/)(talk\.qmd)(?=["'\s,\]#]|$)/gim)].some((m) => m[1] !== mainFile)
+    || (stem.toLowerCase() !== 'talk' && /output-file:[ \t]*["']?(\.\/)?talk(\.html)?["']?[ \t]*(#|$)/im.test(yml));
+  if (leftover) {
+    warnings.push(`${path.join(resolvedOut, '_quarto.yml')} still mentions talk.qmd or output-file talk after the rewrite; check that the deck renders ${mainFile}`);
+  }
   const files = [
     ...copies,
     { src: OFFICIAL_THEME, rel: path.join('_theme', 'deck.scss') },
     { src: OFFICIAL_FRAME, rel: path.join('_theme', 'frame.html') },
     ...themeFiles,
-    { content: qmd, rel: 'talk.qmd' },
+    { content: qmd, rel: mainFile },
     { content: yml, rel: '_quarto.yml' },
   ];
-  return { out: resolvedOut, name, tpl, layers, project, fields, theme, warnings, files };
+  return { out: resolvedOut, name, mainFile, tpl, layers, project, fields, theme, warnings, files };
 }
 
 export function writeDeck(plan) {
@@ -343,7 +437,7 @@ function fieldLine(key, entry) {
 }
 
 export function report(plan) {
-  const lines = [`Template  ${plan.name}  (${plan.tpl.layer}: ${plan.tpl.dir})`];
+  const lines = [`Main file ${plan.mainFile}`, `Template  ${plan.name}  (${plan.tpl.layer}: ${plan.tpl.dir})`];
   if (plan.tpl.shadowed.length) lines.push(`          shadows the ${plan.tpl.shadowed.join(' and ')} template of the same name`);
   lines.push('Settings');
   for (const l of plan.layers) lines.push(`  ${l.layer.padEnd(9)} ${path.join(l.dir, 'local.json')}${existsSync(path.join(l.dir, 'local.json')) ? '' : ' (not found)'}`);
@@ -357,7 +451,7 @@ export function report(plan) {
 
 function parseArgs(argv) {
   const opts = {};
-  const valued = { '--out': 'out', '--template': 'template', '--title': 'title' };
+  const valued = { '--out': 'out', '--name': 'name', '--template': 'template', '--title': 'title' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--help' || a === '-h') opts.help = true;
@@ -395,14 +489,20 @@ export function main(argv, home = os.homedir()) {
   try {
     if (opts.list) { printList(opts, home); return 0; }
     if (!opts.out) { console.error(`--out is required\n\n${HELP}`); return 2; }
-    const plan = planDeck({ out: opts.out, home, template: opts.template, title: opts.title, trustProject: opts.trustProject });
+    if (opts.name === undefined) { console.error(`--name is required: ${NAME_HINT}\n\n${HELP}`); return 2; }
+    const problem = nameProblem(deckStem(opts.name));
+    if (problem) {
+      console.error(`--name ${show(opts.name)} is invalid: ${problem}; use ${NAME_RULE}`);
+      return 2;
+    }
+    const plan = planDeck({ out: opts.out, home, template: opts.template, title: opts.title, deckName: opts.name, trustProject: opts.trustProject });
     console.log(report(plan));
     if (opts.dryRun) {
       console.log(`Dry run: nothing written (${plan.files.length} files would go to ${plan.out})`);
       return 0;
     }
     writeDeck(plan);
-    console.log(`Wrote ${plan.files.length} files to ${plan.out}\nNext: cd ${show(plan.out)} && quarto render`);
+    console.log(`Wrote ${plan.files.length} files to ${plan.out}\nMain file ${plan.mainFile} (quarto render writes ${plan.mainFile.replace(/\.qmd$/, '.html')})\nNext: cd ${show(plan.out)} && quarto render`);
     return 0;
   } catch (e) {
     console.error(`scaffold: ${e.message}`);
