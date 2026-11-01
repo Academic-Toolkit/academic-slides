@@ -12,7 +12,7 @@
 // The print view is a different layout (revealjs's print stylesheet, an unscaled slide, the footer
 // placed on the paper), so a slide that is clean on screen can still run into the footer in the PDF.
 import path from 'path';
-import { options, playwright, deckPath, findDeckFile, serve, openDeck, openPrintView, outputDirectory, writeOutput } from './_lib.mjs';
+import { options, printable, playwright, deckPath, findDeckFile, serve, openDeck, openPrintView, outputDirectory, writeOutput } from './_lib.mjs';
 
 const { get, has } = options(`Usage: node check-layout.mjs [--html <deck>.html] [--width 1280] [--height 720]
                              [--footer '.reveal .footer'] [--out <deck folder>/qa] [--shots]
@@ -202,7 +202,8 @@ if (fatal) {
 }
 if (offenders.length) {
   console.log(`✗ ${offenders.length} slide(s) with layout problems at ${WIDTH}x${HEIGHT}:\n`);
-  for (const o of offenders) console.log(`  #${o.index}  ${o.title}\n      ${reasons(o)}  →  ${o.file}`);
+  // slide titles come from the deck and screenshot names from its file name: printable (#51)
+  for (const o of offenders) console.log(`  #${o.index}  ${printable(o.title)}\n      ${reasons(o)}  →  ${printable(o.file)}`);
 }
 if (printError) {
   if (offenders.length) console.log('');
@@ -213,7 +214,7 @@ if (print.warning) console.log(print.warning);
 if (print.offenders.length) {
   if (offenders.length) console.log('');
   console.log(`✗ ${print.offenders.length} PDF page(s) with layout problems in the print view (${print.paper.width}x${print.paper.height} page):\n`);
-  for (const o of print.offenders) console.log(`  page ${o.page}  ${o.title}\n      ${reasons(o)}  →  ${o.file}`);
+  for (const o of print.offenders) console.log(`  page ${o.page}  ${printable(o.title)}\n      ${reasons(o)}  →  ${printable(o.file)}`);
 }
 if (offenders.length || print.offenders.length) process.exit(1);
 console.log(`✓ no layout problems at ${WIDTH}x${HEIGHT} or in the PDF print view`);

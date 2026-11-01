@@ -148,5 +148,5 @@ try {
 rmSync(work, { recursive: true, force: true });
 const sheets = Math.ceil(pages / (rows * cols));
 const count = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;
-console.log(`✓ wrote ${OUT} (${count(pages, 'slide')} on ${count(sheets, `${orientation} A4 page`)}, `
+console.log(`✓ wrote ${printable(OUT)} (${count(pages, 'slide')} on ${count(sheets, `${orientation} A4 page`)}, `
   + `${count(rows, 'row')} × ${count(cols, 'column')}, each slide ${g.slideW.toFixed(1)} × ${g.slideH.toFixed(1)} mm)`);

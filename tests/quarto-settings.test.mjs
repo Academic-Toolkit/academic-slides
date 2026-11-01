@@ -68,6 +68,11 @@ const UNREAD = {
   'quoted output-dir': ['project:\n  "output-dir": _site', 2],
   'output-dir with a space before the colon': ['project:\n  output-dir : _site', 2],
   'a multi-line flow mapping for format': ['format: {\n  revealjs: {theme: x}\n}', 1],
+  // verify round 2 (adversarial)
+  'a plain scalar continued inside a flow list': ['project:\n  render: [\n    my\n    talk.qmd\n  ]', 4],
+  "a flow list continued at the key's indent": ['project:\n  render: [a.qmd,\n  b.qmd]', 3],
+  'output-file deeper under revealjs': ['format:\n  revealjs:\n    foo:\n      output-file: x', 4],
+  'a null output-file': ['output-file: ~', 1],
 };
 
 // Forms that are read, or deliberately not used, and must not be refused.
@@ -101,6 +106,9 @@ const READ = {
   'a document end marker': 'project:\n  render: [deck.qmd]\n...',
   'a one-line flow mapping for format without an output name': 'format: {pdf: default, revealjs: {incremental: true}}',
   'a one-line flow mapping for project without render': 'project: {type: default}',
+  // verify round 2 (adversarial)
+  'an anchored block scalar under revealjs': 'format:\n  revealjs:\n    output-file: slides\n    notes: &n |\n      output-file: wrong',
+  'output-ext under another format': 'format:\n  pdf:\n    output-ext: tex',
 };
 
 // ---------- the detector ----------
@@ -484,6 +492,9 @@ const OUTPUT_SOURCES_R2 = {
   'a quoted output-dir': [{ '_quarto.yml': 'project:\n  "output-dir": _site\n' }, '_quarto.yml', 2],
   'a quoted output-ext': [{ '_quarto.yml': '"output-ext": htm\n' }, '_quarto.yml', 1],
   'a quoted output-file under an extension format': [{ '_quarto.yml': 'format:\n  clean-revealjs:\n    "output-file": slides\n' }, '_quarto.yml', 3],
+  // verify round 2 (adversarial): a project type other than default writes to its own output folder (_site, _book, ...)
+  'a website project': [{ '_quarto.yml': 'project:\n  type: website\n' }, '_quarto.yml', 2],
+  'a book project': [{ '_quarto.yml': 'project:\n  type: book\n  render: [deck.qmd]\n' }, '_quarto.yml', 2],
 };
 for (const [name, [files, file, line]] of Object.entries(OUTPUT_SOURCES_R2)) {
   test(`#50 round 2: ${name} is refused for the .html lookup, not for the .qmd lookup`, () => {
@@ -499,4 +510,48 @@ for (const [name, [files, file, line]] of Object.entries(OUTPUT_SOURCES_R2)) {
 test('a profile file with a one-line flow mapping that sets nothing the scanner reads is not refused', () => {
   const dir = folder({ 'deck.qmd': QMD, '_quarto.yml': 'project:\n  render: [deck.qmd]\n', '_quarto-print.yml': 'format: {pdf: default}\n...\n' });
   assert.deepEqual(lib.chooseDeckFile('.qmd', { dir }), { file: 'deck.qmd' });
+});
+
+// verify round 2 (adversarial)
+test('output-ext under another format in the front matter does not stop the .html lookup', () => {
+  const dir = folder({ 'deck.qmd': FM('format:\n  pdf:\n    output-ext: tex\n'), 'deck.html': '<html></html>' });
+  assert.deepEqual(lib.chooseDeckFile('.html', { dir }), { file: 'deck.html' });
+});
+
+test('a symbolic-link settings file does not show the names its metadata-files lists', () => {
+  const outside = realpathSync(mkdtempSync(path.join(tmpdir(), 'quarto-settings-outside-')));
+  writeFileSync(path.join(outside, 'settings.yml'), 'metadata-files: [TOP-SECRET-9f3a.yml]\n');
+  const dir = folder({ 'deck.qmd': QMD });
+  symlinkSync(path.join(outside, 'settings.yml'), path.join(dir, '_quarto.yml'));
+  const r = runQa(dir, 'check-density.mjs');
+  assert.equal(r.code, 2, r.out);
+  assert.doesNotMatch(r.out, /TOP-SECRET/);
+});
+
+test('the scaffold accepts a template whose profile only changes the output folder or another format\'s extension', () => {
+  for (const [name, profile] of [['publish', 'project:\n  output-dir: _print\n'], ['texout', 'format:\n  pdf:\n    output-ext: tex\n']]) {
+    const s = sandbox();
+    personalTemplate(s, name, `project:\n  render: [talk.qmd]\n${THEME}`, { [`_quarto-${name}.yml`]: profile });
+    const r = runScaffold(s, ['--template', name, '--name', 'w07', '--out', 'deck']);
+    assert.equal(r.code, 0, `${name}: ${r.out}`);
+  }
+});
+
+// verify round 2 (adversarial, F7): Pandoc reads a metadata block after blank lines and later in the document too
+test('front matter after blank lines, or a later YAML block, that sets the output name stops the .html lookup', () => {
+  for (const [name, qmd] of [
+    ['after blank lines', '\n\n---\ntitle: "T"\noutput-file: slides\n---\n\n## A\n'],
+    ['a later block', '---\ntitle: "T"\n---\n\n## A\n\nText.\n\n---\noutput-file: slides\n---\n'],
+  ]) {
+    const dir = folder({ 'deck.qmd': qmd, 'deck.html': '<html></html>' });
+    const r = lib.chooseDeckFile('.html', { dir });
+    assert.equal(r.reason, 'unread', name);
+    assert.match(r.unread.map((u) => `${u.file}:${u.line}`).join(' '), /deck\.qmd:\d+/, name);
+  }
+});
+
+test('a slide break and a fenced code example are not read as metadata blocks', () => {
+  const qmd = '---\ntitle: "T"\n---\n\n## A\n\nText.\n\n---\n\n## B\n\n```yaml\n---\noutput-file: shown\n---\n```\n\n---\n## C\n\n[link](x)\n\n---\n';
+  const dir = folder({ 'deck.qmd': qmd, 'deck.html': '<html></html>' });
+  assert.deepEqual(lib.chooseDeckFile('.html', { dir }), { file: 'deck.html' });
 });

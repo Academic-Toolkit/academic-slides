@@ -1009,3 +1009,10 @@ test('-h or --help anywhere prints the usage and writes nothing, as in the slide
     assert.deepEqual(readdirSync(s.project), [], args.join(' '));
   }
 });
+
+test('--name=w07 says to write the value after a space, as the slide-qa scripts do', () => {
+  const s = sandbox();
+  const r = spawnSync(process.execPath, [SCAFFOLD, '--name=w07', '--out', 'deck'], { cwd: s.project, env: { ...process.env, HOME: s.home }, encoding: 'utf8' });
+  assert.equal(r.status, 2);
+  assert.match(r.stdout + r.stderr, /--name=w07: write the value after a space \(--name w07\)/);
+});

@@ -40,6 +40,11 @@ CASES = {
     'format flow with an output name': 'format: {revealjs: {output-file: slides}}\n',
     'multi-line format flow': 'format: {\n  revealjs: {\n    output-file: slides\n  }\n}\n',
     'quoted output-file at the top level': '"output-file": slides\n',
+    'plain scalar continued inside a flow list': 'project:\n  render: [\n    my\n    talk.qmd\n  ]\n',
+    "flow list continued at the key's indent": 'project:\n  render: [a.qmd,\n  b.qmd]\n',
+    'anchored block scalar under revealjs': 'format:\n  revealjs:\n    output-file: slides\n    notes: &n |\n      output-file: wrong\n',
+    'output-file deeper under revealjs': 'format:\n  revealjs:\n    foo:\n      output-file: x\n',
+    'null output-file': 'output-file: ~\n',
     # forms the detector must refuse (refused cases are skipped by the oracle test; listed so a regression shows)
     'multi-line plain render item': 'project:\n  render:\n    - my\n      talk.qmd\n',
     'multi-line plain render value': 'project:\n  render: my\n    talk.qmd\n',

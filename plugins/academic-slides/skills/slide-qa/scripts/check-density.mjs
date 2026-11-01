@@ -129,7 +129,7 @@ function normTitle(t) {
 
 const pad = (v, n) => String(v).padStart(n);
 function report(name, slides) {
-  console.log(`\n== ${name} ==`);
+  console.log(`\n== ${printable(name)} ==`);   // names and titles come from the deck folder: printable (#51)
   console.log(`${pad('#', 3)} | ${pad('words', 5)} | ${pad('bul', 3)} | title`);
   let worstW = 0, worstB = 0, ok = true;
   slides.forEach(([title, backup, w, b], i) => {
@@ -138,7 +138,7 @@ function report(name, slides) {
       worstW = Math.max(worstW, w); worstB = Math.max(worstB, b);
       if (w > MAX_WORDS || b > MAX_BULLETS) { flag = '  <-- over limit'; ok = false; }
     }
-    const shown = Array.from(title).slice(0, 70).join('');
+    const shown = printable(Array.from(title).slice(0, 70).join(''));
     console.log(`${pad(i + 1, 3)} | ${pad(w, 5)} | ${pad(b, 3)} | ${backup ? '[backup] ' : ''}${shown}${flag}`);
   });
   console.log(`max words = ${worstW}, max bullets = ${worstB} (main body)`);
@@ -160,7 +160,7 @@ if (TEX) {
   if (qm.length !== tm.length || mism !== null) {
     ok = false;
     const i = mism !== null ? mism : Math.min(qm.length, tm.length);
-    console.log(`\ntitle mismatch at main slide ${i + 1}: qmd=${i < qm.length ? qm[i] : '-'} | tex=${i < tm.length ? tm[i] : '-'} (counts ${qm.length} vs ${tm.length})`);
+    console.log(`\ntitle mismatch at main slide ${i + 1}: qmd=${i < qm.length ? printable(qm[i]) : '-'} | tex=${i < tm.length ? printable(tm[i]) : '-'} (counts ${qm.length} vs ${tm.length})`);
   } else {
     console.log(`\n${qm.length}/${tm.length} titles match`);
   }

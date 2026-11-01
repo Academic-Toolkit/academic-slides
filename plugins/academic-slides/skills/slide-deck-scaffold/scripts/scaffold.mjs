@@ -72,7 +72,9 @@ control character (U+0000-U+001F, U+007F); lang must be a language tag such as e
 template file on a path the scaffold writes itself, or on a case variant of one, is skipped with a
 warning. A project settings folder must belong to you (where ownership cannot be checked, the whole
 project layer needs --trust-project).
-Exit status: 0 done, 1 refused (settings, template, or folder problem), 2 usage error.`;
+Exit status: 0 done, 1 refused (settings, template, or folder problem), 2 usage error (an unknown option, one given
+             twice, a valued option given last, followed by another option, or given a blank value). --help or -h
+             anywhere prints this text.`;
 
 export class ScaffoldError extends Error {}
 
@@ -93,7 +95,7 @@ const LANG = /^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$/;
 // A file read from a settings layer is never followed through a symbolic link: a cloned project could
 // otherwise point talk.qmd or theme.scss at a private file and have it copied into the new deck.
 function refuseLink(p, what) {
-  if (isLink(p)) throw new ScaffoldError(`${p} is a symbolic link; ${what} is never read through a link`);
+  if (isLink(p)) throw new ScaffoldError(`${printable(p)} is a symbolic link; ${what} is never read through a link`);
 }
 
 export function personalDir(home) {
@@ -125,9 +127,9 @@ export function readSettings(dir) {
   try {
     data = JSON.parse(readFileSync(file, 'utf8'));
   } catch (e) {
-    throw new ScaffoldError(`${file}: not valid JSON (${e.message})`);
+    throw new ScaffoldError(`${printable(file)}: not valid JSON (${e.message})`);
   }
-  if (data === null || typeof data !== 'object' || Array.isArray(data)) throw new ScaffoldError(`${file}: must be a JSON object`);
+  if (data === null || typeof data !== 'object' || Array.isArray(data)) throw new ScaffoldError(`${printable(file)}: must be a JSON object`);
   const settings = {};
   const warnings = [];
   for (const [key, value] of Object.entries(data)) {
@@ -135,17 +137,17 @@ export function readSettings(dir) {
       warnings.push(`${file}: unknown field ${show(key)} ignored (known fields: ${FIELDS.join(', ')})`);
       continue;
     }
-    if (value !== null && typeof value !== 'string') throw new ScaffoldError(`${file}: field ${show(key)} must be a string or null`);
+    if (value !== null && typeof value !== 'string') throw new ScaffoldError(`${printable(file)}: field ${show(key)} must be a string or null`);
     // Quarto reads these values as markdown: brackets would allow links and images (which fetch a
     // remote address when the deck is opened), <, {, and backticks HTML, shortcodes, spans, and code.
     // & and the backslash are refused too: Pandoc decodes character references (&#123; is "{") and
     // backslash escapes after this check has run, so they would rebuild any refused character (#8).
     if (typeof value === 'string' && /[<{`[\]&\\\u0000-\u001f\u007f]/.test(value)) {
-      throw new ScaffoldError(`${file}: field ${show(key)} contains <, {, [, ], &, a backslash, a backtick, or a control character; settings values are plain text (no HTML, character references, links, images, Quarto shortcodes, or code)`);
+      throw new ScaffoldError(`${printable(file)}: field ${show(key)} contains <, {, [, ], &, a backslash, a backtick, or a control character; settings values are plain text (no HTML, character references, links, images, Quarto shortcodes, or code)`);
     }
     // Quarto looks lang up as a file name (_language-<lang>.yml), so it must be a language tag, not a path
     if (key === 'lang' && typeof value === 'string' && !LANG.test(value)) {
-      throw new ScaffoldError(`${file}: field "lang" must be a language tag such as en or zh-TW, not ${show(value)}`);
+      throw new ScaffoldError(`${printable(file)}: field "lang" must be a language tag such as en or zh-TW, not ${show(value)}`);
     }
     settings[key] = value;
   }
@@ -195,11 +197,11 @@ export function resolveTemplate(name, dirs) {
   const [chosen, ...rest] = found;
   const layerRoot = layerDirs(dirs).find((d) => d.layer === chosen.layer).root;
   if (!inside(realpathSync(chosen.dir), realpathSync(layerRoot))) {
-    throw new ScaffoldError(`template folder ${chosen.dir} resolves outside ${layerRoot} through a symbolic link`);
+    throw new ScaffoldError(`template folder ${printable(chosen.dir)} resolves outside ${printable(layerRoot)} through a symbolic link`);
   }
   for (const required of ['talk.qmd', '_quarto.yml']) {
     refuseLink(path.join(chosen.dir, required), `a template's ${required}`);
-    if (!isFile(path.join(chosen.dir, required))) throw new ScaffoldError(`template folder ${chosen.dir} has no ${required}`);
+    if (!isFile(path.join(chosen.dir, required))) throw new ScaffoldError(`template folder ${printable(chosen.dir)} has no ${required}`);
   }
   return { ...chosen, shadowed: rest.map((c) => c.layer) };
 }
@@ -211,12 +213,12 @@ function continues(next) {
 // Replace, remove (null), or add single-line `key: value` fields in the front matter.
 export function rewriteFrontMatter(text, edits, where = 'talk.qmd') {
   const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
-  if (!m) throw new ScaffoldError(`${where} has no front matter block at the top`);
+  if (!m) throw new ScaffoldError(`${printable(where)} has no front matter block at the top`);
   const lines = m[1].split(/\r?\n/);
   for (const [key, value] of Object.entries(edits)) {
     if (value === undefined) continue;
     const i = lines.findIndex((l) => l.startsWith(`${key}:`));
-    if (i >= 0 && continues(lines[i + 1])) throw new ScaffoldError(`${where}: front-matter field ${show(key)} must be on one line`);
+    if (i >= 0 && continues(lines[i + 1])) throw new ScaffoldError(`${printable(where)}: front-matter field ${show(key)} must be on one line`);
     if (value === null) {
       if (i >= 0) lines.splice(i, 1);
     } else if (i >= 0) {
@@ -231,8 +233,8 @@ export function rewriteFrontMatter(text, edits, where = 'talk.qmd') {
 export function rewriteQuartoYml(text, { theme, footer, mainFile }, where = '_quarto.yml') {
   const themeLine = /^([ \t]*)theme:[ \t]*(\S.*)?$/m;
   const t = text.match(themeLine);
-  if (!t) throw new ScaffoldError(`${where} has no theme: line`);
-  if (!t[2]) throw new ScaffoldError(`${where}: theme must be a one-line list such as [default, _theme/deck.scss]`);
+  if (!t) throw new ScaffoldError(`${printable(where)} has no theme: line`);
+  if (!t[2]) throw new ScaffoldError(`${printable(where)}: theme must be a one-line list such as [default, _theme/deck.scss]`);
   let out = text.replace(themeLine, (_, indent) => `${indent}theme: [${theme.join(', ')}]`);
   if (mainFile !== undefined) out = renameRenderTarget(out, mainFile);
   if (footer === undefined) return out;
@@ -308,7 +310,7 @@ const OUTPUT_KEYS = ['format', 'revealjs', 'output-file', 'output-ext', 'output-
 const KEY_MENTION = /(^|[\s{,[])(project|format|revealjs|render|output-file|output-ext|output-dir|metadata-files)([ \t]*):(?=[\s{["']|$)/g;
 const MERGE_KEY = /(^|[\s{,[-])<<[ \t]*:/;
 const SCANNED_OUTPUT_FILE = /^[ \t]*output-file:[ \t]*(?:"([^"]*)"|'([^']*)'|(\S+))[ \t]*$/;
-const BLOCK_SCALAR = /(?:^[ \t]*-|:)[ \t]+[|>][-+1-9]*[ \t]*$/;   // a value that starts a | or > block scalar
+const BLOCK_SCALAR = /(?:^[ \t]*-|:)[ \t]+(?:[&!]\S*[ \t]+)*[|>][-+1-9]*[ \t]*$/;   // a value that starts a | or > block scalar, anchor or tag first
 
 // The line with every quoted string replaced by "", the quoted keys (a quoted string followed by a colon, with or
 // without a space, as JSON-style YAML writes them), the other quoted strings with their quote character, and whether
@@ -368,9 +370,10 @@ function settingLines(yml) {
 //                  format such as clean-revealjs, output-ext, project.output-dir; refused when the name is needed
 function scanSettings(yml) {
   const found = [];
-  let top = null; let childIndent = -1; let renderIndent = -1; let fmtIndent = -1; let fmtChild = null;
+  let top = null; let childIndent = -1; let renderIndent = -1; let fmtIndent = -1; let fmtChild = null; let revChild = -1;
   let seen = false; let ended = false;
   let renderFlow = false;    // inside a render flow list spread over several lines
+  let flowItemOpen = false;  // the last line of that list ended in a value with no comma after it
   let continued = -1;        // indent of a plain output-file value that a deeper line without a key would continue
   for (const { line, raw, code, indent, masked, keys, values, open } of settingLines(yml)) {
     const own = masked.match(/^[ \t]*([A-Za-z_][\w.-]*):(?=[ \t]|$)[ \t]*(.*)$/);
@@ -380,13 +383,16 @@ function scanSettings(yml) {
     let files = false;
     let output = continued >= 0 && indent > continued && !own && !/^[ \t]*-/.test(code);   // continues an output-file value
     continued = -1;
-    if (indent === 0) { top = key ?? null; childIndent = -1; renderIndent = -1; fmtIndent = -1; fmtChild = null; renderFlow = false; }
+    // a render flow list left open must go on deeper than its key: YAML would read a line at or left of it otherwise
+    if (renderFlow && indent <= renderIndent && !/^[ \t]*\]/.test(masked)) files = true;   // the closing ] may sit there
+    if (indent === 0) { top = key ?? null; childIndent = -1; renderIndent = -1; fmtIndent = -1; fmtChild = null; revChild = -1; renderFlow = false; }
     else {
       if (childIndent < 0) childIndent = indent;
-      if (indent <= childIndent && !(renderIndent === indent && /^\s*-/.test(code))) { renderIndent = -1; renderFlow = false; if (indent < childIndent || key !== 'revealjs') fmtIndent = -1; }
+      if (indent <= childIndent && !(renderIndent === indent && /^\s*-/.test(code))) { renderIndent = -1; renderFlow = false; if (indent < childIndent || key !== 'revealjs') { fmtIndent = -1; revChild = -1; } }
       if (top === 'format' && indent === childIndent) fmtChild = key ?? null;
       if (top === 'project' && indent === childIndent && key === 'render') renderIndent = indent;
-      if (top === 'format' && indent === childIndent && key === 'revealjs') fmtIndent = indent;
+      if (top === 'format' && indent === childIndent && key === 'revealjs') { fmtIndent = indent; revChild = -1; }
+      else if (fmtIndent >= 0 && indent > fmtIndent && revChild < 0) revChild = indent;   // revealjs's direct children
     }
     // the shape of the document: a flow collection at the root, an explicit key (? key), a merge key, a second document
     // (--- after content, or anything after the end marker ...; the marker itself ends one document and is fine)
@@ -417,17 +423,29 @@ function scanSettings(yml) {
       // Outside a flow list an unquoted comma is part of one value (`- my, talk.qmd`), which the scanner splits.
       if ((keyLine || /^[ \t]*-/.test(code)) && !/^\[/.test(text) && text.includes(',')) files = true;
       if (open || values.some((v) => v.body.includes(',') || (v.q === '"' && v.body.includes('\\')) || (v.q === "'" && v.body.includes("''")))) files = true;
-      if (keyLine) { renderFlow = /^\[/.test(text) && !/\][ \t]*$/.test(text); kinds.push('render'); }
-      else if (renderFlow) { if (/\]/.test(masked)) renderFlow = false; }
-      else if (!/^[ \t]*-/.test(code)) files = true;   // a line continuing a value: YAML joins it, the scanner splits it
+      if (keyLine) {
+        renderFlow = /^\[/.test(text) && !/\][ \t]*$/.test(text);
+        flowItemOpen = renderFlow && !/[[,][ \t]*$/.test(text);
+        kinds.push('render');
+      } else if (renderFlow) {
+        // in a flow list a value runs on until a comma: a line after one that ended without a comma continues it
+        if (flowItemOpen && !/^[ \t]*\]/.test(masked)) files = true;
+        if (/\]/.test(masked)) renderFlow = false;
+        flowItemOpen = !/[[,][ \t]*$/.test(masked.trim());
+      } else if (!/^[ \t]*-/.test(code)) files = true;   // a line continuing a value: YAML joins it, the scanner splits it
     }
     if (key === 'output-file' && (indent === 0 || (fmtIndent >= 0 && indent > fmtIndent))) {
       const o = code.match(SCANNED_OUTPUT_FILE);
-      // not matched, an anchor, alias, tag or flow value, a quoted value with '' or \" the quoted forms could not take, or an escape
-      if (!o || /^[&*!|>{["']/.test(o[3] ?? '') || (o[1] ?? '').includes('\\')) output = true;
+      // not matched, an anchor, alias, tag or flow value, a quoted value with '' or \" the quoted forms could not take, an
+      // escape, a null or empty value, or a key deeper than revealjs's own (Quarto does not take it; verify round 2)
+      if (!o || /^[&*!|>{["']/.test(o[3] ?? '') || (o[1] ?? '').includes('\\') || /^(~|null|Null|NULL)$/.test(o[3] ?? '')
+        || o[1] === '' || o[2] === '' || (indent > 0 && indent > revChild)) output = true;
       else { kinds.push('output-file'); if (o[3] !== undefined) continued = indent; }
     } else if (key === 'output-file' && top === 'format' && indent > childIndent && /.-revealjs$/.test(fmtChild ?? '')) kinds.push('output');
-    if (key === 'output-ext' || (top === 'project' && indent === childIndent && key === 'output-dir')) kinds.push('output');
+    // output-ext at the top level or under a revealjs format; an output folder, set or implied by a project type other
+    // than default (website, book, manuscript write to _site, _book, _manuscript)
+    if ((key === 'output-ext' && (indent === 0 || (top === 'format' && indent > childIndent && /^(revealjs|.+-revealjs)$/.test(fmtChild ?? ''))))
+      || (top === 'project' && indent === childIndent && (key === 'output-dir' || (key === 'type' && value !== '' && !/^["']?default["']?$/.test(value))))) kinds.push('output');
     if (files) found.push({ line, text: raw.trim(), kind: 'unread' });
     else if (output) found.push({ line, text: raw.trim(), kind: 'unread-output' });
     else for (const kind of kinds) found.push({ line, text: raw.trim(), kind });
@@ -461,7 +479,7 @@ export function outputNameLines(yml) {
 // The lines of a profile file (_quarto-<name>.yml) or of a file metadata-files lists that bear on the deck's files,
 // judged by the same rules as the settings file; outputOnly marks those that change only the output name.
 export function profileSettingLines(yml) {
-  return scanSettings(yml).map(({ line, text, kind }) => ({ line, text, outputOnly: OUTPUT_KINDS.includes(kind) }));
+  return scanSettings(yml).map(({ line, text, kind }) => ({ line, text, kind, outputOnly: OUTPUT_KINDS.includes(kind) }));
 }
 
 // A plain or simply quoted YAML scalar ('…' without '', "…" without escapes), else null.
@@ -540,8 +558,8 @@ function templateFiles(dir, warnings, rel = '') {
 
 function checkOut(out) {
   if (!existsSync(out)) return;
-  if (!statSync(out).isDirectory()) throw new ScaffoldError(`${out} is a file, not a folder`);
-  if (readdirSync(out).length) throw new ScaffoldError(`${out} is not empty; choose a new folder (existing decks are never overwritten)`);
+  if (!statSync(out).isDirectory()) throw new ScaffoldError(`${printable(out)} is a file, not a folder`);
+  if (readdirSync(out).length) throw new ScaffoldError(`${printable(out)} is not empty; choose a new folder (existing decks are never overwritten)`);
 }
 
 // true when the folder belongs to the current user, false when it does not, null when this system
@@ -555,9 +573,9 @@ function settingsLayers(home, out, trustProject) {
   const project = findProjectDir(out, home);
   if (project) {
     const owned = ownedByUser(project);
-    if (owned === false) throw new ScaffoldError(`${project} belongs to another user; a project settings folder must be yours`);
+    if (owned === false) throw new ScaffoldError(`${printable(project)} belongs to another user; a project settings folder must be yours`);
     if (owned === null && !trustProject) {
-      throw new ScaffoldError(`cannot check who owns ${project} on this system; ask the user before passing --trust-project to use the project layer`);
+      throw new ScaffoldError(`cannot check who owns ${printable(project)} on this system; ask the user before passing --trust-project to use the project layer`);
     }
   }
   const layers = [{ layer: 'personal', dir: personal, ...readSettings(personal) }];
@@ -629,7 +647,7 @@ export function planDeck({ out, home, template, title, deckName, trustProject = 
   }
   const untrusted = untrustedProjectFiles(tpl, themeFiles, project);
   if (untrusted.length && !trustProject) {
-    throw new ScaffoldError(`these come from the project layer, found by walking up from the deck folder:\n  ${untrusted.join('\n  ')}\nRendering a template runs whatever it contains. Show these files to the user and ask the user whether to use them; pass --trust-project only with the user's approval.`);
+    throw new ScaffoldError(`these come from the project layer, found by walking up from the deck folder:\n  ${untrusted.map(printable).join('\n  ')}\nRendering a template runs whatever it contains. Show these files to the user and ask the user whether to use them; pass --trust-project only with the user's approval.`);
   }
   warnings.push(...untrusted.map((f) => `using from the project layer (--trust-project): ${f}`));
   const theme = ['default', '_theme/deck.scss', ...themeFiles.map((f) => f.rel.split(path.sep).join('/'))];
@@ -650,13 +668,14 @@ export function planDeck({ out, home, template, title, deckName, trustProject = 
         refuseUnreadSettings(ymlFile, [{ line, text: `metadata-files lists ${name}` }], 'but that file is not in the template folder, so '
           + 'the scaffold cannot check it; list only files kept beside _quarto.yml');
       }
-      refuseUnreadSettings(copy.src, profileSettingLines(readFileSync(copy.src, 'utf8')),
+      refuseUnreadSettings(copy.src, profileSettingLines(readFileSync(copy.src, 'utf8')).filter((l) => l.kind !== 'output'),
         'sets render or the output name, or may (through metadata-files, a merge key, or a form the scaffold cannot read), but the scaffold rewrites only _quarto.yml; move those settings there');
     }
   }
   // A profile file is copied unchanged, so one that sets render or output-file would still point at talk.qmd (#46).
   for (const { src, rel } of copies.filter((c) => PROFILE_FILE.test(c.rel))) {
-    refuseUnreadSettings(src, profileSettingLines(readFileSync(src, 'utf8')),
+    // output-dir, output-ext and an extension format's output-file do not stop the scaffold's rename (verify round 2)
+    refuseUnreadSettings(src, profileSettingLines(readFileSync(src, 'utf8')).filter((l) => l.kind !== 'output'),
       'sets render or the output name, or may (through metadata-files, a merge key, or a form the scaffold cannot read), but the scaffold rewrites only _quarto.yml; move those settings there');
   }
   const yml = rewriteQuartoYml(templateYml, { theme, footer: fields.footer?.value, mainFile }, ymlFile);
@@ -693,15 +712,16 @@ function fieldLine(key, entry) {
 }
 
 export function report(plan) {
-  const lines = [`Main file ${plan.mainFile}`, `Template  ${plan.name}  (${plan.tpl.layer}: ${plan.tpl.dir})`];
+  const lines = [`Main file ${plan.mainFile}`, `Template  ${plan.name}  (${plan.tpl.layer}: ${printable(plan.tpl.dir)})`];
   if (plan.tpl.shadowed.length) lines.push(`          shadows the ${plan.tpl.shadowed.join(' and ')} template of the same name`);
   lines.push('Settings');
-  for (const l of plan.layers) lines.push(`  ${l.layer.padEnd(9)} ${path.join(l.dir, 'local.json')}${existsSync(path.join(l.dir, 'local.json')) ? '' : ' (not found)'}`);
+  for (const l of plan.layers) lines.push(`  ${l.layer.padEnd(9)} ${printable(path.join(l.dir, 'local.json'))}${existsSync(path.join(l.dir, 'local.json')) ? '' : ' (not found)'}`);
   if (!plan.project) lines.push('  project   (no .claude/.academic-slides/ above the deck folder)');
   lines.push('Fields');
   for (const key of [...FIELDS, 'title']) lines.push(fieldLine(key, plan.fields[key]));
   lines.push(`Theme     ${plan.theme.join(', ')}`);
-  for (const w of plan.warnings) lines.push(`warning: ${w}`);
+  // A warning names template files: printable, so a line break in a name cannot forge a line (verify round 2)
+  for (const w of plan.warnings) lines.push(`warning: ${printable(w)}`);
   return lines.join('\n');
 }
 
@@ -715,6 +735,10 @@ function parseArgs(argv) {
   const given = new Set();
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
+    const eq = a.indexOf('=');
+    if (!valued[a] && !flags[a] && eq > 0 && valued[a.slice(0, eq)]) {   // --name=w07: a known option, another form
+      throw new UsageError(`${printable(a)}: write the value after a space (${a.slice(0, eq)} ${printable(a.slice(eq + 1))})`);
+    }
     if (!valued[a] && !flags[a]) throw new UsageError(`unknown argument ${show(a)}`);
     if (given.has(a)) throw new UsageError(`${a} is given more than once`);
     given.add(a);

@@ -3,7 +3,7 @@
 // the bottom of the title and the top of the footer. Lists slides below --threshold with a suggested
 // class: roomy-1 (0.58–0.70), roomy-2 (0.45–0.58), roomy-3 (< 0.45), or vc when the slide is already
 // scaled. Informational: always exits 0 unless the HTML is missing or an option is wrong (exit 2).
-import { options, playwright, deckPath, findDeckFile, serve, openDeck } from './_lib.mjs';
+import { options, printable, playwright, deckPath, findDeckFile, serve, openDeck } from './_lib.mjs';
 
 const { get } = options(`Usage: node check-fill.mjs [--html <deck>.html] [--threshold 0.70] [--width 1280] [--height 720]
                            [--footer '.reveal .footer']
@@ -61,5 +61,5 @@ if (!rows.length) {
   console.log(`✓ every content slide fills at least ${THRESHOLD} of its body`);
 } else {
   console.log(`${rows.length} slide(s) fill less than ${THRESHOLD} of the body:\n`);
-  for (const r of rows) console.log(`  #${String(r.index).padStart(2)}  ${r.fill.toFixed(2)}  → ${suggest(r.fill, r.classes)}   ${r.title}`);
+  for (const r of rows) console.log(`  #${String(r.index).padStart(2)}  ${r.fill.toFixed(2)}  → ${suggest(r.fill, r.classes)}   ${printable(r.title)}`);
 }

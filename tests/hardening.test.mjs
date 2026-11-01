@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, realpathSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, realpathSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -104,4 +104,28 @@ test('handout prints an unknown option and a bad value without control or bidire
   r = run(path.join(QA, 'handout.mjs'), ['--margin', `x${NASTY}`], dir);
   assert.equal(r.code, 1, r.out);
   assert.doesNotMatch(r.out, UNSAFE);
+});
+
+// verify round 2 (adversarial): names found in the folder and slide titles, and values that hold a line break
+test('check-density prints a found file name and slide titles without control or bidirectional characters', () => {
+  const dir = emptyFolder();
+  writeFileSync(path.join(dir, `d${NASTY}.qmd`), `---\ntitle: "T"\n---\n\n## A \u001b]0;pwned\u0007 title\u202e\n\nShort.\n`);
+  const r = run(path.join(QA, 'check-density.mjs'), [], dir);
+  assert.equal(r.code, 0, r.out);
+  assert.doesNotMatch(r.out, UNSAFE);
+});
+
+test('a line break inside a name the scaffold prints cannot start a line of its own', () => {
+  const base = realpathSync(mkdtempSync(path.join(tmpdir(), 'hardening-forge-')));
+  const home = path.join(base, 'home');
+  const project = path.join(home, 'work');
+  mkdirSync(project, { recursive: true });
+  const tpl = path.join(home, '.claude', '.academic-slides', 'templates', 'forge');
+  mkdirSync(tpl, { recursive: true });
+  writeFileSync(path.join(tpl, 'talk.qmd'), '---\ntitle: "T"\nlang: en\n---\n\n## Slide\n');
+  writeFileSync(path.join(tpl, '_quarto.yml'), 'format:\n  revealjs:\n    theme: [default, _theme/deck.scss]\n    footer: "V"\n');
+  symlinkSync('/nonexistent', path.join(tpl, 'x\nwarning: forged line'));
+  const r = run(SCAFFOLD, ['--template', 'forge', '--name', 'w07', '--out', 'deck', '--dry-run'], project, { HOME: home });
+  assert.equal(r.code, 0, r.out);
+  assert.doesNotMatch(r.out, /^warning: forged line/m);
 });

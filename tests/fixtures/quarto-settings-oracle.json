@@ -283,6 +283,51 @@
   }
  },
  {
+  "name": "plain scalar continued inside a flow list",
+  "yml": "project:\n  render: [\n    my\n    talk.qmd\n  ]\n",
+  "oracle": {
+   "render": [
+    "my talk.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "flow list continued at the key's indent",
+  "yml": "project:\n  render: [a.qmd,\n  b.qmd]\n",
+  "oracle": {
+   "render": [
+    "a.qmd",
+    "b.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "anchored block scalar under revealjs",
+  "yml": "format:\n  revealjs:\n    output-file: slides\n    notes: &n |\n      output-file: wrong\n",
+  "oracle": {
+   "render": [],
+   "outputFile": "slides"
+  }
+ },
+ {
+  "name": "output-file deeper under revealjs",
+  "yml": "format:\n  revealjs:\n    foo:\n      output-file: x\n",
+  "oracle": {
+   "render": [],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "null output-file",
+  "yml": "output-file: ~\n",
+  "oracle": {
+   "render": [],
+   "outputFile": null
+  }
+ },
+ {
   "name": "multi-line plain render item",
   "yml": "project:\n  render:\n    - my\n      talk.qmd\n",
   "oracle": {
