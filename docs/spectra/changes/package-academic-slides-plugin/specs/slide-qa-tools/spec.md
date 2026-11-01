@@ -188,3 +188,27 @@ When run without its file option — `--qmd` for check-density; `--html` for che
 
 - **WHEN** export-pdf runs without `--html` in a deck whose main file is `talk.qmd` and which holds `talk.html`
 - **THEN** it writes `talk.pdf` as before
+
+### Requirement: Check scripts refuse options they cannot read
+
+check-density, check-fill, check-layout, check-mathjax, and export-pdf SHALL each declare the options they take, and SHALL exit with status 2, naming the option, before looking up the deck file when: a valued option is given without a value (as the last argument, or followed by an argument that starts with `--`); a value is empty (except for `--skip-classes` and `--skip-macros`, where an empty list skips nothing); a number option's value is not a number in its range (`--threshold` from 0 to 1; `--width` and `--height` whole numbers of at least 1; `--words` and `--bullets` whole numbers of at least 0); an option is not one the script takes; an argument belongs to no option; or an option is given twice. A value that starts with a single `-` is read as a value. `--help` or `-h` anywhere prints the usage and exits with status 0. handout keeps its own checks, which exit with status 1 (#34) (issue #45, user decision 2026-11-01).
+
+#### Scenario: Threshold without a value
+
+- **WHEN** check-fill runs with `--threshold` as its last argument
+- **THEN** it exits with status 2 saying that `--threshold` needs a value, without checking any slide
+
+#### Scenario: Option followed by another option
+
+- **WHEN** check-layout runs with `--out --shots`
+- **THEN** it exits with status 2 saying that `--out` needs a value
+
+#### Scenario: Value that is not a number
+
+- **WHEN** check-density runs with `--words abc`
+- **THEN** it exits with status 2 naming `--words` and the value `abc`
+
+#### Scenario: Misspelled option
+
+- **WHEN** check-fill runs with `--treshold 0.5`
+- **THEN** it exits with status 2 naming `--treshold` as an unknown option, instead of running with the default threshold

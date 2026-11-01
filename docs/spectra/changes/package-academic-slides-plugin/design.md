@@ -191,9 +191,20 @@ scaffold 原本把主檔固定寫成 `talk.qmd`，課堂講義、結果報告也
 - Supersedes：本決策第 1 版是「資料夾裡唯一的檔案，不只一個就報錯」（使用者 2026-10-31 的 Clarity 決定）。verify 第 1 輪重建既有 deck 的檔名結構，發現 deck 資料夾通常同時有衍生 PDF（`talk-notes.pdf`、`talk-dual.pdf` 等，#36、#38 還會再加），handout 不帶參數 5/5 失敗，與「既有 deck 照常可用」衝突；使用者 2026-10-31 改定為先挑主檔同名的檔案。兩種做法都不會退回 `talk` 這個固定預設。
 - 只讀範本那種區塊寫法的 `_quarto.yml`；行內 mapping、加引號的鍵、anchor、值裡的逗號等寫法讀不到，這時要明確給檔名參數，完整解析追蹤於 #46。
 - 副檔名大小寫完全相符（伺服器只把小寫 `.html` 當 HTML 提供）；錯誤訊息裡的檔名把控制字元換成 `?`。
-- 給了 `--html`、`--qmd` 卻沒有檔名（放在最後，或後面接著另一個選項）時以狀態 2 結束，不改為自動找檔；handout 的 `--pdf` 依它在 #34 訂下的規則以 1 結束。其他帶值選項缺值的處理不在這次範圍，追蹤於 #45。
+- 給了 `--html`、`--qmd` 卻沒有檔名（放在最後，或後面接著另一個選項）時以狀態 2 結束，不改為自動找檔；handout 的 `--pdf` 依它在 #34 訂下的規則以 1 結束。其他帶值選項缺值的處理不在這次範圍，追蹤於 #45（已由 D22 處理）。
 - 明確給的參數照舊優先；check-density 的 `--tex` 本來就沒有預設值，維持要明確指定。檔名叫 `talk.*` 的既有 deck 同樣適用。
 - 在範圍內：`_lib.mjs`、六支腳本與它們的說明文字、slide-qa `SKILL.md` 與 `references/fix-table.md`。
+
+### D22. 檢查腳本宣告自己的選項，讀不懂就以狀態 2 結束（issue #45）
+
+check-density、check-fill、check-layout、check-mathjax、export-pdf 原本把「下一個參數」當成選項的值，沒有任何地方知道哪些選項存在：帶值選項放在最後得到 `undefined`，後面接另一個選項就把它當成值，數值不是數字得到 `NaN`，打錯的選項名被忽略。`NaN` 門檻讓 `fill < NaN`、`words > NaN` 永遠為假，檢查在使用者以為設了門檻時靜默通過（check-fill 印出「fills at least NaN」並以 0 結束）。
+
+- 每支腳本以 `_lib.mjs` 的 `options(help, spec)` 宣告選項，`spec` 標出每個選項的種類：`file`（檔名，缺值時沿用 #44 的「needs a file name」）、`text`、`list`（逗號分隔，可以是空字串，表示不略過任何 class 或 macro）、`flag`，或數值規則 `{ min, max, integer }`。`parseOptions` 依序讀參數，下列情況以狀態 2 結束並點名選項，而且在找 deck 檔、載入 Playwright 之前回報：帶值選項缺值（放最後，或下一個參數以 `--` 開頭）；空值（`list` 除外）；數值不是數字或超出範圍；不認得的選項（含 `--threshold=0.7` 的寫法）；不屬於任何選項的參數（例如漏寫 `--html` 直接給檔名）；同一個選項給兩次。
+- 數值範圍：`--threshold` 0 到 1（0 等於不標任何頁，仍接受）；`--width`、`--height` 至少 1 的整數；`--words`、`--bullets` 至少 0 的整數（上限 0 是合法的設定）。
+- 以單一 `-` 開頭的值（`--width -5`）當作值讀，再由範圍檢查拒絕；以 `--` 開頭的一律當作下一個選項。`--help`、`-h` 出現在任何位置都印出用法並以 0 結束，與先前相同。
+- handout 不改：它在 #34 已經用同樣的方式檢查自己的選項，錯誤以 1 結束。`args()` 保留給 handout 與測試用的探針。
+- 使用者 2026-11-01 定案「全部比照 handout」：缺值、不是數字的數值、不認得的選項都擋。不屬於任何選項的參數在 diagnose 時一併列入；重複的選項是實作時依同一個讀參數的迴圈加進來的，理由同樣是「不猜」：先前取第一個值，使用者可能以為生效的是後一個。
+- 在範圍內：`_lib.mjs`、五支腳本與它們的說明文字、slide-qa `SKILL.md`、`tests/options.test.mjs`。scaffold 的同類問題開為 #49。
 
 ## Implementation Contract
 
