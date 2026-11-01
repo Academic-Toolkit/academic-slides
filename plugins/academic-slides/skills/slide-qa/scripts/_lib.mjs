@@ -526,7 +526,30 @@ export function quartoSettings(dir = process.cwd()) {
     if (text === null) unread.push({ file: name, line: 0, text: 'could not be read', outputOnly: true });
     else add(name, outputNameLines(text), true);
   }
+  // A folder without a settings file of its own belongs to the nearest folder above that has one, as Quarto finds its
+  // project (any _quarto.yml or _quarto.yaml, up to the root of the file system): that project's settings decide the
+  // deck's output name and folder, which these scripts do not read (#54). A folder with its own settings file is its
+  // own project, and the folders above it do not apply.
+  if (!file) {
+    const project = projectAbove(dir);
+    if (project) {
+      unread.push({ file: path.relative(dir, project) || project, line: 0, outputOnly: true,
+        text: 'this folder has no Quarto settings file of its own, so Quarto renders the deck as part of the Quarto project there' });
+    }
+  }
   return { file, yml: yml ?? '', unread };
+}
+
+// The settings file of the nearest folder above `dir` that holds _quarto.yml or _quarto.yaml, or null (#54).
+function projectAbove(dir) {
+  let at = path.resolve(dir);
+  for (let up = path.dirname(at); up !== at; at = up, up = path.dirname(at)) {
+    const found = ['_quarto.yml', '_quarto.yaml'].map((name) => path.join(up, name)).find((f) => {
+      try { return statSync(f).isFile(); } catch { return false; }
+    });
+    if (found) return found;
+  }
+  return null;
 }
 
 // The lines of a .qmd file's front matter that set the output name (#50), as { file, line, text, outputOnly }.
@@ -602,7 +625,8 @@ export function findDeckFile(given, ext, option, { exclude = null } = {}) {
     console.error(`The deck's file could not be told from its Quarto settings in ${where}: ${lines.join('; ')}. Pass ${flag} <file>. `
       + 'These scripts read project.render and output-file only in block style, as the templates write them, in the settings '
       + 'file itself; they do not read other forms, profile files (_quarto-<name>.yml), merge keys, a project type other '
-      + `than default, or an output name set by an extension format, the front matter, _metadata.yml, output-ext or output-dir.`);
+      + 'than default, an output name set by an extension format, the front matter, _metadata.yml, output-ext or output-dir, '
+      + `or the settings of a Quarto project the deck folder sits in.`);
   } else if (r.reason === 'missing') {
     console.error(`The deck's main file is ${printable(r.main)}, but there is no ${printable(r.expected)} in ${where}`
       + `${list ? ` (found: ${list})` : ''}; ${NEXT[ext]}, or pass ${flag} <file>.`);
