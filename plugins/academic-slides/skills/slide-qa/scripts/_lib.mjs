@@ -362,7 +362,7 @@ function readSettingsValues(yml) {
         rest = rest.replace(/^\s*-\s+/, '');                          // a block-list item
         const pieces = /[[\],]/.test(rest) ? trimList(rest).split(',') : [rest];
         for (const piece of pieces) {
-          const v = unquote(piece.trim()).replace(/^\.\//, '');
+          const v = unquote(piece.trim()).replace(/^\.\/(?=[^/])/, '');   // ./x is x; "./" and ".//x" stay as written (#53)
           if (v) entries.push({ value: v, line });
         }
         continue;

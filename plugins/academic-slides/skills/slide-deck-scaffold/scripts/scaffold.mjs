@@ -239,10 +239,30 @@ export function rewriteQuartoYml(text, { theme, footer, mainFile }, where = '_qu
   let out = text.replace(themeLine, (_, indent) => `${indent}theme: [${theme.join(', ')}]`);
   if (mainFile !== undefined) out = renameRenderTarget(out, mainFile);
   if (footer === undefined) return out;
-  const footerLine = /^([ \t]*)footer:.*$/m;
-  if (footer === null) return out.replace(/^[ \t]*footer:.*(\r?\n)?/m, '');
-  if (footerLine.test(out)) return out.replace(footerLine, (_, indent) => `${indent}footer: ${show(footer)}`);
+  const span = footerSpan(out);
+  if (footer === null) return span ? out.slice(0, span.start) + out.slice(span.end) : out;
+  if (span) return `${out.slice(0, span.start)}${span.indent}footer: ${show(footer)}${span.eol}${out.slice(span.end)}`;
   return out.replace(themeLine, (line, indent) => `${line}\n${indent}footer: ${show(footer)}`);
+}
+
+// The first footer line with the lines of its value: a | or > block scalar, or a scalar continued on later lines,
+// runs on while the lines are blank or indented deeper than the key (trailing blank lines are left in place).
+// Removing only the first line left a block scalar's text behind as settings (verify round 2 of #53).
+function footerSpan(text) {
+  const m = /^([ \t]*)footer:.*(\r?\n|$)/m.exec(text);
+  if (!m) return null;
+  const indent = m[1];
+  let end = m.index + m[0].length;
+  let at = end;
+  while (at < text.length) {
+    const nl = text.indexOf('\n', at);
+    const next = nl < 0 ? text.length : nl + 1;
+    const line = text.slice(at, next).replace(/\r?\n$/, '');
+    if (/^[ \t]*$/.test(line)) { at = next; continue; }
+    if (line.match(/^[ \t]*/)[0].length <= indent.length) break;
+    at = next; end = next;
+  }
+  return { start: m.index, end, indent, eol: m[2] };
 }
 
 // Point the deck's _quarto.yml at its own main file (issue #44). In the render list that is a direct child of
@@ -539,7 +559,7 @@ function readSettingsValues(yml) {
         rest = rest.replace(/^\s*-\s+/, '');                          // a block-list item
         const pieces = /[[\],]/.test(rest) ? trimList(rest).split(',') : [rest];
         for (const piece of pieces) {
-          const v = unquote(piece.trim()).replace(/^\.\//, '');
+          const v = unquote(piece.trim()).replace(/^\.\/(?=[^/])/, '');   // ./x is x; "./" and ".//x" stay as written (#53)
           if (v) entries.push({ value: v, line });
         }
         continue;
@@ -755,7 +775,9 @@ function staleRenderLines(yml, templateLines, copies, mainFile) {
   // first, globs included ("../*.qmd" left the deck); a glob inside it is Quarto's; "." is the whole deck.
   const norm = (v) => path.posix.normalize(v.replace(/\\/g, '/')).replace(/(.)\/+$/, '$1');   // chapters/../ is ./, the deck (verify round 2)
   const glob = (v) => /[*?[\]{}!]/.test(v);
-  const outside = (v) => path.isAbsolute(v) || path.win32.isAbsolute(v) || norm(v) === '..' || norm(v).startsWith('../');
+  // A glob with .. anywhere is outside: ** can match no folder at all, so normalising must not cancel it (verify round 2).
+  const outside = (v) => path.isAbsolute(v) || path.win32.isAbsolute(v)
+    || (glob(v) ? v.split(/[\\/]/).includes('..') : norm(v) === '..' || norm(v).startsWith('../'));
   const entries = renderEntries(yml);
   const pick = (test) => [...new Set(entries.filter(({ value }) => test(value)).map(({ line }) => line))]
     .map((line) => ({ line, text: templateLines[line - 1] ?? '' }));

@@ -807,3 +807,40 @@ test('#53 verify r2: renameRenderTarget keeps the line count, so the lines named
   const all = [...Object.values(UNREAD).map(([yml]) => yml), ...Object.values(READ), ...Object.values(STALE_TEMPLATES).map(([yml]) => yml)];
   for (const yml of all) assert.equal(scaffold.renameRenderTarget(yml, 'w08.qmd').split('\n').length, yml.split('\n').length, yml);
 });
+
+// verify round 2 of #53 (adversarial)
+test('#53 verify r2: "./" and ".//" in a render list are the deck folder, and .//chapters/a.qmd is that file', () => {
+  for (const render of [`  render: ["./", appendix.qmd]`, `  render:\n    - ./\n    - appendix.qmd`, `  render: [talk.qmd, ".//chapters/a.qmd"]`, `  render: [".//"]`]) {
+    const s = sandbox();
+    personalTemplate(s, 'dots', `project:\n${render}\n${THEME}`, { 'appendix.qmd': OLD_DECK });
+    mkdirSync(path.join(s.templates, 'dots', 'chapters'));
+    writeFileSync(path.join(s.templates, 'dots', 'chapters', 'a.qmd'), OLD_DECK);
+    const r = runScaffold(s, ['--template', 'dots', '--name', 'w08', '--out', 'deck']);
+    assert.equal(r.code, 0, `${render}: ${r.out}`);
+  }
+});
+
+test('#53 verify r2: a glob with .. is outside the deck even when ** could absorb it', () => {
+  const s = sandbox();
+  personalTemplate(s, 'starstar', `project:\n  render: [talk.qmd, "**/../*.qmd"]\n${THEME}`);
+  const r = runScaffold(s, ['--template', 'starstar', '--name', 'w08', '--out', 'deck']);
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /_quarto\.yml line 2\b/);
+});
+
+test('#53 verify r2: a block-scalar footer is removed or replaced with its text, which never becomes settings', () => {
+  const yml = `project:\n  render: [talk.qmd]\nformat:\n  revealjs:\n    theme: [default, _theme/deck.scss]\n    footer: |\n      output-file: w07\n\n      second line\n    slide-number: true\n`;
+  assert.equal(scaffold.rewriteQuartoYml(yml, { theme: ['default'], footer: null }),
+    `project:\n  render: [talk.qmd]\nformat:\n  revealjs:\n    theme: [default]\n    slide-number: true\n`);
+  assert.equal(scaffold.rewriteQuartoYml(yml, { theme: ['default'], footer: 'Venue' }),
+    `project:\n  render: [talk.qmd]\nformat:\n  revealjs:\n    theme: [default]\n    footer: "Venue"\n    slide-number: true\n`);
+  for (const settings of [{ footer: null }, { footer: 'My venue' }]) {
+    const s = sandbox();
+    mkdirSync(path.join(s.home, '.claude', '.academic-slides'), { recursive: true });
+    writeFileSync(path.join(s.home, '.claude', '.academic-slides', 'local.json'), JSON.stringify(settings));
+    personalTemplate(s, 'blockfoot', yml);
+    const r = runScaffold(s, ['--template', 'blockfoot', '--name', 'w08', '--out', 'deck']);
+    assert.equal(r.code, 0, r.out);
+    assert.doesNotMatch(readFileSync(path.join(s.project, 'deck', '_quarto.yml'), 'utf8'), /output-file|second line/, JSON.stringify(settings));
+  }
+});
