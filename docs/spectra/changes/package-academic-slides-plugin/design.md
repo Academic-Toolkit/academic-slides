@@ -285,6 +285,10 @@ D23 只讀 `project.render` 與 `format: revealjs:`（或最上層）的 `output
 - render：每個不含 glob 字元的值，必須是 deck 的主檔，或範本裡實際有的檔或資料夾（比對用 `pathKey`，大小寫與 Unicode 形式的差異不算不同）。`..` 或絕對路徑指到新 deck 外面，也拒絕。
 - `output-file`：決定 `.html` 名字的那幾處（最上層、`format: revealjs:`、名稱以 `-revealjs` 結尾的擴充格式）。`talk`、`talk.html` 改成 deck 的名字（擴充格式這次一併改名），其他值拒絕。其他格式（`pdf`、`docx`）不動。自訂範本若把它固定成某個名字，也會被拒；這和 D20「deck 主檔依內容命名」相衝，訊息說明可改成 `talk`。
 - `talk.qmd` 照 Quarto 的規則找 YAML 區塊（與 slide-qa 同一份 `metadataBlocks`）：`output-file` 不論寫法都拒絕，`metadata-files` 與 merge key 也拒絕；scaffold 只改寫 `_quarto.yml`，和 profile 檔同一個原則。`output-ext` 只改副檔名、不帶舊名，照收，和 `_quarto.yml` 的 `output-ext` 一致；這收窄了 #53 範圍擴充 comment 的「警告（或拒絕）」。
+- verify 第 1 輪（Codex）之後：
+  - `..` 與絕對路徑先檢查，glob 也算（`"../*.qmd"` 原本被當成 glob 放行）；訊息改說「指到新 deck 外」，不再說 Quarto 什麼都不輸出。
+  - `talk.qmd` 開頭的 BOM 先去掉再找 YAML 區塊，和 slide-qa 一致；`rewriteFrontMatter` 也先去掉它，原本帶 BOM 的 `talk.qmd` 會被誤報成「開頭沒有 front matter」。
+  - profile 檔與 `metadata-files` 列的檔原樣複製，所以裡面擴充格式的 `output-file` 也拒絕，和 revealjs 底下的一樣；verify 第 2 輪只把改輸出位置或副檔名的設定（`output-dir`、`output-ext`、project type）當成可接受，這裡把原本混在一起的擴充格式 `output-file` 分出來。
 - 實作：`readQuartoYml`（連同 `trimList`、`unquote`）與 `metadataBlocks` 移進 `_lib.mjs` 與 `scaffold.mjs` 逐字相同的偵測器區塊。`readQuartoYml` 改由保留行號的 `renderEntries` 組成，兩邊只有一份讀法；測試比對兩份 `readQuartoYml` 的結果。slide-qa 的行為不變。
 
 ## Implementation Contract
