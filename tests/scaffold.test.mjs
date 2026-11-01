@@ -980,3 +980,32 @@ test('a valued option followed by another option exits 2, names the option, and 
     assert.deepEqual(readdirSync(s.project), [], `${option}: nothing is written`);
   }
 });
+
+// ---------- the same option rules as the slide-qa check scripts (issue #52) ----------
+
+test('an option given twice, or a blank value, exits 2 naming the option and writes nothing', () => {
+  const cases = {
+    '--name is given more than once': ['--name', 'a', '--name', 'b', '--out', 'deck'],
+    '--out is given more than once': ['--out', 'a', '--out', 'b', '--name', 'w07'],
+    '--dry-run is given more than once': ['--dry-run', '--dry-run', '--name', 'w07', '--out', 'deck'],
+    '--title needs a value': ['--title', '', '--name', 'w07', '--out', 'deck'],
+    '--out needs a value': ['--out', '  ', '--name', 'w07'],
+  };
+  for (const [message, args] of Object.entries(cases)) {
+    const s = sandbox();
+    const r = spawnSync(process.execPath, [SCAFFOLD, ...args], { cwd: s.project, env: { ...process.env, HOME: s.home }, encoding: 'utf8' });
+    assert.equal(r.status, 2, `${message}: ${r.stdout}${r.stderr}`);
+    assert.match(r.stdout + r.stderr, new RegExp(message), message);
+    assert.deepEqual(readdirSync(s.project), [], `${message}: nothing is written`);
+  }
+});
+
+test('-h or --help anywhere prints the usage and writes nothing, as in the slide-qa scripts', () => {
+  for (const args of [['--out', '-h', '--name', 'w07'], ['--name', 'w07', '--title', '--help', '--out', 'deck'], ['--bogus', '-h']]) {
+    const s = sandbox();
+    const r = spawnSync(process.execPath, [SCAFFOLD, ...args], { cwd: s.project, env: { ...process.env, HOME: s.home }, encoding: 'utf8' });
+    assert.equal(r.status, 0, `${args.join(' ')}: ${r.stdout}${r.stderr}`);
+    assert.match(r.stdout, /Usage/);
+    assert.deepEqual(readdirSync(s.project), [], args.join(' '));
+  }
+});

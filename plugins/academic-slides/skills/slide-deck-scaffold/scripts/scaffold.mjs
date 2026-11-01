@@ -687,20 +687,23 @@ export function report(plan) {
   return lines.join('\n');
 }
 
+// The same rules as the slide-qa check scripts (#52): --help or -h anywhere asks for the usage; an option given twice,
+// a valued option given last, followed by another option (#49), or given a blank value, exits 2 naming the option.
 function parseArgs(argv) {
+  if (argv.includes('--help') || argv.includes('-h')) return { help: true };
   const opts = {};
   const valued = { '--out': 'out', '--name': 'name', '--template': 'template', '--title': 'title' };
+  const flags = { '--dry-run': 'dryRun', '--list': 'list', '--trust-project': 'trustProject' };
+  const given = new Set();
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === '--help' || a === '-h') opts.help = true;
-    else if (a === '--dry-run') opts.dryRun = true;
-    else if (a === '--list') opts.list = true;
-    else if (a === '--trust-project') opts.trustProject = true;
-    else if (valued[a]) {
-      // Followed by another option counts as no value (#49): `--out --dry-run` must not name a folder --dry-run.
-      if (i + 1 >= argv.length || argv[i + 1].startsWith('--')) throw new UsageError(`${a} needs a value`);
-      opts[valued[a]] = argv[++i];
-    } else throw new UsageError(`unknown argument ${show(a)}`);
+    if (!valued[a] && !flags[a]) throw new UsageError(`unknown argument ${show(a)}`);
+    if (given.has(a)) throw new UsageError(`${a} is given more than once`);
+    given.add(a);
+    if (flags[a]) { opts[flags[a]] = true; continue; }
+    // Followed by another option counts as no value (#49): `--out --dry-run` must not name a folder --dry-run.
+    if (i + 1 >= argv.length || argv[i + 1].startsWith('--') || argv[i + 1].trim() === '') throw new UsageError(`${a} needs a value`);
+    opts[valued[a]] = argv[++i];
   }
   return opts;
 }
