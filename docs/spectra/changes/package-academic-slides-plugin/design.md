@@ -321,7 +321,8 @@ Quarto 1.10.19 找專案的方式（原始碼 `projectContext`、`directoryMetad
 - verify 第 1 輪之後：
   - 往上找從資料夾的實際位置開始（`realpathSync.native`）。`link/..` 這種寫法，作業系統會先跟隨連結再處理 `..`；JS 版的 `realpathSync` 會先把 `..` 字面消掉，結果往錯的資料夾找。
   - 名為 `_quarto.yml` 的東西都算，資料夾也算，和 Quarto 一致：Quarto 遇到這種情況會報錯停下。
-  - 訊息裡的檔名照磁碟上的大小寫（例如 `_Quarto.yml`）。
+  - 訊息裡的檔名照磁碟上的大小寫（例如 `_Quarto.yml`）；verify 第 2 輪起，完全相同的檔名優先，分大小寫的磁碟上 `_Quarto.yml` 與 `_quarto.yml` 並存時，點名 Quarto 讀的 `_quarto.yml`。
+  - 測試裡的資料夾名稱在 Windows 上不含控制字元（Windows 不允許），只留雙向控制字元。
 - 限制（照實寫明）：
   - Quarto 只在 deck 是上層專案的輸入檔時才用它的設定。render 清單沒列這個 deck，或 deck 在 `_`、`.` 開頭的資料夾裡時，Quarto 會把 deck 當單一檔案原地輸出，不再往上找。這裡不判斷這一點，照樣拒絕（多拒絕，方向安全），給 `--html` 即可。之前觀察到「隱藏資料夾底下的專案不被採用」，原因也是這條規則，不是隱藏資料夾本身。
   - deck 資料夾自己帶有 `_extensions` 提供的 project 類型時，Quarto 會用它輸出到別處，這裡不模擬；上層資料夾的 `_extensions` Quarto 不採用。
