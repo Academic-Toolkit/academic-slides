@@ -83,8 +83,9 @@ export async function playwright() {
 }
 
 const isFileIn = (dir, name) => { try { return statSync(path.join(dir, name)).isFile(); } catch { return false; } };
-// File names come from the folder and are printed: control characters (terminal escapes) become '?'.
-const printable = (s) => String(s).replace(/[\u0000-\u001f\u007f-\u009f]/g, '?');
+// File names and settings lines come from the folder and are printed: control characters (C0, DEL, C1: terminal escapes)
+// and bidirectional controls (which reorder how a name is shown) become '?' (#51).
+export const printable = (s) => String(s).replace(/[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '?');
 
 // The deck files in `dir` with extension `ext` (issue #44): files only, this folder only (not its
 // subfolders), sorted; the extension must match exactly (the deck server serves only lower-case .html as
@@ -117,6 +118,15 @@ const plainName = (v) => typeof v === 'string' && v !== '' && path.basename(v) =
 // quoted or not, with ./ dropped) and the output-file that applies to revealjs (the one under format: revealjs:,
 // else the top-level one, whatever their order in the file), from a _quarto.yml. Block-style YAML as the templates
 // write it; other forms (flow mappings, quoted keys) are not read, and the scripts then need their file option.
+// Brackets and spaces off both ends, in one pass each: the regex this replaces backtracked on a long run of spaces (#51).
+function trimList(s) {
+  let i = 0;
+  let j = s.length;
+  while (i < j && (s[i] === '[' || /\s/.test(s[i]))) i++;
+  while (j > i && (s[j - 1] === ']' || /\s/.test(s[j - 1]))) j--;
+  return s.slice(i, j);
+}
+
 export function readQuartoYml(yml) {
   const render = [];
   let topOutput = null;
@@ -132,7 +142,7 @@ export function readQuartoYml(yml) {
       if (renderIndent >= 0) {
         let rest = code.replace(/^\s*render:/, '');
         rest = rest.replace(/^\s*-\s+/, '');                          // a block-list item
-        const pieces = /[[\],]/.test(rest) ? rest.replace(/^[\s[]+|[\s\]]+$/g, '').split(',') : [rest];
+        const pieces = /[[\],]/.test(rest) ? trimList(rest).split(',') : [rest];
         for (const piece of pieces) {
           const v = unquote(piece.trim()).replace(/^\.\//, '');
           if (v) render.push(v);
@@ -484,7 +494,7 @@ export function findDeckFile(given, ext, option, { exclude = null } = {}) {
 // Resolve the deck path; exit 2 when it does not exist.
 export function deckPath(html) {
   const file = path.resolve(html);
-  if (!existsSync(file)) { console.error(`HTML not found: ${file} (render the deck first)`); process.exit(2); }
+  if (!existsSync(file)) { console.error(`HTML not found: ${printable(file)} (render the deck first)`); process.exit(2); }
   return { root: path.dirname(file), name: path.basename(file) };
 }
 

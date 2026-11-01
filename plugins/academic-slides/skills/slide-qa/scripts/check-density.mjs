@@ -7,7 +7,7 @@
 // \appendix (tex).
 import { readFileSync, existsSync } from 'fs';
 import path from 'path';
-import { options, findDeckFile } from './_lib.mjs';
+import { options, findDeckFile, printable } from './_lib.mjs';
 
 const HELP = `Usage: node check-density.mjs [--qmd <deck>.qmd] [--tex beamer/<deck>.tex] [--words 35] [--bullets 3]
                               [--skip-classes notes,hidden,source,sidenote,sim-tag]
@@ -145,8 +145,8 @@ function report(name, slides) {
   return ok;
 }
 
-if (!existsSync(QMD)) { console.error(`qmd not found: ${QMD}`); process.exit(2); }
-if (TEX && !existsSync(TEX)) { console.error(`tex not found: ${TEX}`); process.exit(2); }
+if (!existsSync(QMD)) { console.error(`qmd not found: ${printable(QMD)}`); process.exit(2); }
+if (TEX && !existsSync(TEX)) { console.error(`tex not found: ${printable(TEX)}`); process.exit(2); }
 
 const q = parseQmd(QMD);
 let ok = report(path.basename(QMD), q);

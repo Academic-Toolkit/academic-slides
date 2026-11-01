@@ -78,7 +78,11 @@ export class ScaffoldError extends Error {}
 
 const isDir = (p) => existsSync(p) && statSync(p).isDirectory();
 const isFile = (p) => existsSync(p) && statSync(p).isFile();
-const show = (v) => JSON.stringify(v);
+const show = (v) => JSON.stringify(v);   // also writes YAML values: never change it to clean text for the terminal
+// Everything the scaffold prints goes through screen(): control characters (C0, DEL, C1) and bidirectional controls in
+// names, paths and template lines become '?', line by line, so a multi-line message keeps its lines (#51).
+const printable = (s) => String(s).replace(/[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '?');
+const screen = (s) => String(s).split('\n').map(printable).join('\n');
 const isLink = (p) => lstatSync(p, { throwIfNoEntry: false })?.isSymbolicLink() ?? false;
 const inside = (child, parent) => child === parent || child.startsWith(parent + path.sep);
 // How a file system that ignores case and Unicode form sees a path (the macOS default): two names with
@@ -567,8 +571,6 @@ function untrustedProjectFiles(tpl, themeFiles, project) {
 const PROFILE_FILE = /^_quarto-[^/\\]+\.ya?ml$/i;   // any letter case, as Quarto finds it on a case-insensitive disk
 function refuseUnreadSettings(file, unread, why) {
   if (!unread.length) return;
-  // Template text and file names are printed: control characters, DEL and C1 included, become '?' (verify round 1).
-  const printable = (s) => String(s).replace(/[\u0000-\u001f\u007f-\u009f]/g, '?');
   const lines = unread.slice(0, 3).map((u) => `line ${u.line} (${show(printable(u.text))})`);
   if (unread.length > 3) lines.push(`and ${unread.length - 3} more`);
   throw new ScaffoldError(`${printable(file)} ${lines.join('; ')} ${why}`);
@@ -710,7 +712,7 @@ function printList(opts, home) {
   const dirs = { projectDir: findProjectDir(out, home), personalDir: personalDir(home), officialDir: OFFICIAL_DIR };
   for (const t of listTemplates(dirs)) {
     const note = t.shadowedBy ? `shadowed by ${t.shadowedBy}` : '';
-    console.log(`${t.name.padEnd(18)} ${t.layer.padEnd(9)} ${note.padEnd(20)} ${t.dir}`);
+    console.log(screen(`${t.name.padEnd(18)} ${t.layer.padEnd(9)} ${note.padEnd(20)} ${t.dir}`));
   }
 }
 
@@ -719,30 +721,30 @@ export function main(argv, home = os.homedir()) {
   try {
     opts = parseArgs(argv);
   } catch (e) {
-    console.error(`${e.message}\n\n${HELP}`);
+    console.error(screen(`${e.message}\n\n${HELP}`));
     return 2;
   }
-  if (opts.help) { console.log(HELP); return 0; }
+  if (opts.help) { console.log(screen(HELP)); return 0; }
   try {
     if (opts.list) { printList(opts, home); return 0; }
-    if (!opts.out) { console.error(`--out is required\n\n${HELP}`); return 2; }
-    if (opts.name === undefined) { console.error(`--name is required: ${NAME_HINT}\n\n${HELP}`); return 2; }
+    if (!opts.out) { console.error(screen(`--out is required\n\n${HELP}`)); return 2; }
+    if (opts.name === undefined) { console.error(screen(`--name is required: ${NAME_HINT}\n\n${HELP}`)); return 2; }
     const problem = nameProblem(deckStem(opts.name));
     if (problem) {
-      console.error(`--name ${show(opts.name)} is invalid: ${problem}; use ${NAME_RULE}`);
+      console.error(screen(`--name ${show(opts.name)} is invalid: ${problem}; use ${NAME_RULE}`));
       return 2;
     }
     const plan = planDeck({ out: opts.out, home, template: opts.template, title: opts.title, deckName: opts.name, trustProject: opts.trustProject });
-    console.log(report(plan));
+    console.log(screen(report(plan)));
     if (opts.dryRun) {
-      console.log(`Dry run: nothing written (${plan.files.length} files would go to ${plan.out})`);
+      console.log(screen(`Dry run: nothing written (${plan.files.length} files would go to ${plan.out})`));
       return 0;
     }
     writeDeck(plan);
-    console.log(`Wrote ${plan.files.length} files to ${plan.out}\nMain file ${plan.mainFile} (quarto render writes ${plan.mainFile.replace(/\.qmd$/, '.html')})\nNext: cd ${show(plan.out)} && quarto render`);
+    console.log(screen(`Wrote ${plan.files.length} files to ${plan.out}\nMain file ${plan.mainFile} (quarto render writes ${plan.mainFile.replace(/\.qmd$/, '.html')})\nNext: cd ${show(plan.out)} && quarto render`));
     return 0;
   } catch (e) {
-    console.error(`scaffold: ${e.message}`);
+    console.error(screen(`scaffold: ${e.message}`));
     return 1;
   }
 }
