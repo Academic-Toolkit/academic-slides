@@ -638,3 +638,59 @@ test('round 3: many unclosed fences and comments are read in linear time', () =>
   assert.deepEqual(lib.chooseDeckFile('.html', { dir }), { file: 'deck.html' });
   assert.ok(Date.now() - t0 < 3000, `took ${Date.now() - t0} ms`);
 });
+
+// ---------- #53: a template copied from a finished deck keeps that deck's name ----------
+// Quarto 1.10.19: a render entry for a missing file renders nothing and exits 0; an output-file under revealjs
+// renders the new deck under the old name. The scaffold refuses before writing, naming the file and the line.
+const OLD_DECK = '---\ntitle: "T"\nlang: en\n---\n\n## Slide\n\nBody\n';
+const STALE_TEMPLATES = {
+  'a render entry for the old deck': [`project:\n  render:\n    - "w07.qmd"\n${THEME}`, {}, '_quarto.yml', 3],
+  'a render entry the template does not have': [`project:\n  render: [talk.qmd, notes.qmd]\n${THEME}`, {}, '_quarto.yml', 2],
+  'a render entry outside the deck': [`project:\n  render: [talk.qmd, ../shared.qmd]\n${THEME}`, {}, '_quarto.yml', 2],
+  "the old deck's output-file under revealjs": [`project:\n  render: [talk.qmd]\nformat:\n  revealjs:\n    theme: [default, _theme/deck.scss]\n    footer: "Venue"\n    output-file: w07\n`, {}, '_quarto.yml', 7],
+  "the old deck's output-file at the top level": [`output-file: w07.html\nproject:\n  render: [talk.qmd]\n${THEME}`, {}, '_quarto.yml', 1],
+  "the old deck's output-file under an extension format": [`project:\n  render: [talk.qmd]\n${THEME}  clean-revealjs:\n    output-file: w07\n`, {}, '_quarto.yml', 8],
+  'output-file in the front matter': [`project:\n  render: [talk.qmd]\n${THEME}`, { 'talk.qmd': '---\ntitle: "T"\noutput-file: w07\n---\n\n## Slide\n' }, 'talk.qmd', 3],
+  'output-file under format: revealjs: in the front matter': [`project:\n  render: [talk.qmd]\n${THEME}`, { 'talk.qmd': '---\ntitle: "T"\nformat:\n  revealjs:\n    output-file: w07\n---\n\n## Slide\n' }, 'talk.qmd', 5],
+  'output-file in a later YAML block of talk.qmd': [`project:\n  render: [talk.qmd]\n${THEME}`, { 'talk.qmd': '---\ntitle: "T"\n---\n\n## Slide\n\n---\noutput-file: w07\n---\n' }, 'talk.qmd', 8],
+  'metadata-files in the front matter': [`project:\n  render: [talk.qmd]\n${THEME}`, { 'talk.qmd': '---\ntitle: "T"\nmetadata-files: [names.yml]\n---\n\n## Slide\n' }, 'talk.qmd', 3],
+};
+for (const [name, [yml, extra, file, line]] of Object.entries(STALE_TEMPLATES)) {
+  test(`#53: the scaffold refuses ${name}, naming the line, before writing anything`, () => {
+    const s = sandbox();
+    personalTemplate(s, 'copied', yml, extra);
+    const r = runScaffold(s, ['--template', 'copied', '--name', 'w08', '--out', 'deck']);
+    assert.equal(r.code, 1, `${name}: ${r.out}`);
+    assert.match(r.out, new RegExp(`${file.replace('.', '\\.')} line ${line}\\b`), name);
+    assert.equal(existsSync(path.join(s.project, 'deck')), false, `${name}: nothing written`);
+  });
+}
+
+test('#53: render entries the template has, a glob, output-file talk and output-ext in the front matter are accepted', () => {
+  for (const [name, yml, extra] of [
+    ['appendix', `project:\n  render: [talk.qmd, appendix.qmd]\n${THEME}`, { 'appendix.qmd': OLD_DECK }],
+    ['cased', `project:\n  render: [talk.qmd, Appendix.qmd]\n${THEME}`, { 'appendix.qmd': OLD_DECK }],
+    ['glob', `project:\n  render: ["*.qmd"]\n${THEME}`, {}],
+    ['talkoutput', `project:\n  render: [talk.qmd]\nformat:\n  revealjs:\n    theme: [default, _theme/deck.scss]\n    output-file: talk\n`, {}],
+    ['outputext', `project:\n  render: [talk.qmd]\n${THEME}`, { 'talk.qmd': '---\ntitle: "T"\noutput-ext: htm\nlang: en\n---\n\n## Slide\n' }],
+  ]) {
+    const s = sandbox();
+    personalTemplate(s, name, yml, extra);
+    const r = runScaffold(s, ['--template', name, '--name', 'w08', '--out', 'deck']);
+    assert.equal(r.code, 0, `${name}: ${r.out}`);
+  }
+});
+
+test('#53: an extension format output-file talk is renamed with the deck', () => {
+  assert.equal(scaffold.renameRenderTarget('format:\n  clean-revealjs:\n    output-file: talk.html\n', 'w07.qmd'), 'format:\n  clean-revealjs:\n    output-file: w07.html\n');
+  const s = sandbox();
+  personalTemplate(s, 'ext', `project:\n  render: [talk.qmd]\n${THEME}  clean-revealjs:\n    output-file: talk\n`);
+  const r = runScaffold(s, ['--template', 'ext', '--name', 'w08', '--out', 'deck']);
+  assert.equal(r.code, 0, r.out);
+  assert.match(readFileSync(path.join(s.project, 'deck', '_quarto.yml'), 'utf8'), /clean-revealjs:\n    output-file: w08\n/);
+});
+
+test('#53: the scaffold and slide-qa read project.render and output-file the same way', () => {
+  const all = [...Object.values(UNREAD).map(([yml]) => yml), ...Object.values(READ)];
+  for (const yml of all) assert.deepEqual(scaffold.readQuartoYml(yml), lib.readQuartoYml(yml), yml);
+});
