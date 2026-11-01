@@ -251,7 +251,7 @@ D23 只讀 `project.render` 與 `format: revealjs:`（或最上層）的 `output
   - front matter 前面有空白行、文件後面另一段以鍵開頭的 YAML 區塊，Pandoc 都會讀，所以都檢查；revealjs 分頁用的 `---`（下一行是標題）與 fenced code 不算。
   - `output-ext` 只看最上層與 revealjs 格式底下；`format: pdf: output-ext: tex` 不改 `.html` 的名字，不擋。
   - scaffold 的範本檢查不再拒絕只改輸出位置或副檔名的設定（擴充格式的 `output-file`、`output-ext`、`output-dir`、project type）：改名照常生效，main 與 #50 之前都接受這種範本，拒絕它是 #50 帶進來的回歸。
-  - deck 放在上層 Quarto 專案的子資料夾時，上層的 `_quarto.yml` 與 `_metadata.yml` 也會影響輸出，這裡不讀也不拒，另開 issue 追蹤。
+  - deck 放在上層 Quarto 專案的子資料夾時，上層的 `_quarto.yml` 與 `_metadata.yml` 也會影響輸出，這裡不讀也不拒，由 #54 追蹤。
 
 ### D25. 從別處來的資料夾：印出的文字與 render 值的 trim（issue #51）
 
