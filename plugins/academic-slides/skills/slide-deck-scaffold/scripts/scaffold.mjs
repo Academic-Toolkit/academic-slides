@@ -459,7 +459,8 @@ function parseArgs(argv) {
     else if (a === '--list') opts.list = true;
     else if (a === '--trust-project') opts.trustProject = true;
     else if (valued[a]) {
-      if (i + 1 >= argv.length) throw new UsageError(`${a} needs a value`);
+      // Followed by another option counts as no value (#49): `--out --dry-run` must not name a folder --dry-run.
+      if (i + 1 >= argv.length || argv[i + 1].startsWith('--')) throw new UsageError(`${a} needs a value`);
       opts[valued[a]] = argv[++i];
     } else throw new UsageError(`unknown argument ${show(a)}`);
   }

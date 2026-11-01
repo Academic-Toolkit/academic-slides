@@ -90,3 +90,7 @@
 - [x] 17.1 [Req: Check scripts refuse options they cannot read] 依 D22 先寫測試（`tests/options.test.mjs`）：`parseOptions` 的單元測試（缺值、後接選項、空值、非數字與範圍、不認得的選項、多餘參數、重複選項、控制字元）；五支腳本各自的命令列測試，選項錯誤要在找 deck 檔之前回報；slide-qa `SKILL.md` 表格列的每個選項都被接受。驗證：新測試在改 `_lib.mjs` 之前失敗（17 項）。
 - [x] 17.2 [Req: Check scripts refuse options they cannot read] [after: 17.1] 依 D22 在 `_lib.mjs` 加 `parseOptions` 與 `options`，五支腳本宣告選項並改用它，check-density 移除自己的 `arg()`；說明文字與 slide-qa `SKILL.md` 寫明選項錯誤以 2 結束、handout 為 1。驗證：17.1 的測試通過，`npm test` 178 項全部通過。
 
+## 18. GitHub issue #49：scaffold 的帶值選項後接另一個選項（2026-11-01）
+
+- [x] 18.1 [Req: Scaffold writes only into an empty folder] #45 的同類問題（diagnose #45 時發現）：先寫測試（`tests/scaffold.test.mjs`），`--out`、`--name`、`--template`、`--title` 後面接 `--dry-run` 時以狀態 2 結束、訊息點名選項、資料夾裡沒有寫出任何東西；再改 `parseArgs`，下一個參數以 `--` 開頭時與放在最後同樣回報 `needs a value`。驗證：新測試在修改前失敗（`--out --dry-run` 以 0 結束並寫出 deck），修改後 `npm test` 全部通過。
+

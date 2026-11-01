@@ -960,3 +960,23 @@ test('CLI: --name Talk still warns about a talk.qmd left under resources', () =>
   assert.match(r.out, /still mentions talk\.qmd/);
 });
 
+
+// ---------- a valued option followed by another option (issue #49) ----------
+
+// Before #49, `--out --dry-run` took --dry-run as the folder name, so the dry run did not happen and a deck was
+// written into a folder called --dry-run. Each case runs in an empty folder that must stay empty.
+test('a valued option followed by another option exits 2, names the option, and writes nothing', () => {
+  const cases = {
+    '--out': ['--out', '--dry-run', '--name', 'w07'],
+    '--name': ['--name', '--dry-run', '--out', 'deck'],
+    '--template': ['--template', '--dry-run', '--name', 'w07', '--out', 'deck'],
+    '--title': ['--title', '--dry-run', '--name', 'w07', '--out', 'deck'],
+  };
+  for (const [option, args] of Object.entries(cases)) {
+    const s = sandbox();
+    const r = spawnSync(process.execPath, [SCAFFOLD, ...args], { cwd: s.project, env: { ...process.env, HOME: s.home }, encoding: 'utf8' });
+    assert.equal(r.status, 2, `${option}: ${r.stdout}${r.stderr}`);
+    assert.match(r.stdout + r.stderr, new RegExp(`${option} needs a value`), option);
+    assert.deepEqual(readdirSync(s.project), [], `${option}: nothing is written`);
+  }
+});
