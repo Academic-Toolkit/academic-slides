@@ -147,6 +147,102 @@ export function readQuartoYml(yml) {
   return { render, outputFile: revealOutput ?? topOutput };
 }
 
+// Forms of _quarto.yml that the line scanner does not read (issue #46). The scanner reads project, format, revealjs,
+// render and output-file only as plain block keys (unquoted, no space before the colon, first on the line), render
+// as a block or flow list of plain or simply quoted values, and output-file as one plain or simply quoted value.
+// Every line that writes these settings another way is returned as { line, text }, so the caller refuses instead
+// of guessing: one of those keys quoted, with a space before the colon, inside a flow mapping, or after a list
+// dash; such a key's value given as a flow mapping, an anchor, an alias, a tag, or a block scalar; a merge key
+// (<<) or metadata-files anywhere; and in project.render or the output-file the scanner uses, an anchor, alias
+// or tag, a quoted value holding a comma, or an escape. The same code is in slide-deck-scaffold's scaffold.mjs;
+// tests/quarto-settings.test.mjs checks that the two agree.
+const SCANNED_KEYS = ['project', 'format', 'revealjs', 'render', 'output-file'];
+const KEY_MENTION = /(^|[\s{,[])(project|format|revealjs|render|output-file|metadata-files)([ \t]*):(?=[ \t]|$)/g;
+const MERGE_KEY = /(^|[\s{,[-])<<[ \t]*:/;
+const SCANNED_OUTPUT_FILE = /^[ \t]*output-file:[ \t]*(?:"([^"]*)"|'([^']*)'|(\S+))[ \t]*$/;
+
+// The line with every quoted string replaced by "", the quoted keys (a quoted string followed by a colon), and the
+// other quoted strings with their quote character.
+function maskQuoted(code) {
+  let masked = '';
+  const keys = [];
+  const values = [];
+  for (let i = 0; i < code.length; i++) {
+    const q = code[i];
+    if (q !== '"' && q !== "'") { masked += q; continue; }
+    let j = i + 1;
+    let body = '';
+    while (j < code.length) {
+      if (code[j] === q) {
+        if (q === "'" && code[j + 1] === "'") { body += "''"; j += 2; continue; }   // '' is a quote inside '…'
+        break;
+      }
+      if (q === '"' && code[j] === '\\') body += code[j++];                         // \x is an escape inside "…"
+      body += code[j++];
+    }
+    if (/^[ \t]*:(?=[ \t]|$)/.test(code.slice(j + 1))) keys.push(body); else values.push({ q, body });
+    masked += '""';
+    i = j;
+  }
+  return { masked, keys, values };
+}
+
+export function unreadQuartoLines(yml) {
+  const unread = [];
+  let top = null; let childIndent = -1; let renderIndent = -1; let fmtIndent = -1;
+  yml.split(/\r?\n/).forEach((raw, n) => {
+    const [code] = splitComment(raw);
+    if (/^\s*$/.test(code)) return;
+    const { masked, keys, values } = maskQuoted(code);
+    const indent = code.match(/^[ \t]*/)[0].length;
+    const own = masked.match(/^[ \t]*([A-Za-z_][\w.-]*):(?=[ \t]|$)[ \t]*(.*)$/);
+    const key = own?.[1];
+    const value = (own?.[2] ?? '').trim();
+    if (indent === 0) { top = key ?? null; childIndent = -1; renderIndent = -1; fmtIndent = -1; }
+    else {
+      if (childIndent < 0) childIndent = indent;
+      if (indent <= childIndent && !(renderIndent === indent && /^\s*-/.test(code))) { renderIndent = -1; if (indent < childIndent || key !== 'revealjs') fmtIndent = -1; }
+      if (top === 'project' && indent === childIndent && key === 'render') renderIndent = indent;
+      if (top === 'format' && indent === childIndent && key === 'revealjs') fmtIndent = indent;
+    }
+    let bad = keys.some((k) => SCANNED_KEYS.includes(k) || k === 'metadata-files') || MERGE_KEY.test(masked)
+      || [...masked.matchAll(KEY_MENTION)].some((m) => m[2] === 'metadata-files' || m[3] !== '' || m.index + m[1].length !== indent);
+    if (['project', 'format', 'revealjs'].includes(key) && /^[{[&*!|>]/.test(value)) bad = true;
+    if (renderIndent >= 0) {
+      const text = key === 'render' && indent === renderIndent ? value : masked.trim().replace(/^-[ \t]*/, '');
+      if (/(^|[\s,[])[&*!|>{]/.test(text)) bad = true;
+      if (values.some((v) => v.body.includes(',') || (v.q === '"' && v.body.includes('\\')) || (v.q === "'" && v.body.includes("''")))) bad = true;
+    }
+    if (key === 'output-file' && (indent === 0 || (fmtIndent >= 0 && indent > fmtIndent))) {
+      const o = code.match(SCANNED_OUTPUT_FILE);
+      if (!o || /^[&*!|>{[]/.test(o[3] ?? '') || (o[1] ?? '').includes('\\')) bad = true;
+    }
+    if (bad) unread.push({ line: n + 1, text: raw.trim() });
+  });
+  return unread;
+}
+
+// The deck's Quarto settings (issue #46): _quarto.yml, else _quarto.yaml (the file Quarto uses), and the settings the
+// scanner cannot read: the lines unreadQuartoLines reports in that file, and every line of a profile file
+// (_quarto-<name>.yml) that sets render or output-file, since Quarto merges a profile file only while that profile
+// is active, which these scripts cannot know. A file that cannot be read counts as unread.
+const PROFILE_FILE = /^_quarto-.+\.ya?ml$/;
+const SETS_DECK_FILES = /(^|[\s{,[])["']?(render|output-file)["']?[ \t]*:/;
+export function quartoSettings(dir = process.cwd()) {
+  const read = (name) => { try { return readFileSync(path.join(dir, name), 'utf8'); } catch { return null; } };
+  const file = ['_quarto.yml', '_quarto.yaml'].find((name) => isFileIn(dir, name)) ?? null;
+  const yml = file ? read(file) : '';
+  const unread = yml === null ? [{ file, line: 0, text: 'could not be read' }] : unreadQuartoLines(yml).map((u) => ({ file, ...u }));
+  for (const name of readdirSync(dir).filter((f) => PROFILE_FILE.test(f) && isFileIn(dir, f)).sort()) {
+    const text = read(name);
+    if (text === null) { unread.push({ file: name, line: 0, text: 'could not be read' }); continue; }
+    text.split(/\r?\n/).forEach((raw, n) => {
+      if (SETS_DECK_FILES.test(splitComment(raw)[0])) unread.push({ file: name, line: n + 1, text: raw.trim() });
+    });
+  }
+  return { file, yml: yml ?? '', unread };
+}
+
 // The .qmd files project.render names in this folder (plain names only).
 export function renderedQmds(yml) {
   return readQuartoYml(yml).render.filter((v) => v.endsWith('.qmd') && plainName(v));
@@ -157,8 +253,7 @@ export function renderedQmds(yml) {
 // unless it ends in .html, as Quarto does) when that is a plain name; export-pdf writes the .pdf under the
 // .html's stem. Every name returned is a plain file name in `dir`.
 export function deckMain(dir = process.cwd()) {
-  let yml = '';
-  try { yml = readFileSync(path.join(dir, '_quarto.yml'), 'utf8'); } catch { /* no project file */ }
+  const { yml } = quartoSettings(dir);
   const listed = renderedQmds(yml);
   const qmds = deckCandidates('.qmd', { dir });
   const qmd = listed.length === 1 ? listed[0] : qmds.length === 1 ? qmds[0] : null;
@@ -173,8 +268,11 @@ export function deckMain(dir = process.cwd()) {
 // verify round 1); if that file is missing, the result says so instead of picking another. When the main
 // file cannot be told, the folder's only candidate. Never a fixed name such as talk.html.
 export function chooseDeckFile(ext, { dir = process.cwd(), exclude = null } = {}) {
-  const main = deckMain(dir);
   const candidates = deckCandidates(ext, { dir, exclude });
+  // Settings the scanner cannot read leave the main file unknown; refuse rather than guess (#46).
+  const { unread } = quartoSettings(dir);
+  if (unread.length) return { reason: 'unread', unread, candidates };
+  const main = deckMain(dir);
   if (main) return isFileIn(dir, main[ext]) ? { file: main[ext] } : { reason: 'missing', expected: main[ext], main: main['.qmd'], candidates };
   if (candidates.length === 1) return { file: candidates[0] };
   return { reason: candidates.length ? 'several' : 'none', candidates };
@@ -197,7 +295,13 @@ export function findDeckFile(given, ext, option, { exclude = null } = {}) {
   if (r.file) return r.file;
   const list = r.candidates.map(printable).join(', ');
   const where = printable(dir);
-  if (r.reason === 'missing') {
+  if (r.reason === 'unread') {
+    const lines = r.unread.slice(0, 3).map((u) => `${printable(u.file)}${u.line ? ` line ${u.line}` : ''} (${printable(u.text)})`);
+    if (r.unread.length > 3) lines.push(`and ${r.unread.length - 3} more`);
+    console.error(`The deck's file could not be told from its Quarto settings in ${where}: ${lines.join('; ')}. These scripts read `
+      + 'project.render and output-file only in block style, as the templates write them, and not from profile files '
+      + `(_quarto-<name>.yml) or metadata-files; pass ${flag} <file>, or write those settings in block style.`);
+  } else if (r.reason === 'missing') {
     console.error(`The deck's main file is ${printable(r.main)}, but there is no ${printable(r.expected)} in ${where}`
       + `${list ? ` (found: ${list})` : ''}; ${NEXT[ext]}, or pass ${flag} <file>.`);
   } else if (r.reason === 'several') {

@@ -280,6 +280,81 @@ export function renameRenderTarget(text, mainFile) {
   }).join('');
 }
 
+// Forms of _quarto.yml that the line scanner does not read (issue #46). The scanner reads project, format, revealjs,
+// render and output-file only as plain block keys (unquoted, no space before the colon, first on the line), render
+// as a block or flow list of plain or simply quoted values, and output-file as one plain or simply quoted value.
+// Every line that writes these settings another way is returned as { line, text }, so the caller refuses instead
+// of guessing: one of those keys quoted, with a space before the colon, inside a flow mapping, or after a list
+// dash; such a key's value given as a flow mapping, an anchor, an alias, a tag, or a block scalar; a merge key
+// (<<) or metadata-files anywhere; and in project.render or the output-file the scanner uses, an anchor, alias
+// or tag, a quoted value holding a comma, or an escape. The same code is in slide-qa's _lib.mjs;
+// tests/quarto-settings.test.mjs checks that the two agree.
+const SCANNED_KEYS = ['project', 'format', 'revealjs', 'render', 'output-file'];
+const KEY_MENTION = /(^|[\s{,[])(project|format|revealjs|render|output-file|metadata-files)([ \t]*):(?=[ \t]|$)/g;
+const MERGE_KEY = /(^|[\s{,[-])<<[ \t]*:/;
+const SCANNED_OUTPUT_FILE = /^[ \t]*output-file:[ \t]*(?:"([^"]*)"|'([^']*)'|(\S+))[ \t]*$/;
+
+// The line with every quoted string replaced by "", the quoted keys (a quoted string followed by a colon), and the
+// other quoted strings with their quote character.
+function maskQuoted(code) {
+  let masked = '';
+  const keys = [];
+  const values = [];
+  for (let i = 0; i < code.length; i++) {
+    const q = code[i];
+    if (q !== '"' && q !== "'") { masked += q; continue; }
+    let j = i + 1;
+    let body = '';
+    while (j < code.length) {
+      if (code[j] === q) {
+        if (q === "'" && code[j + 1] === "'") { body += "''"; j += 2; continue; }   // '' is a quote inside '…'
+        break;
+      }
+      if (q === '"' && code[j] === '\\') body += code[j++];                         // \x is an escape inside "…"
+      body += code[j++];
+    }
+    if (/^[ \t]*:(?=[ \t]|$)/.test(code.slice(j + 1))) keys.push(body); else values.push({ q, body });
+    masked += '""';
+    i = j;
+  }
+  return { masked, keys, values };
+}
+
+export function unreadQuartoLines(yml) {
+  const unread = [];
+  let top = null; let childIndent = -1; let renderIndent = -1; let fmtIndent = -1;
+  yml.split(/\r?\n/).forEach((raw, n) => {
+    const [code] = splitComment(raw);
+    if (/^\s*$/.test(code)) return;
+    const { masked, keys, values } = maskQuoted(code);
+    const indent = code.match(/^[ \t]*/)[0].length;
+    const own = masked.match(/^[ \t]*([A-Za-z_][\w.-]*):(?=[ \t]|$)[ \t]*(.*)$/);
+    const key = own?.[1];
+    const value = (own?.[2] ?? '').trim();
+    if (indent === 0) { top = key ?? null; childIndent = -1; renderIndent = -1; fmtIndent = -1; }
+    else {
+      if (childIndent < 0) childIndent = indent;
+      if (indent <= childIndent && !(renderIndent === indent && /^\s*-/.test(code))) { renderIndent = -1; if (indent < childIndent || key !== 'revealjs') fmtIndent = -1; }
+      if (top === 'project' && indent === childIndent && key === 'render') renderIndent = indent;
+      if (top === 'format' && indent === childIndent && key === 'revealjs') fmtIndent = indent;
+    }
+    let bad = keys.some((k) => SCANNED_KEYS.includes(k) || k === 'metadata-files') || MERGE_KEY.test(masked)
+      || [...masked.matchAll(KEY_MENTION)].some((m) => m[2] === 'metadata-files' || m[3] !== '' || m.index + m[1].length !== indent);
+    if (['project', 'format', 'revealjs'].includes(key) && /^[{[&*!|>]/.test(value)) bad = true;
+    if (renderIndent >= 0) {
+      const text = key === 'render' && indent === renderIndent ? value : masked.trim().replace(/^-[ \t]*/, '');
+      if (/(^|[\s,[])[&*!|>{]/.test(text)) bad = true;
+      if (values.some((v) => v.body.includes(',') || (v.q === '"' && v.body.includes('\\')) || (v.q === "'" && v.body.includes("''")))) bad = true;
+    }
+    if (key === 'output-file' && (indent === 0 || (fmtIndent >= 0 && indent > fmtIndent))) {
+      const o = code.match(SCANNED_OUTPUT_FILE);
+      if (!o || /^[&*!|>{[]/.test(o[3] ?? '') || (o[1] ?? '').includes('\\')) bad = true;
+    }
+    if (bad) unread.push({ line: n + 1, text: raw.trim() });
+  });
+  return unread;
+}
+
 // A template made by copying a finished deck carries the outputs of rendering talk.qmd; copied into a deck named
 // otherwise they would sit beside <name>.html and make slide-qa's lookup ambiguous, so they are left out (#44).
 // Also the files derived from them by the plugin's own tools (talk-notes, talk-dual, talk-presenter-notes,
@@ -359,6 +434,16 @@ function untrustedProjectFiles(tpl, themeFiles, project) {
 }
 
 // Everything the deck will contain, computed without writing anything.
+// Template settings the scaffold cannot rewrite (issue #46) stop it before anything is written.
+const PROFILE_FILE = /^_quarto-[^/\\]+\.ya?ml$/;
+const SETS_DECK_FILES = /(^|[\s{,[])["']?(render|output-file)["']?[ \t]*:/;
+function refuseUnreadSettings(file, unread, why) {
+  if (!unread.length) return;
+  const lines = unread.slice(0, 3).map((u) => `line ${u.line} (${show(u.text)})`);
+  if (unread.length > 3) lines.push(`and ${unread.length - 3} more`);
+  throw new ScaffoldError(`${file} ${lines.join('; ')} ${why}`);
+}
+
 export function planDeck({ out, home, template, title, deckName, trustProject = false }) {
   const stem = deckStem(deckName);
   const problem = nameProblem(stem);
@@ -403,7 +488,16 @@ export function planDeck({ out, home, template, title, deckName, trustProject = 
   const qmd = rewriteFrontMatter(readFileSync(qmdFile, 'utf8'), {
     title: fields.title?.value, author: fields.author?.value, institute: fields.affiliation?.value, lang: fields.lang?.value,
   }, qmdFile);
-  const yml = rewriteQuartoYml(readFileSync(ymlFile, 'utf8'), { theme, footer: fields.footer?.value, mainFile }, ymlFile);
+  const templateYml = readFileSync(ymlFile, 'utf8');
+  refuseUnreadSettings(ymlFile, unreadQuartoLines(templateYml), 'sets project, format, render or output-file in a form the scaffold '
+    + 'cannot rewrite; write these settings in block style, as the official templates do');
+  // A profile file is copied unchanged, so one that sets render or output-file would still point at talk.qmd (#46).
+  for (const { src, rel } of copies.filter((c) => PROFILE_FILE.test(c.rel))) {
+    const lines = readFileSync(src, 'utf8').split(/\r?\n/)
+      .flatMap((raw, n) => (SETS_DECK_FILES.test(splitComment(raw)[0]) ? [{ line: n + 1, text: raw.trim() }] : []));
+    refuseUnreadSettings(src, lines, `sets render or output-file, but the scaffold rewrites only _quarto.yml; move those settings there`);
+  }
+  const yml = rewriteQuartoYml(templateYml, { theme, footer: fields.footer?.value, mainFile }, ymlFile);
   // A value that is still talk.qmd (not a name such as w07-talk.qmd that merely ends in it), or output-file talk.
   const leftover = [...yml.matchAll(/(?:^|[\s[,:"']|\.\/)(talk\.qmd)(?=["'\s,\]#]|$)/gim)].some((m) => m[1] !== mainFile)
     || (stem.toLowerCase() !== 'talk' && /output-file:[ \t]*["']?(\.\/)?talk(\.html)?["']?[ \t]*(#|$)/im.test(yml));
