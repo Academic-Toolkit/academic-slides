@@ -54,6 +54,8 @@ node <this skill>/scripts/scaffold.mjs --list                                   
 cd jscs2026 && quarto render                                                                 # → jscs2026-imputation.html
 ```
 
+A wrong option exits 2 and names it, before anything is written: an unknown option, one given twice, or a valued option given last, followed by another option, or given a blank value. `--help` or `-h` anywhere prints the usage.
+
 The beamer mirror of `research-talk` is not copied by the script; add it by hand when you want one:
 
 ```bash

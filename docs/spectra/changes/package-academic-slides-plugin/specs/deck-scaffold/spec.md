@@ -133,7 +133,7 @@ When looking up a template name, the scaffold SHALL use `templates/<name>/` of t
 
 ### Requirement: Scaffold writes only into an empty folder
 
-The scaffold SHALL refuse with status 1 when `--out` names a non-empty folder or a file, and SHALL write nothing with `--dry-run`, which prints the same resolution report. A valued option (`--out`, `--name`, `--template`, `--title`) given as the last argument, or followed by an argument that starts with `--`, SHALL make the script exit with status 2 naming the option before anything is written, so `--out --dry-run` never names a folder `--dry-run` (issue #49). The written `_quarto.yml` SHALL list its theme as `[default, _theme/deck.scss]` followed by `theme/personal.scss` and `theme/project.scss` for the layers that have a `theme.scss`, which are copied there. A template file on a path the scaffold writes itself (one of those overlay paths, or anything under `_theme`), or on a variant of such a path that differs only in letter case or Unicode form, SHALL be skipped with a warning before anything is written, so such a collision never leaves a partly written deck, also on a file system that ignores case.
+The scaffold SHALL refuse with status 1 when `--out` names a non-empty folder or a file, and SHALL write nothing with `--dry-run`, which prints the same resolution report. A valued option (`--out`, `--name`, `--template`, `--title`) given as the last argument, followed by an argument that starts with `--`, or given a blank value, and any option given twice, SHALL make the script exit with status 2 naming the option before anything is written, so `--out --dry-run` never names a folder `--dry-run` (issues #49, #52). `--help` or `-h` anywhere SHALL print the usage and exit with status 0, as in the slide-qa scripts (issue #52). Everything the script prints SHALL have control and bidirectional characters replaced (issue #51). The written `_quarto.yml` SHALL list its theme as `[default, _theme/deck.scss]` followed by `theme/personal.scss` and `theme/project.scss` for the layers that have a `theme.scss`, which are copied there. A template file on a path the scaffold writes itself (one of those overlay paths, or anything under `_theme`), or on a variant of such a path that differs only in letter case or Unicode form, SHALL be skipped with a warning before anything is written, so such a collision never leaves a partly written deck, also on a file system that ignores case.
 
 #### Scenario: Existing deck is not overwritten
 
@@ -154,6 +154,16 @@ The scaffold SHALL refuse with status 1 when `--out` names a non-empty folder or
 
 - **WHEN** the scaffold runs with `--out --dry-run --name w07`
 - **THEN** it exits with status 2 saying that `--out` needs a value, and no folder is created
+
+#### Scenario: Option given twice
+
+- **WHEN** the scaffold runs with `--name a --name b --out deck`
+- **THEN** it exits with status 2 saying that `--name` is given more than once, and no folder is created
+
+#### Scenario: -h as a value
+
+- **WHEN** the scaffold runs with `--out -h --name w07`
+- **THEN** it prints the usage, exits with status 0, and no folder is created
 
 ### Requirement: Settings layers cannot leak local files or run code without consent
 

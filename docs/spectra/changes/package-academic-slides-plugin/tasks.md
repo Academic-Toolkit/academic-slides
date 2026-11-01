@@ -103,5 +103,18 @@
 
 - [x] 20.1 [Req: Repository layout and manifests] [after: 17.2, 18.1, 19.2] `plugin.json` 與 `marketplace.json` 升為 0.8.0（打錯的選項、讀不懂的設定改為拒絕，是行為改變）。驗證：`npm test`、`npm run test:render`、兩處 `claude plugin validate --strict`、`spectra validate package-academic-slides-plugin` 都通過。
 - [x] 20.3 [Req: Check scripts refuse options they cannot read] [Req: Scripts find the deck file when none is given] [Req: Same-name templates resolve project, personal, official] [after: 20.1] 依 /idd-verify 第 1 輪（4 個審查角度、Devil's Advocate、Codex）修正：#46 拒絕 JSON 寫法、行首 flow、顯式鍵、第二份 YAML 文件、`output-file` 引號值的跳脫、render 裡 flow list 以外的逗號（`- my, talk.qmd`，issue 點名的寫法）；block scalar 的內容不算設定（偵測器與兩支掃描器都略過）；`Q & A.qmd`、`revealjs: {}`、其他鍵底下的 `format: {…}` 不再誤擋；`metadata-files` 依 Diagnosis 讀它列的檔，設了 render 或 output-file 才拒；profile 檔以同一個讀法檢查（不分大小寫、只在有設定檔時）；符號連結的設定檔不印內容；scaffold 的訊息換掉控制字元；文件寫實（`output-file` 的逗號不拒）。#45 只有空白的值算缺值、`--help` 列出全部的狀態 2 情形、SKILL 與 README 的指令範例納入測試。follow-up 開為 #50、#51、#52。驗證：新測試在修正前失敗，修正後 `npm test` 267 項、`npm run test:render`、`spectra validate` 都通過。
-- [ ] 20.2 [Req: Repository layout and manifests] [after: 20.1] 推送 cluster branch 並開一個 PR，內文以 Refs #45、Refs #46、Refs #49 連結（不用 Fixes，issue 於 merge 後由 /idd-close 關閉）；推送與開 PR 由 /idd-all-chain 在使用者確認後執行。驗證：`gh pr view` 顯示 PR 為 open。
+- [ ] 20.2 [Req: Repository layout and manifests] [after: 20.4, 21.1, 22.1, 23.1] 推送 cluster branch 並開一個 PR，內文以 Refs #45、#46、#49、#50、#51、#52 連結（不用 Fixes，issue 於 merge 後由 /idd-close 關閉）；推送與開 PR 由 /idd-all-chain 在使用者確認後執行。驗證：`gh pr view` 顯示 PR 為 open。
+- [x] 20.4 [Req: Check scripts refuse options they cannot read] [Req: Scripts find the deck file when none is given] [after: 20.3] 依 /idd-verify 第 1 輪 Devil's Advocate 與使用者 2026-11-01 的決定（重複選項三處一致拒絕）修正：偵測器整理成 `scanSettings`，設定檔、profile 檔、`metadata-files` 列的檔用同一套規則；跨行的 render 與 `output-file` 值、沒關上的引號拒絕；BOM 先去掉；oracle 測試（PyYAML 預算的 fixture）；handout 拒絕重複選項；`--x=value` 與空字串參數的訊息；`--help` 寫出設定讀不懂以 2 結束。驗證：新測試在修正前失敗，修正後 `npm test` 全部通過。
+
+## 21. GitHub issue #51：從別處來的資料夾，印出的文字與 trim（2026-11-01，同一條 chain）
+
+- [x] 21.1 [Req: Scripts find the deck file when none is given] [Req: Scaffold writes only into an empty folder] 依 D25 先寫測試（`tests/hardening.test.mjs`）：`printable` 涵蓋雙向控制字元；`HTML not found`、`qmd not found`、`tex not found` 不印控制字元；scaffold 印出的名稱、範本路徑、設定行都不含控制或雙向字元，寫出的 YAML 值不變；15 萬字元的 render 值在一秒內讀完。再實作 D25。驗證：新測試在修正前失敗（5 項，trim 那項跑了 18 秒），修正後 `npm test` 全部通過。
+
+## 22. GitHub issue #52：scaffold 的選項規則（2026-11-01，同一條 chain）
+
+- [x] 22.1 [Req: Scaffold writes only into an empty folder] 依 D26 先寫測試（`tests/scaffold.test.mjs`）：重複選項、空白值以狀態 2 結束並點名、不寫任何檔；`-h`、`--help` 在任何位置都印出用法、以 0 結束、不寫任何檔。再改 `parseArgs`。驗證：新測試在修正前失敗，修正後 `npm test` 全部通過。
+
+## 23. GitHub issue #50：其他決定輸出檔名的來源（2026-11-01，同一條 chain）
+
+- [x] 23.1 [Req: Scripts find the deck file when none is given] 依 D24 先寫測試（`tests/quarto-settings.test.mjs`）：擴充格式的 `output-file`、front matter 的 `output-file` 與 `output-ext`、`_metadata.yml`、`project: output-dir`、`output-ext`，找 `.html` 與 `.pdf` 時以狀態 2 結束並指出檔名與行號，找 `.qmd` 不受影響；沒有輸出檔名設定的 front matter 與 `_metadata.yml`、四個官方範本都不被擋。再改 `chooseDeckFile` 與 `quartoSettings`。驗證：新測試在修正前失敗，修正後 `npm test` 全部通過。
 

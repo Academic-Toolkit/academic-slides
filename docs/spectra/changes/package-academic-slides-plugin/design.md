@@ -205,6 +205,7 @@ check-density、check-fill、check-layout、check-mathjax、export-pdf 原本把
 - handout 不改：它在 #34 已經用同樣的方式檢查自己的選項，錯誤以 1 結束。`args()` 保留給 handout 與測試用的探針。
 - 使用者 2026-11-01 定案「全部比照 handout」：缺值、不是數字的數值、不認得的選項都擋。不屬於任何選項的參數在 diagnose 時一併列入；重複的選項是實作時依同一個讀參數的迴圈加進來的，理由同樣是「不猜」：先前取第一個值，使用者可能以為生效的是後一個。
 - 在範圍內：`_lib.mjs`、五支腳本與它們的說明文字、slide-qa `SKILL.md`、`tests/options.test.mjs`。scaffold 的同類問題開為 #49。
+- verify 第 1 輪之後：Devil's Advocate 指出「拒絕重複選項」不是使用者定的，使用者 2026-11-01 改定為「拒絕，三處一致」：slide-qa 檢查腳本、scaffold（#52）、handout 都拒絕同一個選項給兩次，handout 依 #34 以 1 結束。另外：只有空白的值算缺值；`--threshold=0.5` 的訊息改為請使用者用空格隔開；空字串參數在訊息裡印成 `""`；各腳本的 `--help` 寫出全部的狀態 2 情形，含 Quarto 設定讀不懂。
 
 ### D23. 讀不懂的 Quarto 設定寫法：拒絕猜，不解析（issue #46）
 
@@ -223,8 +224,33 @@ slide-qa 的 `readQuartoYml` 與 scaffold 的 `renameRenderTarget` 是兩支逐�
 - slide-qa：設定檔照 Quarto 的做法取 `_quarto.yml`，沒有時取 `_quarto.yaml`（實測兩者都在時 Quarto 用 `_quarto.yml`）。設定檔有讀不懂的行，`metadata-files` 列的檔如上，或資料夾裡的 profile 檔 `_quarto-<name>.yml`（不分大小寫，macOS 上 Quarto 也會載入 `_QUARTO-p.yml`）以任何寫法設了 `render` 或 `output-file`，或用了 `metadata-files`、merge key（引號內的文字與 block scalar 不算；Quarto 只在那個 profile 啟用時合併它，腳本無從得知 render 時用了哪個；沒有設定檔時 Quarto 不用 profile，這時不檢查），沒給檔名參數的腳本以狀態 2 結束，列出檔名、行號與原文（最多三筆），請使用者給檔名參數，或把 `project.render` 與 `output-file` 以區塊寫法寫在設定檔本身；給了檔名參數就照用，不讀設定。設定檔是符號連結時照舊跟隨讀取（與 0.7.0 相同），但拒絕訊息只列檔名與行號、不印內容，免得把資料夾外檔案的內容印出來（verify 第 1 輪 security）。
 - scaffold：範本的 `_quarto.yml` 有讀不懂的行；`metadata-files` 列的檔不在範本資料夾裡，或設了 `render`、`output-file`；或範本裡的 profile 檔設了（或可能間接設了）它們（這些檔照原樣複製，改寫不到）：在寫入任何東西之前以狀態 1 結束，列出檔名與行號，印出的文字把控制字元（含 DEL 與 C1）換成 `?`。D20 的殘留警告保留給區塊寫法裡改寫不到的 `talk.qmd`（例如列在 `resources` 底下）。
 - 來源：profile 檔與 `metadata-files` 是 diagnose #46 時發現的同類來源（寫在 Diagnosis）。`_quarto.yaml` 是實作時實測 Quarto 的選檔順序後加入的，Diagnosis 沒有列，使用者也沒有另外決定；它只讓 deck 多一種讀得到的設定檔。
-- 不涵蓋（開為 #50）：`clean-revealjs` 這類擴充格式的 `output-file`、`.qmd` front matter 的 `output-file`、`_metadata.yml`、`project: output-dir`、`output-ext`。
+- 不涵蓋（開為 #50，見 D24）：`clean-revealjs` 這類擴充格式的 `output-file`、`.qmd` front matter 的 `output-file`、`_metadata.yml`、`project: output-dir`、`output-ext`。
 - 在範圍內：`_lib.mjs`、`scaffold.mjs`、兩份 SKILL.md、`tests/quarto-settings.test.mjs`。
+- verify 第 1 輪 Devil's Advocate 之後：
+  - 偵測器原本是黑名單，與 Diagnosis 說的「認得的才算」不符，而且偵測器、掃描器、profile 檢查各有一套判斷。改為一個 `scanSettings` 掃過每一行並標上種類（讀不懂、render、掃描器採用的 output-file、metadata-files、其他輸出名稱來源），設定檔、profile 檔、`metadata-files` 列的檔都用它判斷，profile 檔裡 `format: pdf: output-file` 不再被擋。
+  - 跨行的值（純量或沒關上的引號）在 YAML 是一個值，掃描器卻讀成兩個，一律拒絕：render 的區塊清單項目、單一值與 `output-file` 都是。
+  - 檔案開頭的 UTF-8 BOM 先去掉再讀（原本第一行的區塊寫法會被誤擋，scaffold 也是）。
+  - 新增 oracle 測試：`tests/fixtures/make-quarto-oracle.py` 用 PyYAML 算出每個案例的 render 與 output-file，寫成 `quarto-settings-oracle.json`；測試要求偵測器接受的設定，掃描器讀出的結果與 PyYAML 相同，讀錯的案例必須被拒。執行期仍只用 Node 內建模組（D10 不變），產生器只在案例改變時手動執行。
+
+### D24. 其他決定輸出檔名的來源：找 `.html`、`.pdf` 時拒絕猜（issue #50）
+
+D23 只讀 `project.render` 與 `format: revealjs:`（或最上層）的 `output-file`。Quarto 還會從另外五個地方決定輸出檔名：擴充格式（例如 `clean-revealjs:`）自己的 `output-file`、主 `.qmd` front matter 的 `output-file` 或 `output-ext`、資料夾裡的 `_metadata.yml`（或 `.yaml`）、`project: output-dir`、`_quarto.yml` 的 `output-ext`。原本這些都不讀也不拒，腳本去找 `<stem>.html`，可能是比真正輸出舊的檔。
+
+- 決定：沿用使用者在 #46 的決定（2026-11-01：認不出就拒絕猜，只用 Node 內建模組），五個來源一律拒絕，不新增讀法：沒給檔名參數時以狀態 2 結束，列出檔名與行號。
+- 它們只改變 `.html`（以及跟著它的 `.pdf`）的名字，所以只在需要輸出檔名的查找（check-fill、check-layout、check-mathjax、export-pdf 的 `.html`，handout 的 `.pdf`）才拒絕；check-density 找 `.qmd` 不受影響。
+- front matter 與 `_metadata.yml` 只看會決定輸出檔名的鍵（掃描器會讀的 `output-file`、擴充格式的 `output-file`、`output-ext`），`format: pdf: output-file` 這類其他格式的設定不算，免得誤擋常見寫法。
+- scaffold 照原樣複製範本的 front matter；自訂範本若在那裡設了 `output-file`，deck 會以那個名字 render。官方範本沒有，記在 #50 的 Diagnosis，不另開 issue。
+
+### D25. 從別處來的資料夾：印出的文字與 render 值的 trim（issue #51）
+
+- slide-qa 的 `printable` 另外把雙向控制字元（U+061C、U+200E、U+200F、U+202A–U+202E、U+2066–U+2069）換成 `?`，並用在既有的 `HTML not found`、`qmd not found`、`tex not found` 訊息。
+- scaffold 印出的所有文字經過 `screen()`：逐行套用同樣的替換，多行訊息保留換行。`show()`（`JSON.stringify`）也用來寫 YAML 值，所以不改它。
+- `readQuartoYml` 去掉 render 值兩端的括號與空白，改用線性的迴圈；原本的 regex 遇到一長串空白會回溯，15 萬字元要 18 秒。
+
+### D26. scaffold 的選項規則比照 slide-qa 檢查腳本（issue #52）
+
+- `--help` 或 `-h` 出現在任何位置都印出用法並以 0 結束（`--out -h` 不再建出名為 `-h` 的資料夾）；同一個選項（含旗標）給兩次、帶值選項放最後、後面接另一個選項（#49）、值只有空白，都以狀態 2 結束並點名選項，什麼都不寫。
+- 重複選項的拒絕依使用者 2026-11-01 的決定（見 D22）。
 
 ## Implementation Contract
 
