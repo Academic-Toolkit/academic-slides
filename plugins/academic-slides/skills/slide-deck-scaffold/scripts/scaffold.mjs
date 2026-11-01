@@ -212,6 +212,7 @@ function continues(next) {
 
 // Replace, remove (null), or add single-line `key: value` fields in the front matter.
 export function rewriteFrontMatter(text, edits, where = 'talk.qmd') {
+  text = text.replace(/^\uFEFF/, '');   // a byte order mark is not part of the front matter (verify round 1 of #53)
   const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
   if (!m) throw new ScaffoldError(`${printable(where)} has no front matter block at the top`);
   const lines = m[1].split(/\r?\n/);
@@ -238,17 +239,38 @@ export function rewriteQuartoYml(text, { theme, footer, mainFile }, where = '_qu
   let out = text.replace(themeLine, (_, indent) => `${indent}theme: [${theme.join(', ')}]`);
   if (mainFile !== undefined) out = renameRenderTarget(out, mainFile);
   if (footer === undefined) return out;
-  const footerLine = /^([ \t]*)footer:.*$/m;
-  if (footer === null) return out.replace(/^[ \t]*footer:.*(\r?\n)?/m, '');
-  if (footerLine.test(out)) return out.replace(footerLine, (_, indent) => `${indent}footer: ${show(footer)}`);
+  const span = footerSpan(out);
+  if (footer === null) return span ? out.slice(0, span.start) + out.slice(span.end) : out;
+  if (span) return `${out.slice(0, span.start)}${span.indent}footer: ${show(footer)}${span.eol}${out.slice(span.end)}`;
   return out.replace(themeLine, (line, indent) => `${line}\n${indent}footer: ${show(footer)}`);
+}
+
+// The first footer line with the lines of its value: a | or > block scalar, or a scalar continued on later lines,
+// runs on while the lines are blank or indented deeper than the key (trailing blank lines are left in place).
+// Removing only the first line left a block scalar's text behind as settings (verify round 2 of #53).
+function footerSpan(text) {
+  const m = /^([ \t]*)footer:.*(\r?\n|$)/m.exec(text);
+  if (!m) return null;
+  const indent = m[1];
+  let end = m.index + m[0].length;
+  let at = end;
+  while (at < text.length) {
+    const nl = text.indexOf('\n', at);
+    const next = nl < 0 ? text.length : nl + 1;
+    const line = text.slice(at, next).replace(/\r?\n$/, '');
+    if (/^[ \t]*$/.test(line)) { at = next; continue; }
+    if (line.match(/^[ \t]*/)[0].length <= indent.length) break;
+    at = next; end = next;
+  }
+  return { start: m.index, end, indent, eol: m[2] };
 }
 
 // Point the deck's _quarto.yml at its own main file (issue #44). In the render list that is a direct child of
 // project:, a value that is exactly talk.qmd (quoted or not, with or without ./) becomes <name>.qmd, in a block
 // list, a flow list, or a single value; a value that only contains talk.qmd ("my talk.qmd"), a comment, and a
 // talk.qmd listed anywhere else (under resources, say) are left alone. An output-file of talk or talk.html,
-// at the top level or under format: revealjs:, becomes <name> or <name>.html.
+// at the top level, under format: revealjs:, or under an extension format such as clean-revealjs (#53), becomes
+// <name> or <name>.html.
 export function splitComment(body) {   // YAML: '#' after whitespace, outside quotes, starts a comment
   let quote = null;
   for (let i = 0; i < body.length; i++) {
@@ -259,6 +281,7 @@ export function splitComment(body) {   // YAML: '#' after whitespace, outside qu
   }
   return [body, ''];
 }
+const REVEALJS_KEY = /^\s*(?:[\w.-]+-)?revealjs:/;   // format.revealjs, or an extension format such as clean-revealjs (#53)
 const WHOLE_TALK = /(^|[[,:]|-[ \t])([ \t]*)(["']?)(\.\/)?talk\.qmd\3(?=[ \t]*(?:,|\]|$))/gi;
 export function renameRenderTarget(text, mainFile) {
   const stem = mainFile.replace(/\.qmd$/, '');
@@ -277,9 +300,9 @@ export function renameRenderTarget(text, mainFile) {
     if (indent === 0) { top = code.match(/^([^:\s]+):/)?.[1] ?? null; childIndent = -1; renderIndent = -1; fmtIndent = -1; }
     else {
       if (childIndent < 0) childIndent = indent;
-      if (indent <= childIndent && !(renderIndent === indent && /^\s*-/.test(code))) { renderIndent = -1; if (indent < childIndent || !/^\s*revealjs:/.test(code)) fmtIndent = -1; }
+      if (indent <= childIndent && !(renderIndent === indent && /^\s*-/.test(code))) { renderIndent = -1; if (indent < childIndent || !REVEALJS_KEY.test(code)) fmtIndent = -1; }
       if (top === 'project' && indent === childIndent && /^\s*render:/.test(code)) renderIndent = indent;
-      if (top === 'format' && indent === childIndent && /^\s*revealjs:/.test(code)) fmtIndent = indent;
+      if (top === 'format' && indent === childIndent && REVEALJS_KEY.test(code)) fmtIndent = indent;
       if (renderIndent >= 0) return code.replace(WHOLE_TALK, (_, d, sp, q, dot) => `${d}${sp}${q}${dot ?? ''}${mainFile}${q}`) + comment + nl;
     }
     const outputFile = indent === 0 || (fmtIndent >= 0 && indent > fmtIndent);
@@ -369,10 +392,10 @@ function settingLines(yml) {
 //   render         project.render, read by the scanner
 //   output-file    the output-file the scanner reads (the top level, or under format: revealjs:)
 //   metadata       metadata-files whose list the callers read
-//   output         another source of the output name the scanner does not read (#50), in any form, that changes only
-//                  where the deck is written or its extension: output-file under an extension format such as
-//                  clean-revealjs, output-ext, project.output-dir, a project type other than default; refused when the
-//                  name is needed, and no obstacle to the scaffold's rename (verify round 3)
+//   output         another source of the output name the scanner does not read (#50), in any form: output-file under
+//                  an extension format such as clean-revealjs, output-ext, project.output-dir, a project type other than
+//                  default; refused when the name is needed. All but the extension format's output-file change only where
+//                  the deck is written or its extension, which the scaffold accepts (verify round 3; #53 for the rest)
 function scanSettings(yml) {
   const found = [];
   let top = null; let childIndent = -1; let renderIndent = -1; let fmtIndent = -1; let fmtChild = null; let revChild = -1;
@@ -500,6 +523,118 @@ export function profileSettingLines(yml) {
   return scanSettings(yml).map(({ line, text, kind }) => ({ line, text, kind, outputOnly: OUTPUT_KINDS.includes(kind) }));
 }
 
+// The reader of project.render and output-file, and the YAML blocks of a document, are shared with the scaffold
+// (#53): it checks a template's render entries and talk.qmd's blocks with the same code slide-qa reads them with.
+const unquote = (v) => (/^(["']).*\1$/.test(v) ? v.slice(1, -1) : v);
+
+// The values of project.render (its direct child key; block or flow list, or one value; whole values only,
+// quoted or not, with ./ dropped) and the output-file that applies to revealjs (the one under format: revealjs:,
+// else the top-level one, whatever their order in the file), from a _quarto.yml. Block-style YAML as the templates
+// write it; other forms (flow mappings, quoted keys) are not read, and the scripts then need their file option.
+// Brackets and spaces off both ends, in one pass each: the regex this replaces backtracked on a long run of spaces (#51).
+function trimList(s) {
+  let i = 0;
+  let j = s.length;
+  while (i < j && (s[i] === '[' || /\s/.test(s[i]))) i++;
+  while (j > i && (s[j - 1] === ']' || /\s/.test(s[j - 1]))) j--;
+  return s.slice(i, j);
+}
+
+// Each render value with the line it is on, and the output-file: the scaffold names the line of a render entry that
+// the template does not have (#53), and readQuartoYml keeps its shape.
+function readSettingsValues(yml) {
+  const entries = [];
+  let topOutput = null;
+  let revealOutput = null;
+  let top = null; let childIndent = -1; let renderIndent = -1; let fmtIndent = -1;
+  for (const { line, code, indent } of settingLines(yml)) {   // block scalar contents are text, not settings (#46)
+    if (indent === 0) { top = code.match(/^([^:\s]+):/)?.[1] ?? null; childIndent = -1; renderIndent = -1; fmtIndent = -1; }
+    else {
+      if (childIndent < 0) childIndent = indent;
+      if (indent <= childIndent && !(renderIndent === indent && /^\s*-/.test(code))) { renderIndent = -1; if (indent < childIndent || !/^\s*revealjs:/.test(code)) fmtIndent = -1; }
+      if (top === 'project' && indent === childIndent && /^\s*render:/.test(code)) renderIndent = indent;
+      if (top === 'format' && indent === childIndent && /^\s*revealjs:/.test(code)) fmtIndent = indent;
+      if (renderIndent >= 0) {
+        let rest = code.replace(/^\s*render:/, '');
+        rest = rest.replace(/^\s*-\s+/, '');                          // a block-list item
+        const pieces = /[[\],]/.test(rest) ? trimList(rest).split(',') : [rest];
+        for (const piece of pieces) {
+          const v = unquote(piece.trim()).replace(/^\.\/(?=[^/])/, '');   // ./x is x; "./" and ".//x" stay as written (#53)
+          if (v) entries.push({ value: v, line });
+        }
+        continue;
+      }
+    }
+    if (indent === 0 || (fmtIndent >= 0 && indent > fmtIndent)) {
+      const o = code.match(/^[ \t]*output-file:[ \t]*(?:"([^"]*)"|'([^']*)'|(\S+))[ \t]*$/);
+      if (o) { const v = (o[1] ?? o[2] ?? o[3]).replace(/^\.\//, ''); if (indent === 0) topOutput = v; else revealOutput = v; }
+    }
+  }
+  return { entries, outputFile: revealOutput ?? topOutput };
+}
+
+export function readQuartoYml(yml) {
+  const { entries, outputFile } = readSettingsValues(yml);
+  return { render: entries.map((e) => e.value), outputFile };
+}
+
+export function renderEntries(yml) {
+  return readSettingsValues(yml).entries;
+}
+
+// The YAML blocks Quarto reads a document's metadata from, as { text, line(n) } (line(n): the file's line number of
+// the block's line n, 1 being the opening ---). Quarto's own rules (readYamlFromMarkdown; verify round 3): it drops
+// HTML comments and backtick-fenced code, then takes every line-start --- followed by a line that is not blank, up to
+// the next --- or ... line, whatever comes before it, and leaves out a block that starts with a blank line. Quarto
+// parses each block and stops the render on one that is not YAML, so reading them here cannot refuse a deck that
+// renders. Comments and fences are found line by line, not with Quarto's regular expressions, which take quadratic
+// time on many unclosed ones in a folder from elsewhere (#51).
+const QUARTO_YAML = /(^)(---[ \t]*[\r\n]+(?![ \t]*[\r\n]+)[\W\w]*?[\r\n]+(?:---|\.\.\.))([ \t]*)$/gm;   // kRegExYAML
+export function metadataBlocks(text) {
+  // drop HTML comments (<!-- up to the first --> after it), keeping the file's line number of every line that is left
+  let kept = ''; const origin = [0]; let line = 0; let at = 0;
+  for (;;) {
+    const open = text.indexOf('<!--', at);
+    const close = open < 0 ? -1 : text.indexOf('-->', open + 4);
+    const part = text.slice(at, close < 0 ? text.length : open);
+    kept += part;
+    for (let n = part.indexOf('\n'); n >= 0; n = part.indexOf('\n', n + 1)) origin.push(++line);
+    if (close < 0) break;
+    for (let n = text.indexOf('\n', open); n >= 0 && n < close; n = text.indexOf('\n', n + 1)) line++;
+    at = close + 3;
+  }
+  // blank fenced code: an opening line of backticks (after tabs, spaces or >) with no backtick after them, closed by the
+  // first line two or more lines down that has the same opening and only white space after it
+  const lines = kept.split('\n');
+  const closers = new Map();
+  lines.forEach((l, n) => { const m = l.match(/^([\t >]*`{3,})\s*$/); if (m) { if (!closers.has(m[1])) closers.set(m[1], []); closers.get(m[1]).push(n); } });
+  const next = new Map();   // per opening, how far its closer list has been read
+  for (let n = 0; n < lines.length; n++) {
+    const m = lines[n].match(/^([\t >]*`{3,})[^`]*$/);
+    if (!m) continue;
+    const list = closers.get(m[1]) ?? [];
+    let k = next.get(m[1]) ?? 0;
+    while (k < list.length && list[k] < n + 2) k++;
+    next.set(m[1], k);
+    if (k === list.length) continue;
+    for (let b = n; b <= list[k]; b++) lines[b] = '';
+    n = list[k];
+  }
+  const body = lines.join('\n');
+  const starts = [0];
+  for (let n = body.indexOf('\n'); n >= 0; n = body.indexOf('\n', n + 1)) starts.push(n + 1);
+  const blocks = [];
+  let row = 0;
+  for (const m of body.matchAll(QUARTO_YAML)) {
+    const block = m[2].replace(/^---/, '').replace(/---\s*$/, '').split('\n').map((x) => x.trimEnd()).join('\n');
+    if (/^\n\s*\n/.test(block) || /^\n\s*\n---/m.test(block) || block.trim() === '') continue;
+    while (row + 1 < starts.length && starts[row + 1] <= m.index) row++;
+    const first = row;
+    blocks.push({ text: block, line: (n) => origin[first + n - 1] + 1 });
+  }
+  return blocks;
+}
+
 // A plain or simply quoted YAML scalar ('…' without '', "…" without escapes), else null.
 function simpleScalar(s) {
   s = s.trim();
@@ -623,6 +758,64 @@ function untrustedProjectFiles(tpl, themeFiles, project) {
 // Everything the deck will contain, computed without writing anything.
 // Template settings the scaffold cannot rewrite (issue #46) stop it before anything is written.
 const PROFILE_FILE = /^_quarto-[^/\\]+\.ya?ml$/i;   // any letter case, as Quarto finds it on a case-insensitive disk
+// A template made by copying a finished deck keeps that deck's name (#53). Quarto 1.10.19 renders nothing for a render
+// entry whose file is missing, and exits 0; it renders the deck under any other output-file name. So, after the
+// rewrite, the scaffold refuses before writing: a render entry that names neither the deck's main file nor a file or
+// folder of the template (a glob is left to Quarto; .. or an absolute path points outside the new deck), an
+// output-file for the deck's HTML that is not the deck's own name (talk and talk.html have just been renamed), and,
+// in talk.qmd, which is copied as it is, an output-file in any form, or metadata-files or a merge key that could bring
+// one in. output-ext changes only the extension and is left alone, as in _quarto.yml. Lines are the template's.
+function staleRenderLines(yml, templateLines, copies, mainFile) {
+  const keys = copies.map((c) => pathKey(c.rel.split(path.sep).join('/')));
+  const has = (v) => {
+    const k = pathKey(v).replace(/\/+$/, '');
+    return k === pathKey(mainFile) || keys.some((c) => c === k || c.startsWith(`${k}/`));
+  };
+  // A value as Quarto reads it: ./ and // inside a path do not change it (verify round 1). Outside the deck is checked
+  // first, globs included ("../*.qmd" left the deck); a glob inside it is Quarto's; "." is the whole deck.
+  const norm = (v) => path.posix.normalize(v.replace(/\\/g, '/')).replace(/(.)\/+$/, '$1');   // chapters/../ is ./, the deck (verify round 2)
+  const glob = (v) => /[*?[\]{}!]/.test(v);
+  // A glob with .. anywhere is outside: ** can match no folder at all, so normalising must not cancel it (verify round 2).
+  const outside = (v) => path.isAbsolute(v) || path.win32.isAbsolute(v)
+    || (glob(v) ? v.split(/[\\/]/).includes('..') : norm(v) === '..' || norm(v).startsWith('../'));
+  const entries = renderEntries(yml);
+  const pick = (test) => [...new Set(entries.filter(({ value }) => test(value)).map(({ line }) => line))]
+    .map((line) => ({ line, text: templateLines[line - 1] ?? '' }));
+  // A render list that names neither the main file, nor ".", nor a glob never renders the deck itself (verify round 1);
+  // an empty one renders nothing, and Quarto exits 0 (verify round 2).
+  const renderKey = scanSettings(yml).find((f) => f.kind === 'render');
+  const covers = (v) => glob(v) || norm(v) === '.' || pathKey(norm(v)) === pathKey(mainFile);
+  return {
+    outside: pick(outside),
+    missing: pick((v) => !outside(v) && !glob(v) && norm(v) !== '.' && !has(norm(v))),
+    noMain: renderKey && !entries.some(({ value }) => covers(value))
+      ? [{ line: renderKey.line, text: templateLines[renderKey.line - 1] ?? '' }] : [],
+  };
+}
+
+function staleOutputLines(yml, templateLines, stem) {
+  const own = new Set([stem, `${stem}.html`].map(pathKey));
+  return scanSettings(yml)
+    .filter(({ kind, text }) => kind === 'output-file' || (kind === 'output' && /^output-file:/.test(text)))
+    .filter(({ text }) => {
+      const o = splitComment(text)[0].trimEnd().match(SCANNED_OUTPUT_FILE);   // a comment after the value is not part of it
+      return !own.has(pathKey((o?.[1] ?? o?.[2] ?? o?.[3] ?? '').replace(/^\.\//, '')));
+    })
+    .map(({ line }) => ({ line, text: templateLines[line - 1] ?? '' }));
+}
+
+function frontMatterNameLines(text) {
+  const setsOutputFile = (t) => /(^|[\s{,])["']?output-file["']?[ \t]*:/.test(t);
+  return metadataBlocks(text).flatMap((b) => scanSettings(b.text)
+    .filter(({ kind, text: t }) => kind !== 'render' && !(kind === 'output' && !setsOutputFile(t)))
+    .map(({ line, text: t }) => ({ line: b.line(line), text: t })));
+}
+
+// A profile file and a file metadata-files lists are copied unchanged, so their settings are refused unless they change
+// only where the deck is written or its extension (output-dir, output-ext, a project type; verify round 2): an
+// output-file under an extension format names the deck's HTML like one under revealjs (verify round 1 of #53).
+const placeOnlyAccepted = (l) => l.kind !== 'output' || /^output-file:/.test(l.text);
+
 function refuseUnreadSettings(file, unread, why) {
   if (!unread.length) return;
   const lines = unread.slice(0, 3).map((u) => `line ${u.line} (${show(printable(u.text))})`);
@@ -671,7 +864,8 @@ export function planDeck({ out, home, template, title, deckName, trustProject = 
   const theme = ['default', '_theme/deck.scss', ...themeFiles.map((f) => f.rel.split(path.sep).join('/'))];
   const qmdFile = path.join(tpl.dir, 'talk.qmd');
   const ymlFile = path.join(tpl.dir, '_quarto.yml');
-  const qmd = rewriteFrontMatter(readFileSync(qmdFile, 'utf8'), {
+  const templateQmd = readFileSync(qmdFile, 'utf8');
+  const qmd = rewriteFrontMatter(templateQmd, {
     title: fields.title?.value, author: fields.author?.value, institute: fields.affiliation?.value, lang: fields.lang?.value,
   }, qmdFile);
   const templateYml = readFileSync(ymlFile, 'utf8').replace(/^\uFEFF/, '');   // a byte order mark is not part of the first key
@@ -686,17 +880,42 @@ export function planDeck({ out, home, template, title, deckName, trustProject = 
         refuseUnreadSettings(ymlFile, [{ line, text: `metadata-files lists ${name}` }], 'but that file is not in the template folder, so '
           + 'the scaffold cannot check it; list only files kept beside _quarto.yml');
       }
-      refuseUnreadSettings(copy.src, profileSettingLines(readFileSync(copy.src, 'utf8')).filter((l) => l.kind !== 'output'),
+      refuseUnreadSettings(copy.src, profileSettingLines(readFileSync(copy.src, 'utf8')).filter(placeOnlyAccepted),
         'sets render or the output name, or may (through metadata-files, a merge key, or a form the scaffold cannot read), but the scaffold rewrites only _quarto.yml; move those settings there');
     }
   }
   // A profile file is copied unchanged, so one that sets render or output-file would still point at talk.qmd (#46).
   for (const { src, rel } of copies.filter((c) => PROFILE_FILE.test(c.rel))) {
-    // output-dir, output-ext and an extension format's output-file do not stop the scaffold's rename (verify round 2)
-    refuseUnreadSettings(src, profileSettingLines(readFileSync(src, 'utf8')).filter((l) => l.kind !== 'output'),
+    // output-dir, output-ext and a project type are accepted; an extension format's output-file is not (placeOnlyAccepted)
+    refuseUnreadSettings(src, profileSettingLines(readFileSync(src, 'utf8')).filter(placeOnlyAccepted),
       'sets render or the output name, or may (through metadata-files, a merge key, or a form the scaffold cannot read), but the scaffold rewrites only _quarto.yml; move those settings there');
   }
   const yml = rewriteQuartoYml(templateYml, { theme, footer: fields.footer?.value, mainFile }, ymlFile);
+  // Checked on the template's text with only the renames applied, so line numbers are the template's: a settings layer
+  // can add or remove the footer line in the written file (verify round 1 of #53).
+  const renamed = renameRenderTarget(templateYml, mainFile);
+  const templateLines = templateYml.split(/\r?\n/);
+  const staleRender = staleRenderLines(renamed, templateLines, copies, mainFile);
+  refuseUnreadSettings(ymlFile, staleRender.outside, 'names a path outside the new deck folder (.. or an absolute path); a deck '
+    + 'renders only its own files, so list talk.qmd, which the scaffold renames to the deck\'s main file, files kept in the template, or a glob inside it');
+  refuseUnreadSettings(ymlFile, staleRender.missing, 'names a file that is neither talk.qmd nor '
+    + 'kept in the template (left from the deck it was copied from?); Quarto renders nothing for it and exits 0. List talk.qmd, '
+    + 'which the scaffold renames to the deck\'s main file, files kept in the template, or a glob');
+  refuseUnreadSettings(ymlFile, staleRender.noMain, 'lists files to render but not talk.qmd, the deck\'s main file, which would '
+    + 'then never be rendered (left from the deck the template was copied from?). Add talk.qmd, which the scaffold renames, or use a glob');
+  refuseUnreadSettings(ymlFile, staleOutputLines(renamed, templateLines, stem), 'names the deck\'s HTML after something other than talk '
+    + '(left from the deck it was copied from?); the deck would render under that name. Write output-file: talk, which the '
+    + 'scaffold renames to the deck\'s name, or remove it');
+  // _metadata.yml beside talk.qmd is merged into it and copied unchanged, so it is judged like a profile file (verify
+  // round 1 of #53): it may change where the deck is written or its extension, not its name.
+  for (const { src } of copies.filter((c) => /^_metadata\.ya?ml$/i.test(c.rel))) {
+    refuseUnreadSettings(src, profileSettingLines(readFileSync(src, 'utf8')).filter((l) => l.kind !== 'render').filter(placeOnlyAccepted),
+      'sets the output name, or may (through metadata-files, a merge key, or a form the scaffold cannot read); _metadata.yml is copied '
+      + 'unchanged, so the deck would render under that name. Remove it, or write output-file: talk in the template\'s _quarto.yml');
+  }
+  refuseUnreadSettings(qmdFile, frontMatterNameLines(templateQmd.replace(/^\uFEFF/, '')), 'sets the output name in talk.qmd, or may (through metadata-files '
+    + 'or a merge key); talk.qmd is copied as it is, so the deck would render under that name. Remove it, or write output-file: '
+    + 'talk in the template\'s _quarto.yml, which the scaffold renames');
   // A value that is still talk.qmd (not a name such as w07-talk.qmd that merely ends in it), or output-file talk.
   const leftover = [...yml.matchAll(/(?:^|[\s[,:"']|\.\/)(talk\.qmd)(?=["'\s,\]#]|$)/gim)].some((m) => m[1] !== mainFile)
     || (stem.toLowerCase() !== 'talk' && /output-file:[ \t]*["']?(\.\/)?talk(\.html)?["']?[ \t]*(#|$)/im.test(yml));

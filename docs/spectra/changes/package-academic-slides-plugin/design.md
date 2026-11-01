@@ -273,6 +273,39 @@ D23 只讀 `project.render` 與 `format: revealjs:`（或最上層）的 `output
 - 重複選項的拒絕依使用者 2026-11-01 的決定（見 D22）。
 - `--旗標=值`（`--shots=1`、`--dry-run=1`、`--landscape=1`）在檢查腳本、scaffold、handout 都回「不接受值」；帶值選項寫成 `--x=值`，三處都提示改用空格（verify 第 3 輪）。
 
+### D27. 從完成的 deck 複製成的範本帶著原 deck 的名字：寫入前拒絕（issue #53）
+
+用完成的 deck（例如 `w07`）複製成範本時，有三處會帶著原 deck 的名字。scaffold 原本只改名 `talk.qmd` 與 `output-file: talk`，其餘照抄，#44 的警告也只找 `talk`：
+
+- `project.render` 的 `- "w07.qmd"`：Quarto 1.10.19 實測，`quarto render` 對不存在的 render 檔什麼都不輸出，也以 0 結束；
+- `_quarto.yml` 的 `output-file: w07`：新的 `w08.qmd` 輸出成 `w07.html`；
+- `talk.qmd` front matter 的 `output-file`：同上（#50 的 residue）。
+
+- 決定：預設，沿用使用者在 #46 的決定，認不出就拒絕猜。改寫之後、寫入任何東西之前以狀態 1 拒絕，點名範本的檔案與行號；不猜哪一項是原 deck 的主檔再改名。
+- render：每個不含 glob 字元的值，必須是 deck 的主檔，或範本裡實際有的檔或資料夾（比對用 `pathKey`，大小寫與 Unicode 形式的差異不算不同）。`..` 或絕對路徑指到新 deck 外面，也拒絕。
+- `output-file`：決定 `.html` 名字的那幾處（最上層、`format: revealjs:`、名稱以 `-revealjs` 結尾的擴充格式）。`talk`、`talk.html` 改成 deck 的名字（擴充格式這次一併改名），其他值拒絕。其他格式（`pdf`、`docx`）不動。自訂範本若把它固定成某個名字，也會被拒；這和 D20「deck 主檔依內容命名」相衝，訊息說明可改成 `talk`。
+- `talk.qmd` 照 Quarto 的規則找 YAML 區塊（與 slide-qa 同一份 `metadataBlocks`）：決定 `.html` 名字的 `output-file`（最上層、revealjs、擴充格式底下）不論寫法都拒絕，其他格式底下的不動，`metadata-files` 與 merge key 也拒絕；scaffold 只改寫 `_quarto.yml`，和 profile 檔同一個原則。`output-ext` 只改副檔名、不帶舊名，照收，和 `_quarto.yml` 的 `output-ext` 一致；這收窄了 #53 範圍擴充 comment 的「警告（或拒絕）」。
+- verify 第 1 輪（Codex）之後：
+  - `..` 與絕對路徑先檢查，glob 也算（`"../*.qmd"` 原本被當成 glob 放行）；訊息改說「指到新 deck 外」，不再說 Quarto 什麼都不輸出。
+  - `talk.qmd` 開頭的 BOM 先去掉再找 YAML 區塊，和 slide-qa 一致；`rewriteFrontMatter` 也先去掉它，原本帶 BOM 的 `talk.qmd` 會被誤報成「開頭沒有 front matter」。
+  - profile 檔與 `metadata-files` 列的檔原樣複製，所以裡面擴充格式的 `output-file` 也拒絕，和 revealjs 底下的一樣；verify 第 2 輪只把改輸出位置或副檔名的設定（`output-dir`、`output-ext`、project type）當成可接受，這裡把原本混在一起的擴充格式 `output-file` 分出來。
+- verify 第 1 輪（對抗式審查）之後：
+  - `output-file: talk   # 註解`：比對前先去掉同一行的註解；原本會誤擋，訊息還要使用者改成本來就寫好的 `output-file: talk`（回歸，main 原本接受）。
+  - 行號一律是範本的：檢查改在「只做改名」的範本文字上跑；個人或專案設定刪掉或加上 footer 那一行時，寫出的檔案行數會變。
+  - 範本裡 `talk.qmd` 旁邊的 `_metadata.yml`／`_metadata.yaml` 也原樣複製，比照 profile 檔判斷：Quarto 實測會以裡面的 `output-file` 輸出（預設，沿用本 issue「範本帶著原 deck 的名字就拒絕」的原則；審查者請使用者決定範圍，這裡先取這個預設，PR 審閱時可推翻）。
+  - render 清單既沒有主檔、也沒有 `.` 或 glob 時拒絕：主檔永遠不會被 render（原 deck 的 `.qmd` 還留在範本裡時就會這樣）。
+  - render 值照 Quarto 的讀法先正規化：`.`、路徑中的 `./`、`//` 照收；verify 第 2 輪起，回到 deck 資料夾本身的路徑（`chapters/../`）也算 `.`。
+  - 空的 render 清單（`render: []`）也拒絕：Quarto 1.10.19 實測什麼都不輸出，並以 0 結束（verify 第 2 輪）。
+- verify 第 2 輪（對抗式審查）之後：
+  - 兩個前一輪帶進來的回歸已修：(1) render 值 `./` 讀進來時被去掉開頭的 `./` 變成空字串而丟掉，主檔檢查就誤擋 `render: ["./", appendix.qmd]`；`.//chapters/a.qmd` 則變成絕對路徑被當成 deck 外。共用的讀法改成只在 `./` 後面還有別的字、且不是 `/` 時才去掉，slide-qa 只用以 `.qmd` 結尾的單純檔名，不受影響。(2) 檢查改在範本文字上跑之後，設定層刪掉 `footer: |` 只刪第一行，區塊純量的內容留下來變成真的設定；footer 的改寫現在連同它的值一起刪或換（後面比 key 縮排深的行與中間的空行）。
+  - glob 裡只要有 `..` 就算 deck 外：`**` 可以比對零層資料夾，`**/../*.qmd` 正規化後會被抵銷，Quarto 實測卻寫到 deck 外。
+  - `_metadata.yml` 只判斷輸出名稱的設定：Quarto 1.10.19 實測不讀它的 `project.render`。
+- 已知限制（不在本 issue 修）：
+  - 帶組織名的擴充格式（`acme/clean-revealjs:`）與加引號的格式名，scanner 認不出來，底下的 `output-file` 不擋也不改名。這是 #50 起的 scanner 限制，兩份偵測器都有，追蹤於 #57。
+  - render 清單有任何 glob（含 `!` 排除項）就當成涵蓋主檔，不實際比對（spec 寫明）；Node 的 `path.matchesGlob` 可以拿掉這個限制，留待之後。
+  - 帶舊名的 glob（`w07*.qmd`）照收：scaffold 不比對 glob，這是刻意的限制。
+- 實作：`readQuartoYml`（連同 `trimList`、`unquote`）與 `metadataBlocks` 移進 `_lib.mjs` 與 `scaffold.mjs` 逐字相同的偵測器區塊。`readQuartoYml` 與保留行號的 `renderEntries` 都由同一個 `readSettingsValues` 組成，兩邊只有一份讀法；測試比對兩份 `readQuartoYml` 的結果，也比對兩份偵測器區塊的原始碼（只差互相指引的那一行）。slide-qa 的行為不變。
+
 ## Implementation Contract
 
 **Behavior：**
