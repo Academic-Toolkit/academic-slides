@@ -309,7 +309,7 @@ const FILE_KEYS = ['project', 'render', 'metadata-files'];
 const OUTPUT_KEYS = ['format', 'revealjs', 'output-file', 'output-ext', 'output-dir'];
 const RENAME_KEYS = ['format', 'revealjs', 'output-file'];   // the scaffold rewrites the name these set
 const REVEALJS_FORMAT = /^(revealjs|.+-revealjs)$/;
-const DEFAULT_TYPE = /^(?:"default"|'default'|default)?$/;   // project.type default, quoted or not, or no value
+const DEFAULT_TYPE = /^(?:"default"|'default'|default|~|null|Null|NULL)?$/;   // project.type default, quoted or not, or null
 const KEY_MENTION = /(^|[\s{,[])(project|format|revealjs|render|output-file|output-ext|output-dir|metadata-files)([ \t]*):(?=[\s{["']|$)/g;
 const MERGE_KEY = /(^|[\s{,[-])<<[ \t]*:/;
 const SCANNED_OUTPUT_FILE = /^[ \t]*output-file:[ \t]*(?:"([^"]*)"|'([^']*)'|(\S+))[ \t]*$/;
@@ -413,6 +413,7 @@ function scanSettings(yml) {
       output = true; if (RENAME_KEYS.includes(k)) renames = true;
     };
     for (const k of keys) { if (FILE_KEYS.includes(k)) files = true; else if (OUTPUT_KEYS.includes(k)) outputKey(k); }
+    if (keys.some((k) => k.includes('\\'))) files = true;   // "ren\u0064er": an escape in a key could spell any key (round 3)
     for (const m of masked.matchAll(KEY_MENTION)) {
       if (m[3] === '' && m.index + m[1].length === indent) continue;   // a plain block key, first on its line
       // format and revealjs named inside a one-line flow mapping set nothing on their own; an output key named there is
@@ -753,6 +754,7 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const eq = a.indexOf('=');
+    if (!valued[a] && !flags[a] && eq > 0 && flags[a.slice(0, eq)]) throw new UsageError(`${a.slice(0, eq)} takes no value (got ${printable(a)})`);
     if (!valued[a] && !flags[a] && eq > 0 && valued[a.slice(0, eq)]) {   // --name=w07: a known option, another form
       throw new UsageError(`${printable(a)}: write the value after a space (${a.slice(0, eq)} ${printable(a.slice(eq + 1))})`);
     }
@@ -774,7 +776,7 @@ function printList(opts, home) {
   const dirs = { projectDir: findProjectDir(out, home), personalDir: personalDir(home), officialDir: OFFICIAL_DIR };
   for (const t of listTemplates(dirs)) {
     const note = t.shadowedBy ? `shadowed by ${t.shadowedBy}` : '';
-    console.log(screen(`${t.name.padEnd(18)} ${t.layer.padEnd(9)} ${note.padEnd(20)} ${t.dir}`));
+    console.log(screen(`${t.name.padEnd(18)} ${t.layer.padEnd(9)} ${note.padEnd(20)} ${printable(t.dir)}`));
   }
 }
 
@@ -799,11 +801,11 @@ export function main(argv, home = os.homedir()) {
     const plan = planDeck({ out: opts.out, home, template: opts.template, title: opts.title, deckName: opts.name, trustProject: opts.trustProject });
     console.log(screen(report(plan)));
     if (opts.dryRun) {
-      console.log(screen(`Dry run: nothing written (${plan.files.length} files would go to ${plan.out})`));
+      console.log(screen(`Dry run: nothing written (${plan.files.length} files would go to ${printable(plan.out)})`));
       return 0;
     }
     writeDeck(plan);
-    console.log(screen(`Wrote ${plan.files.length} files to ${plan.out}\nMain file ${plan.mainFile} (quarto render writes ${plan.mainFile.replace(/\.qmd$/, '.html')})\nNext: cd ${show(plan.out)} && quarto render`));
+    console.log(screen(`Wrote ${plan.files.length} files to ${printable(plan.out)}\nMain file ${plan.mainFile} (quarto render writes ${plan.mainFile.replace(/\.qmd$/, '.html')})\nNext: cd ${show(plan.out)} && quarto render`));
     return 0;
   } catch (e) {
     console.error(screen(`scaffold: ${e.message}`));

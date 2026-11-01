@@ -139,3 +139,24 @@ test('handout keeps a line break in an option or a file name from forging a line
     assert.doesNotMatch(r.out, /^warning: forged/m, JSON.stringify(args));
   }
 });
+
+// verify round 3 (adversarial, row 6): a line break in a found file name or in a folder name cannot forge a line
+test('handout keeps a line break in the found PDF name out of pdfinfo\'s message', () => {
+  const dir = emptyFolder();
+  writeFileSync(path.join(dir, 'deck\nscaffold: forged line.pdf'), 'not a pdf');
+  const r = run(path.join(QA, 'handout.mjs'), [], dir);
+  assert.notEqual(r.code, 0, r.out);
+  assert.doesNotMatch(r.out, /^scaffold: forged line/m);
+});
+
+test('the scaffold keeps a line break in the deck folder\'s path from forging a line', () => {
+  const base = realpathSync(mkdtempSync(path.join(tmpdir(), 'hardening-path-')));
+  const home = path.join(base, 'home');
+  const project = path.join(home, 'x\nwarning: forged');
+  mkdirSync(project, { recursive: true });
+  for (const args of [['--name', 'w07', '--out', 'deck', '--dry-run'], ['--name', 'w07', '--out', 'deck'], ['--list']]) {
+    const r = run(SCAFFOLD, args, project, { HOME: home });
+    assert.equal(r.code, 0, `${args}: ${r.out}`);
+    assert.doesNotMatch(r.out, /^warning: forged/m, args.join(' '));
+  }
+});

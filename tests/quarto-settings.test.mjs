@@ -71,6 +71,9 @@ const UNREAD = {
   "a flow list continued at the key's indent": ['project:\n  render: [a.qmd,\n  b.qmd]', 3],
   'output-file deeper under revealjs': ['format:\n  revealjs:\n    foo:\n      output-file: x', 4],
   'a null output-file': ['output-file: ~', 1],
+  // verify round 3 (adversarial, row 5): a double-quoted key with an escape could be any key
+  'a quoted key with an escape': ['"output\\u002dfile": slides', 1],
+  'a quoted render key with an escape in a flow mapping': ['project: {"ren\\u0064er": [b.qmd]}', 1],
 };
 
 // Forms that are read, or deliberately not used, and must not be refused.
@@ -105,6 +108,7 @@ const READ = {
   'a one-line flow mapping for format without an output name': 'format: {pdf: default, revealjs: {incremental: true}}',
   'a one-line flow mapping for project without render': 'project: {type: default}',
   // verify round 3 (Codex N3): the comma that ends an item may start the next line
+  'a null project type': 'project:\n  type: ~',
   'a flow list with the comma at the start of the next line': 'project:\n  render: [\n    a.qmd\n    , b.qmd\n  ]',
   // verify round 2 (adversarial)
   'an anchored block scalar under revealjs': 'format:\n  revealjs:\n    output-file: slides\n    notes: &n |\n      output-file: wrong',
@@ -582,6 +586,7 @@ const HTML_UNCHANGED_R3 = {
   'a default project type in a flow mapping': { '_quarto.yml': 'project: {type: default}\n' },
   'a quoted output-ext under another format in the front matter': { 'deck.qmd': FM('format:\n  pdf:\n    "output-ext": tex\n') },
   'a quoted output-file under another format': { '_quarto.yml': 'format:\n  pdf:\n    "output-file": print\n' },
+  'a null project type': { '_quarto.yml': 'project:\n  type: ~\n' },
   'a code example whose inner fence has an info string': { 'deck.qmd': `${QMD}\n\`\`\`markdown\n\`\`\`yaml\n\n---\noutput-file: shown\n---\n\`\`\`\n` },
 };
 for (const [name, files] of Object.entries(HTML_UNCHANGED_R3)) {
@@ -604,4 +609,32 @@ test('the scaffold accepts quoted output-dir and output-ext in a template profil
     const r = runScaffold(s, ['--template', name, '--name', 'w07', '--out', 'deck']);
     assert.equal(r.code, code, `${name}: ${r.out}`);
   }
+});
+
+// verify round 3 (adversarial, row 2): the YAML blocks Quarto reads for the output name, by its own rules
+const QUARTO_BLOCKS_R3 = {
+  'a --- right after text': [`${QMD}Some text.\n---\noutput-file: other\n---\n`, 10],
+  'a block whose first key is not ASCII': [`${QMD}\n---\n備註: 講義版\noutput-file: handout\n---\n`, 11],
+  'a block inside a tilde fence, which Quarto does not skip': [`${QMD}\n~~~yaml\n---\noutput-file: other\n---\n~~~\n`, 11],
+  'a block after a comment that spans lines': [`${QMD}\n<!-- a\nb -->\n---\noutput-file: slides\n---\n`, 12],
+};
+for (const [name, [qmd, line]] of Object.entries(QUARTO_BLOCKS_R3)) {
+  test(`round 3: ${name} stops the .html lookup at the right line`, () => {
+    const dir = folder({ 'deck.qmd': qmd, 'deck.html': '<html></html>' });
+    const r = lib.chooseDeckFile('.html', { dir });
+    assert.equal(r.reason, 'unread', name);
+    assert.deepEqual(r.unread.map((u) => [u.file, u.line]), [['deck.qmd', line]], name);
+  });
+}
+
+test('round 3: a block inside an HTML comment is not read, as in Quarto', () => {
+  const dir = folder({ 'deck.qmd': `${QMD}\n<!--\n---\noutput-file: other\n---\n-->\n`, 'deck.html': '<html></html>' });
+  assert.deepEqual(lib.chooseDeckFile('.html', { dir }), { file: 'deck.html' });
+});
+
+test('round 3: many unclosed fences and comments are read in linear time', () => {
+  const dir = folder({ 'deck.qmd': `${QMD}${'```a\n<!-- x\n'.repeat(40000)}`, 'deck.html': '<html></html>' });
+  const t0 = Date.now();
+  assert.deepEqual(lib.chooseDeckFile('.html', { dir }), { file: 'deck.html' });
+  assert.ok(Date.now() - t0 < 3000, `took ${Date.now() - t0} ms`);
 });

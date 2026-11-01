@@ -31,6 +31,9 @@ export function parseOptions(argv, spec) {
     const name = token.slice(2);
     const kind = Object.hasOwn(spec, name) ? spec[name] : undefined;
     const eq = name.indexOf('=');
+    if (kind === undefined && eq > 0 && spec[name.slice(0, eq)] === 'flag') {   // --shots=1: a flag takes no value (round 3)
+      throw new OptionError(`--${name.slice(0, eq)} takes no value (got ${printable(token)})`);
+    }
     if (kind === undefined && eq > 0 && Object.hasOwn(spec, name.slice(0, eq))) {   // --threshold=0.5: a known option, another form
       throw new OptionError(`${printable(token)}: write the value after a space (--${printable(name.slice(0, eq))} ${printable(name.slice(eq + 1))})`);
     }
@@ -178,7 +181,7 @@ const FILE_KEYS = ['project', 'render', 'metadata-files'];
 const OUTPUT_KEYS = ['format', 'revealjs', 'output-file', 'output-ext', 'output-dir'];
 const RENAME_KEYS = ['format', 'revealjs', 'output-file'];   // the scaffold rewrites the name these set
 const REVEALJS_FORMAT = /^(revealjs|.+-revealjs)$/;
-const DEFAULT_TYPE = /^(?:"default"|'default'|default)?$/;   // project.type default, quoted or not, or no value
+const DEFAULT_TYPE = /^(?:"default"|'default'|default|~|null|Null|NULL)?$/;   // project.type default, quoted or not, or null
 const KEY_MENTION = /(^|[\s{,[])(project|format|revealjs|render|output-file|output-ext|output-dir|metadata-files)([ \t]*):(?=[\s{["']|$)/g;
 const MERGE_KEY = /(^|[\s{,[-])<<[ \t]*:/;
 const SCANNED_OUTPUT_FILE = /^[ \t]*output-file:[ \t]*(?:"([^"]*)"|'([^']*)'|(\S+))[ \t]*$/;
@@ -282,6 +285,7 @@ function scanSettings(yml) {
       output = true; if (RENAME_KEYS.includes(k)) renames = true;
     };
     for (const k of keys) { if (FILE_KEYS.includes(k)) files = true; else if (OUTPUT_KEYS.includes(k)) outputKey(k); }
+    if (keys.some((k) => k.includes('\\'))) files = true;   // "ren\u0064er": an escape in a key could spell any key (round 3)
     for (const m of masked.matchAll(KEY_MENTION)) {
       if (m[3] === '' && m.index + m[1].length === indent) continue;   // a plain block key, first on its line
       // format and revealjs named inside a one-line flow mapping set nothing on their own; an output key named there is
@@ -460,33 +464,55 @@ export function quartoSettings(dir = process.cwd()) {
 }
 
 // The lines of a .qmd file's front matter that set the output name (#50), as { file, line, text, outputOnly }.
-// The YAML metadata blocks Pandoc reads in a document, as { first, text } (first: the 0-based line after the opening
-// ---). The front matter, also after blank lines, and a later block (verify round 2): a --- line after a blank line,
-// not followed by a blank line, up to the next --- or ... line. A later block counts only when it reads as a YAML
-// mapping: every line at the left margin that is not blank or a comment starts with a key or a merge key (verify
-// round 3). That leaves out a revealjs slide break followed by its heading and text. Fenced code is skipped; a fence
-// closes only on a line of its own character, at least as long, with nothing after it.
-const KEY_LINE = /^(?:<<|["']?[A-Za-z_][\w.-]*["']?)[ \t]*:(?:[ \t]|$)/;
+// The YAML blocks Quarto reads a document's metadata from, as { text, line(n) } (line(n): the file's line number of
+// the block's line n, 1 being the opening ---). Quarto's own rules (readYamlFromMarkdown; verify round 3): it drops
+// HTML comments and backtick-fenced code, then takes every line-start --- followed by a line that is not blank, up to
+// the next --- or ... line, whatever comes before it, and leaves out a block that starts with a blank line. Quarto
+// parses each block and stops the render on one that is not YAML, so reading them here cannot refuse a deck that
+// renders. Comments and fences are found line by line, not with Quarto's regular expressions, which take quadratic
+// time on many unclosed ones in a folder from elsewhere (#51).
+const QUARTO_YAML = /(^)(---[ \t]*[\r\n]+(?![ \t]*[\r\n]+)[\W\w]*?[\r\n]+(?:---|\.\.\.))([ \t]*)$/gm;   // kRegExYAML
 function metadataBlocks(text) {
-  const lines = text.split(/\r?\n/);
+  // drop HTML comments (<!-- up to the first --> after it), keeping the file's line number of every line that is left
+  let kept = ''; const origin = [0]; let line = 0; let at = 0;
+  for (;;) {
+    const open = text.indexOf('<!--', at);
+    const close = open < 0 ? -1 : text.indexOf('-->', open + 4);
+    const part = text.slice(at, close < 0 ? text.length : open);
+    kept += part;
+    for (let n = part.indexOf('\n'); n >= 0; n = part.indexOf('\n', n + 1)) origin.push(++line);
+    if (close < 0) break;
+    for (let n = text.indexOf('\n', open); n >= 0 && n < close; n = text.indexOf('\n', n + 1)) line++;
+    at = close + 3;
+  }
+  // blank fenced code: an opening line of backticks (after tabs, spaces or >) with no backtick after them, closed by the
+  // first line two or more lines down that has the same opening and only white space after it
+  const lines = kept.split('\n');
+  const closers = new Map();
+  lines.forEach((l, n) => { const m = l.match(/^([\t >]*`{3,})\s*$/); if (m) { if (!closers.has(m[1])) closers.set(m[1], []); closers.get(m[1]).push(n); } });
+  const next = new Map();   // per opening, how far its closer list has been read
+  for (let n = 0; n < lines.length; n++) {
+    const m = lines[n].match(/^([\t >]*`{3,})[^`]*$/);
+    if (!m) continue;
+    const list = closers.get(m[1]) ?? [];
+    let k = next.get(m[1]) ?? 0;
+    while (k < list.length && list[k] < n + 2) k++;
+    next.set(m[1], k);
+    if (k === list.length) continue;
+    for (let b = n; b <= list[k]; b++) lines[b] = '';
+    n = list[k];
+  }
+  const body = lines.join('\n');
+  const starts = [0];
+  for (let n = body.indexOf('\n'); n >= 0; n = body.indexOf('\n', n + 1)) starts.push(n + 1);
   const blocks = [];
-  let fence = null; let content = false;
-  for (let i = 0; i < lines.length; i++) {
-    const f = lines[i].match(/^[ \t]{0,3}(`{3,}|~{3,})(.*)$/);
-    if (fence) { if (f && f[1][0] === fence[0] && f[1].length >= fence.length && f[2].trim() === '') fence = null; continue; }
-    if (f) { fence = f[1]; content = true; continue; }
-    const top = !content;
-    if (lines[i].trim() !== '') content = true;
-    if (!/^---[ \t]*$/.test(lines[i]) || (i > 0 && lines[i - 1].trim() !== '')) continue;
-    if (!top && (lines[i + 1] ?? '').trim() === '') continue;
-    let j = i + 1;
-    while (j < lines.length && !/^(?:---|\.\.\.)[ \t]*$/.test(lines[j])) j++;
-    if (j >= lines.length) break;
-    const body = lines.slice(i + 1, j);
-    const margin = body.filter((l) => /^[^ \t#]/.test(l));
-    if (!top && (margin.length === 0 || !margin.every((l) => KEY_LINE.test(l)))) continue;
-    blocks.push({ first: i + 1, text: body.join('\n') });
-    i = j;
+  let row = 0;
+  for (const m of body.matchAll(QUARTO_YAML)) {
+    const block = m[2].replace(/^---/, '').replace(/---\s*$/, '').split('\n').map((x) => x.trimEnd()).join('\n');
+    if (/^\n\s*\n/.test(block) || /^\n\s*\n---/m.test(block) || block.trim() === '') continue;
+    while (row + 1 < starts.length && starts[row + 1] <= m.index) row++;
+    const first = row;
+    blocks.push({ text: block, line: (n) => origin[first + n - 1] + 1 });
   }
   return blocks;
 }
@@ -497,7 +523,7 @@ function frontMatterOutputLines(dir, name) {
   let link = false;
   try { link = lstatSync(path.join(dir, name)).isSymbolicLink(); } catch { /* read above */ }
   return metadataBlocks(text).flatMap((b) => outputNameLines(b.text).map((u) => ({
-    file: name, line: b.first + u.line, text: link ? 'not shown: the file is a symbolic link' : u.text, outputOnly: true,
+    file: name, line: b.line(u.line), text: link ? 'not shown: the file is a symbolic link' : u.text, outputOnly: true,
   })));
 }
 

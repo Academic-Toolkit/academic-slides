@@ -63,6 +63,12 @@ for (const token of process.argv.slice(2)) {
     continue;
   }
   if (name === 'nup') fail('--nup is not an option: give the grid as --rows R --cols C.');
+  // --pdf=deck.pdf and --landscape=1: known options in another form, told as the check scripts tell them (round 3)
+  const eq = name.indexOf('=');
+  if (eq > 0 && FLAGS.includes(name.slice(0, eq))) fail(`--${name.slice(0, eq)} takes no value (got ${printable(token)})`);
+  if (eq > 0 && VALUE_OPTIONS.includes(name.slice(0, eq))) {
+    fail(`${printable(token)}: write the value after a space (--${name.slice(0, eq)} ${printable(name.slice(eq + 1))})`);
+  }
   fail(`unknown option ${printable(token)} (see --help)`);
 }
 for (const name of ['pdf', 'out', 'title', 'cjk-font', 'rows', 'cols', 'margin', 'gap', 'frame-width']) get(name);

@@ -1016,3 +1016,10 @@ test('--name=w07 says to write the value after a space, as the slide-qa scripts 
   assert.equal(r.status, 2);
   assert.match(r.stdout + r.stderr, /--name=w07: write the value after a space \(--name w07\)/);
 });
+
+test('--dry-run=1 says the flag takes no value', () => {
+  const s = sandbox();
+  const r = spawnSync(process.execPath, [SCAFFOLD, '--dry-run=1', '--name', 'w07', '--out', 'deck'], { cwd: s.project, env: { ...process.env, HOME: s.home }, encoding: 'utf8' });
+  assert.equal(r.status, 2);
+  assert.match(r.stdout + r.stderr, /--dry-run takes no value/);
+});

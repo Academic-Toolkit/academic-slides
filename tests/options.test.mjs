@@ -238,3 +238,18 @@ test('handout refuses an option given twice, and its --help mentions Quarto sett
   assert.match(r.out, /--margin is given more than once/);
   assert.match(runIn(emptyFolder(), 'handout.mjs', ['--help']).out, /Quarto settings/);
 });
+
+// verify round 3 (adversarial, row 7): a flag given with =value is told it takes no value, in all three entry points; a
+// valued option given with = is told to put the value after a space
+test('a flag given with =value is told it takes no value; handout gives the space hint too', () => {
+  const dir = emptyFolder();
+  let r = runIn(dir, 'check-layout.mjs', ['--shots=1']);
+  assert.equal(r.code, 2, r.out);
+  assert.match(r.out, /--shots takes no value/);
+  r = runIn(dir, 'handout.mjs', ['--landscape=1']);
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /--landscape takes no value/);
+  r = runIn(dir, 'handout.mjs', ['--pdf=deck.pdf']);
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /--pdf=deck\.pdf: write the value after a space \(--pdf deck\.pdf\)/);
+});
