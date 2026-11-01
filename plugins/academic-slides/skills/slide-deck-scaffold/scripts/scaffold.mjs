@@ -459,8 +459,11 @@ function parseArgs(argv) {
     else if (a === '--list') opts.list = true;
     else if (a === '--trust-project') opts.trustProject = true;
     else if (valued[a]) {
-      if (i + 1 >= argv.length) throw new UsageError(`${a} needs a value`);
-      opts[valued[a]] = argv[++i];
+      const value = argv[i + 1];
+      if (value === undefined) throw new UsageError(`${a} needs a value`);
+      if (value.startsWith('-')) throw new UsageError(`${a} needs a value, not the option ${show(value)}`);
+      opts[valued[a]] = value;
+      i++;
     } else throw new UsageError(`unknown argument ${show(a)}`);
   }
   return opts;
