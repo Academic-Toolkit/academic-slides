@@ -914,3 +914,32 @@ test('#54 verify: the file option is used as given, and a parent folder name is 
   r = runQa(deckDir, 'check-density.mjs', ['--qmd', 'deck.qmd']);
   assert.equal(r.code, 0, r.out);
 });
+
+// verify round 1 of #54 (adversarial): tests that fail when the feature is broken
+test('#54 verify: the message says why, a deck folder with only _quarto.yaml is its own project, and three levels up is searched', () => {
+  let dir = path.join(nested({ '_quarto.yml': 'project:\n  output-dir: _out\n', 'sub/deck.qmd': QMD, 'sub/deck.html': '<html></html>' }), 'sub');
+  const r = runQa(dir, 'check-fill.mjs');
+  assert.equal(r.code, 2, r.out);
+  assert.match(r.out, /no Quarto settings file of its own/);
+  dir = path.join(nested({ '_quarto.yml': 'project:\n  output-dir: _out\n', 'sub/_quarto.yaml': 'project:\n  render: [deck.qmd]\n', 'sub/deck.qmd': QMD, 'sub/deck.html': '<html></html>' }), 'sub');
+  assert.deepEqual(lib.chooseDeckFile('.html', { dir }), { file: 'deck.html' });
+  dir = path.join(nested({ '_quarto.yml': 'project:\n  output-dir: _out\n', 'a/b/c/deck.qmd': QMD, 'a/b/c/deck.html': '<html></html>' }), 'a', 'b', 'c');
+  assert.deepEqual(lib.chooseDeckFile('.html', { dir }).unread.map((u) => u.file), [path.join('..', '..', '..', '_quarto.yml')]);
+});
+
+test('#54 verify: a folder named _quarto.yml above counts, as in Quarto, and handout stops too', () => {
+  const base = nested({ 'sub/deck.qmd': QMD, 'sub/deck.html': '<html></html>', 'sub/deck.pdf': '%PDF' });
+  mkdirSync(path.join(base, '_quarto.yml'));
+  const dir = path.join(base, 'sub');
+  assert.equal(lib.chooseDeckFile('.html', { dir }).reason, 'unread');
+  const r = runQa(dir, 'handout.mjs');
+  assert.equal(r.code, 2, r.out);
+  assert.match(r.out, /_quarto\.yml/);
+});
+
+test('#54 verify: the message gives the settings file name as it is on disk', () => {
+  const base = nested({ '_Quarto.yml': 'project:\n  output-dir: _out\n', 'sub/deck.qmd': QMD, 'sub/deck.html': '<html></html>' });
+  if (!existsSync(path.join(base, '_quarto.yml'))) return;   // a case-sensitive disk: Quarto does not see _Quarto.yml either
+  const r = lib.chooseDeckFile('.html', { dir: path.join(base, 'sub') });
+  assert.deepEqual(r.unread.map((u) => u.file), [path.join('..', '_Quarto.yml')]);
+});

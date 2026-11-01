@@ -535,7 +535,8 @@ export function quartoSettings(dir = process.cwd()) {
     const project = projectAbove(here);
     if (project) {
       unread.push({ file: path.relative(here, project) || project, line: 0, outputOnly: true,
-        text: 'this folder has no Quarto settings file of its own, so Quarto renders the deck as part of the Quarto project there' });
+        text: 'this folder has no Quarto settings file of its own, so when the deck is one of the inputs of the Quarto project '
+          + 'there, Quarto renders it with that project\'s settings' });
     }
   }
   return { file, yml: yml ?? '', unread };
@@ -547,14 +548,18 @@ function realDir(dir) {
   try { return realpathSync.native(dir); } catch { return path.resolve(dir); }   // native: the system resolves the link before .., not path.resolve
 }
 
-// The settings file of the nearest folder above `dir` that holds _quarto.yml or _quarto.yaml, or null (#54).
+// The settings file of the nearest folder above `dir` that holds _quarto.yml or _quarto.yaml, or null (#54). Like
+// Quarto, anything by that name counts, a folder too (Quarto then stops with an error), and the name is given as it is
+// on disk (a case-insensitive disk finds _Quarto.yml; verify round 1).
 function projectAbove(dir) {
   let at = dir;
   for (let up = path.dirname(at); up !== at; at = up, up = path.dirname(at)) {
-    const found = ['_quarto.yml', '_quarto.yaml'].map((name) => path.join(up, name)).find((f) => {
-      try { return statSync(f).isFile(); } catch { return false; }
-    });
-    if (found) return found;
+    const name = ['_quarto.yml', '_quarto.yaml'].find((n) => existsSync(path.join(up, n)));
+    if (name) {
+      let onDisk = name;
+      try { onDisk = readdirSync(up).find((n) => n.toLowerCase() === name) ?? name; } catch { /* unreadable folder: keep the name */ }
+      return path.join(up, onDisk);
+    }
   }
   return null;
 }
