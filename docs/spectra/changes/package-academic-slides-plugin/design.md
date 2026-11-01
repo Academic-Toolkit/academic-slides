@@ -235,22 +235,30 @@ slide-qa 的 `readQuartoYml` 與 scaffold 的 `renameRenderTarget` 是兩支逐�
   - 讀不懂的行分成兩類：牽涉 deck 由哪些檔組成的（`project`、`render`、`metadata-files`、merge key、文件結構）每種查找都拒絕；只牽涉輸出檔名的（`format`、`revealjs`、`output-file`、`output-ext`、`output-dir`）只在找 `.html`、`.pdf` 時拒絕。原本加引號的 `"output-ext":` 會連 check-density 都擋，裸鍵卻不會。
   - 一行內關得起來、沒提到掃描器會讀的鍵的 flow mapping（`format: {pdf: default}`、`project: {type: default}`）照讀，設定檔與 profile 檔都是；跨行的 flow mapping 仍然拒絕。
   - 文件結尾 `...` 本身合法；之後還有內容，或內容之後出現 `---`，才算第二份文件。
+  - verify 第 2 輪的對抗式審查又找到幾種讀錯又放行的寫法，一律改成拒絕：跨行 render flow list 裡沒有逗號隔開的續行（YAML 把兩行接成一個值）、縮排沒超過 `render:` 的 flow 續行、帶 anchor 或 tag 的 block scalar（內容仍是文字，不算設定）、`revealjs:` 底下更深一層的 `output-file`（Quarto 不採用）、`output-file: ~` 或空值。
   - 限制（照實寫明）：oracle 測試只保證 fixture 裡列出的案例被讀對或被拒；讀取器、scaffold 的改寫器與偵測器仍是各自維護的狀態機，這不是對所有 YAML 寫法的證明。新發現的寫法要加進 `make-quarto-oracle.py` 的案例。
 
 ### D24. 其他決定輸出檔名的來源：找 `.html`、`.pdf` 時拒絕猜（issue #50）
 
-D23 只讀 `project.render` 與 `format: revealjs:`（或最上層）的 `output-file`。Quarto 還會從另外五個地方決定輸出檔名：擴充格式（例如 `clean-revealjs:`）自己的 `output-file`、主 `.qmd` front matter 的 `output-file` 或 `output-ext`、資料夾裡的 `_metadata.yml`（或 `.yaml`）、`project: output-dir`、`_quarto.yml` 的 `output-ext`。原本這些都不讀也不拒，腳本去找 `<stem>.html`，可能是比真正輸出舊的檔。
+D23 只讀 `project.render` 與 `format: revealjs:`（或最上層）的 `output-file`。issue #50 列出 Quarto 另外五個決定輸出檔名的地方（verify 第 2 輪又找到兩個，見本節最後一點）：擴充格式（例如 `clean-revealjs:`）自己的 `output-file`、主 `.qmd` front matter 的 `output-file` 或 `output-ext`、資料夾裡的 `_metadata.yml`（或 `.yaml`）、`project: output-dir`、`_quarto.yml` 的 `output-ext`。原本這些都不讀也不拒，腳本去找 `<stem>.html`，可能是比真正輸出舊的檔。
 
 - 決定：沿用使用者在 #46 的決定（2026-11-01：認不出就拒絕猜，只用 Node 內建模組），五個來源一律拒絕，不新增讀法：沒給檔名參數時以狀態 2 結束，列出檔名與行號。
 - 它們只改變 `.html`（以及跟著它的 `.pdf`）的名字，所以只在需要輸出檔名的查找（check-fill、check-layout、check-mathjax、export-pdf 的 `.html`，handout 的 `.pdf`）才拒絕；check-density 找 `.qmd` 不受影響。
 - front matter 與 `_metadata.yml` 只看會決定輸出檔名的設定：掃描器會讀的 `output-file`、擴充格式的 `output-file`、`output-ext`，不論寫法（加引號的鍵也算），以及可能間接帶進它們的 `metadata-files` 與 merge key（verify 第 2 輪）；`format: pdf: output-file` 這類其他格式的設定不算，免得誤擋常見寫法。
 - scaffold 照原樣複製範本的 front matter；自訂範本若在那裡設了 `output-file`，deck 會以那個名字 render。官方範本沒有，記在 #50 的 Diagnosis，不另開 issue。
+- verify 第 2 輪（對抗式審查）之後：
+  - `project.type` 不是 `default` 時也拒絕：website、book、manuscript 不寫 `output-dir` 也會輸出到 `_site/`、`_book/`、`_manuscript/`。本機實測 9 個 Quarto book 與 website 資料夾，找 `.html` 全部被擋、找 `.qmd` 都照常。
+  - front matter 前面有空白行、文件後面另一段以鍵開頭的 YAML 區塊，Pandoc 都會讀，所以都檢查；revealjs 分頁用的 `---`（下一行是標題）與 fenced code 不算。
+  - `output-ext` 只看最上層與 revealjs 格式底下；`format: pdf: output-ext: tex` 不改 `.html` 的名字，不擋。
+  - scaffold 的範本檢查不再拒絕只改輸出位置或副檔名的設定（擴充格式的 `output-file`、`output-ext`、`output-dir`、project type）：改名照常生效，main 與 #50 之前都接受這種範本，拒絕它是 #50 帶進來的回歸。
+  - deck 放在上層 Quarto 專案的子資料夾時，上層的 `_quarto.yml` 與 `_metadata.yml` 也會影響輸出，這裡不讀也不拒，另開 issue 追蹤。
 
 ### D25. 從別處來的資料夾：印出的文字與 render 值的 trim（issue #51）
 
 - slide-qa 的 `printable` 另外把雙向控制字元（U+061C、U+200E、U+200F、U+202A–U+202E、U+2066–U+2069）換成 `?`，並用在既有的 `HTML not found`、`qmd not found`、`tex not found` 訊息。
 - scaffold 印出的所有文字經過 `screen()`：逐行套用同樣的替換，多行訊息保留換行。`show()`（`JSON.stringify`）也用來寫 YAML 值，所以不改它。
 - `readQuartoYml` 去掉 render 值兩端的括號與空白，改用線性的迴圈；原本的 regex 遇到一長串空白會回溯，15 萬字元要 18 秒。
+- verify 第 2 輪之後：check-density 從資料夾找到的檔名、各腳本報表裡的投影片標題與 MathJax 錯誤原文、handout 與 export-pdf 的「✓ wrote」也經過 `printable`。替換的只有控制字元與雙向控制字元，中英日文字照原樣印出。scaffold 在 warning 與錯誤訊息裡印的檔名先經過 `printable`，名字裡的換行也換掉，不能偽造一行 `warning:`。
 
 ### D26. scaffold 的選項規則比照 slide-qa 檢查腳本（issue #52）
 
