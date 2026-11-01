@@ -233,6 +233,56 @@
   }
  },
  {
+  "name": "document end marker",
+  "yml": "project:\n  render: [deck.qmd]\n...\n",
+  "oracle": {
+   "render": [
+    "deck.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "one-line format flow without an output name",
+  "yml": "format: {pdf: default, revealjs: {incremental: true}}\n",
+  "oracle": {
+   "render": [],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "one-line project flow without render",
+  "yml": "project: {type: default}\n",
+  "oracle": {
+   "render": [],
+   "outputFile": null
+  }
+ },
+ {
+  "name": "format flow with an output name",
+  "yml": "format: {revealjs: {output-file: slides}}\n",
+  "oracle": {
+   "render": [],
+   "outputFile": "slides"
+  }
+ },
+ {
+  "name": "multi-line format flow",
+  "yml": "format: {\n  revealjs: {\n    output-file: slides\n  }\n}\n",
+  "oracle": {
+   "render": [],
+   "outputFile": "slides"
+  }
+ },
+ {
+  "name": "quoted output-file at the top level",
+  "yml": "\"output-file\": slides\n",
+  "oracle": {
+   "render": [],
+   "outputFile": "slides"
+  }
+ },
+ {
   "name": "multi-line plain render item",
   "yml": "project:\n  render:\n    - my\n      talk.qmd\n",
   "oracle": {

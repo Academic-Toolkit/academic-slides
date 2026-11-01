@@ -93,3 +93,15 @@ test('the YAML values the scaffold writes are unchanged by the printing fix', ()
   assert.equal(r.code, 0, r.out);
   assert.match(readFileSync(path.join(home, 'work', 'deck', 'w07.qmd'), 'utf8'), /^title: "A \\"quoted\\" title"$/m);
 });
+
+// verify round 2 (Codex): handout's own messages too
+test('handout prints an unknown option and a bad value without control or bidirectional characters', () => {
+  const dir = emptyFolder();
+  let r = run(path.join(QA, 'handout.mjs'), [`--bogus${NASTY}`], dir);
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /unknown option/);
+  assert.doesNotMatch(r.out, UNSAFE);
+  r = run(path.join(QA, 'handout.mjs'), ['--margin', `x${NASTY}`], dir);
+  assert.equal(r.code, 1, r.out);
+  assert.doesNotMatch(r.out, UNSAFE);
+});

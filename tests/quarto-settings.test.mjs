@@ -63,6 +63,11 @@ const UNREAD = {
   'multi-line plain render value': ['project:\n  render: my\n    talk.qmd', 3],
   'multi-line quoted render item': ['project:\n  render:\n    - "my\n      talk.qmd"', 3],
   'multi-line plain output-file': ['format:\n  revealjs:\n    output-file: my\n      slides', 4],
+  // verify round 2 (Codex)
+  'content after the document end marker': ['project:\n  render: [a.qmd]\n...\nproject:\n  render: [b.qmd]', 4],
+  'quoted output-dir': ['project:\n  "output-dir": _site', 2],
+  'output-dir with a space before the colon': ['project:\n  output-dir : _site', 2],
+  'a multi-line flow mapping for format': ['format: {\n  revealjs: {theme: x}\n}', 1],
 };
 
 // Forms that are read, or deliberately not used, and must not be refused.
@@ -92,6 +97,10 @@ const READ = {
   'a document marker at the top': '---\nproject:\n  render: [deck.qmd]',
   // verify round 1 (Devil's Advocate): a byte order mark before the first key
   'a UTF-8 byte order mark': '\ufeffproject:\n  render: [deck.qmd]',
+  // verify round 2 (Codex): a document end marker, and one-line flow mappings that name nothing the scanner reads
+  'a document end marker': 'project:\n  render: [deck.qmd]\n...',
+  'a one-line flow mapping for format without an output name': 'format: {pdf: default, revealjs: {incremental: true}}',
+  'a one-line flow mapping for project without render': 'project: {type: default}',
 };
 
 // ---------- the detector ----------
@@ -118,7 +127,7 @@ test('unreadQuartoLines accepts the four official templates and the beamer-free 
 
 test('unreadQuartoLines gives the line and its text', () => {
   assert.deepEqual(lib.unreadQuartoLines('# settings\nproject: {render: [deck.qmd]}  # flow'), [
-    { line: 2, text: 'project: {render: [deck.qmd]}  # flow' },
+    { line: 2, text: 'project: {render: [deck.qmd]}  # flow', outputOnly: false },
   ]);
 });
 
@@ -271,12 +280,14 @@ test('readQuartoYml and renameRenderTarget leave block scalar contents alone', (
 // uses the file option when it is given; the scaffold refuses a template with that _quarto.yml and writes nothing.
 test('every unread form is refused on the command line by slide-qa and by the scaffold', () => {
   for (const [name, [yml, line]] of Object.entries(UNREAD)) {
-    const dir = folder({ 'deck.qmd': QMD, '_quarto.yml': `${yml}\n` });
-    let r = runQa(dir, 'check-density.mjs');
+    const dir = folder({ 'deck.qmd': QMD, 'deck.html': '<html></html>', '_quarto.yml': `${yml}\n` });
+    // an output-only form leaves check-density's .qmd lookup alone and stops the .html lookup (#50, verify round 2)
+    const outputOnly = lib.unreadQuartoLines(yml).every((u) => u.outputOnly);
+    let r = runQa(dir, outputOnly ? 'check-mathjax.mjs' : 'check-density.mjs');
     assert.equal(r.code, 2, `${name}: ${r.out}`);
     assert.match(r.out, new RegExp(`_quarto\\.yml line ${line}\\b`), name);
-    r = runQa(dir, 'check-density.mjs', ['--qmd', 'deck.qmd']);
-    assert.equal(r.code, 0, `${name} with --qmd: ${r.out}`);
+    r = runQa(dir, 'check-density.mjs', outputOnly ? [] : ['--qmd', 'deck.qmd']);
+    assert.equal(r.code, 0, `${name}, .qmd: ${r.out}`);
     const s = sandbox();
     personalTemplate(s, 'odd', `${yml}\n${THEME}`);
     r = runScaffold(s, ['--template', 'odd', '--name', 'w07', '--out', 'deck']);
@@ -460,4 +471,32 @@ test('the refusal message names the sources of the output name it does not read 
   assert.match(r.out, /_quarto\.yml line 2/);
   assert.match(r.out, /output-dir/);
   assert.match(r.out, /--html/);
+});
+
+// verify round 2 (Codex): output names set in front matter or _metadata.yml in any form, directly or indirectly
+const OUTPUT_SOURCES_R2 = {
+  'a quoted output-file in the front matter': [{ 'deck.qmd': FM('"output-file": slides\n') }, 'deck.qmd', 3],
+  'a quoted output-ext in the front matter': [{ 'deck.qmd': FM("'output-ext': htm\n") }, 'deck.qmd', 3],
+  'metadata-files in the front matter': [{ 'deck.qmd': FM('metadata-files: [names.yml]\n') }, 'deck.qmd', 3],
+  'a quoted output-file in _metadata.yml': [{ '_metadata.yml': '"output-file": slides\n' }, '_metadata.yml', 1],
+  'metadata-files in _metadata.yml': [{ '_metadata.yml': 'metadata-files: [names.yml]\n', 'names.yml': 'output-file: slides\n' }, '_metadata.yml', 1],
+  'a merge key in _metadata.yml': [{ '_metadata.yml': 'base: &b {output-file: slides}\n<<: *b\n' }, '_metadata.yml', 1],
+  'a quoted output-dir': [{ '_quarto.yml': 'project:\n  "output-dir": _site\n' }, '_quarto.yml', 2],
+  'a quoted output-ext': [{ '_quarto.yml': '"output-ext": htm\n' }, '_quarto.yml', 1],
+  'a quoted output-file under an extension format': [{ '_quarto.yml': 'format:\n  clean-revealjs:\n    "output-file": slides\n' }, '_quarto.yml', 3],
+};
+for (const [name, [files, file, line]] of Object.entries(OUTPUT_SOURCES_R2)) {
+  test(`#50 round 2: ${name} is refused for the .html lookup, not for the .qmd lookup`, () => {
+    const dir = folder({ 'deck.qmd': QMD, 'deck.html': '<html></html>', ...files });
+    const r = lib.chooseDeckFile('.html', { dir });
+    assert.equal(r.reason, 'unread', name);
+    assert.equal(r.unread[0].file, file, name);
+    assert.equal(r.unread[0].line, line, name);
+    assert.deepEqual(lib.chooseDeckFile('.qmd', { dir }), { file: 'deck.qmd' }, `${name} .qmd`);
+  });
+}
+
+test('a profile file with a one-line flow mapping that sets nothing the scanner reads is not refused', () => {
+  const dir = folder({ 'deck.qmd': QMD, '_quarto.yml': 'project:\n  render: [deck.qmd]\n', '_quarto-print.yml': 'format: {pdf: default}\n...\n' });
+  assert.deepEqual(lib.chooseDeckFile('.qmd', { dir }), { file: 'deck.qmd' });
 });

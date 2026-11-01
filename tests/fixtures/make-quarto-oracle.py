@@ -34,6 +34,12 @@ CASES = {
     'website format mapping': 'website:\n  format: {a: b}\nproject:\n  render: [deck.qmd]\n',
     'metadata-files list': 'metadata-files: [shared.yml]\nproject:\n  render: [deck.qmd]\n',
     'nothing': '',
+    'document end marker': 'project:\n  render: [deck.qmd]\n...\n',
+    'one-line format flow without an output name': 'format: {pdf: default, revealjs: {incremental: true}}\n',
+    'one-line project flow without render': 'project: {type: default}\n',
+    'format flow with an output name': 'format: {revealjs: {output-file: slides}}\n',
+    'multi-line format flow': 'format: {\n  revealjs: {\n    output-file: slides\n  }\n}\n',
+    'quoted output-file at the top level': '"output-file": slides\n',
     # forms the detector must refuse (refused cases are skipped by the oracle test; listed so a regression shows)
     'multi-line plain render item': 'project:\n  render:\n    - my\n      talk.qmd\n',
     'multi-line plain render value': 'project:\n  render: my\n    talk.qmd\n',

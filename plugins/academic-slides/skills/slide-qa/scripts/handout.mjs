@@ -8,7 +8,7 @@ import { spawnSync } from 'child_process';
 import { mkdtempSync, copyFileSync, writeFileSync, existsSync, readFileSync, rmSync, statSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
-import { args, findDeckFile, writeOutput } from './_lib.mjs';
+import { args, findDeckFile, printable, writeOutput } from './_lib.mjs';
 import { PRESETS, A4, geometry, texFor, pdfTitle } from './_handout.mjs';
 
 const { get: rawGet, has } = args(`Usage: node handout.mjs [--pdf <deck>.pdf] [--out <deck>-handout.pdf] [--landscape | --portrait]
@@ -20,8 +20,10 @@ The header is the PDF's title (else the file name) unless --title or --no-header
 Needs XeLaTeX (TeX Live) and pdfinfo (poppler).
 Exit status: 0 handout written, 1 failed (bad option, missing tool, LaTeX error), 2 PDF not found, or the deck's .pdf not found in the current folder when --pdf is not given, its Quarto settings cannot be read.`);
 
+// Every message goes through printable, line by line: option values, file names and tool output can carry control
+// or bidirectional characters (#51, verify round 2).
 function fail(message, code = 1) {
-  console.error(message);
+  console.error(String(message).split('\n').map(printable).join('\n'));
   process.exit(code);
 }
 
