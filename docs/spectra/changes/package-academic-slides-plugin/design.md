@@ -189,7 +189,7 @@ scaffold 原本把主檔固定寫成 `talk.qmd`，課堂講義、結果報告也
 - 先定出 deck 的主檔：`_quarto.yml` 的 `project.render`（`project` 直接底下的鍵，只取完整的值）在這個資料夾裡指名的唯一 `.qmd`；不是剛好一個時，改用資料夾裡唯一的 `.qmd`。從 `_quarto.yml` 讀到的值只接受單純的檔名：含資料夾、`..`、絕對路徑或萬用字元的一律忽略，所以找檔不會離開目前資料夾。定得出來時，讀與主檔同名的那個檔（`format: revealjs:` 底下的 `output-file`，沒有的話是最上層的，與在檔案中的先後無關；有設、且是單純檔名時，`.html` 用它，不以 `.html` 結尾就補上，和 Quarto 一樣；`.pdf` 跟著 `.html` 的名字）：資料夾裡同時有 `talk.pdf`、`talk-notes.pdf`、`talk-dual.pdf` 時讀 `talk.pdf`。那個檔不存在時以狀態 2 結束、說明缺哪個檔並列出找到的其他檔，不改讀別的。
 - 主檔定不出來時（例如只放 PDF 的資料夾），才用資料夾裡唯一的那個檔；handout 在這一步排除自己產生的 `*-handout.pdf`。沒有或不只一個時以狀態 2 結束，列出資料夾與所有候選。
 - Supersedes：本決策第 1 版是「資料夾裡唯一的檔案，不只一個就報錯」（使用者 2026-10-31 的 Clarity 決定）。verify 第 1 輪重建既有 deck 的檔名結構，發現 deck 資料夾通常同時有衍生 PDF（`talk-notes.pdf`、`talk-dual.pdf` 等，#36、#38 還會再加），handout 不帶參數 5/5 失敗，與「既有 deck 照常可用」衝突；使用者 2026-10-31 改定為先挑主檔同名的檔案。兩種做法都不會退回 `talk` 這個固定預設。
-- 只讀範本那種區塊寫法的 `_quarto.yml`；行內 mapping、加引號的鍵、anchor、值裡的逗號等寫法讀不到，這時要明確給檔名參數，完整解析追蹤於 #46。
+- 只讀範本那種區塊寫法的 `_quarto.yml`；行內 mapping、加引號的鍵、anchor、值裡的逗號等寫法讀不到，這時要明確給檔名參數，完整解析追蹤於 #46（D23：讀不懂時拒絕猜）。
 - 副檔名大小寫完全相符（伺服器只把小寫 `.html` 當 HTML 提供）；錯誤訊息裡的檔名把控制字元換成 `?`。
 - 給了 `--html`、`--qmd` 卻沒有檔名（放在最後，或後面接著另一個選項）時以狀態 2 結束，不改為自動找檔；handout 的 `--pdf` 依它在 #34 訂下的規則以 1 結束。其他帶值選項缺值的處理不在這次範圍，追蹤於 #45（已由 D22 處理）。
 - 明確給的參數照舊優先；check-density 的 `--tex` 本來就沒有預設值，維持要明確指定。檔名叫 `talk.*` 的既有 deck 同樣適用。
@@ -205,6 +205,17 @@ check-density、check-fill、check-layout、check-mathjax、export-pdf 原本把
 - handout 不改：它在 #34 已經用同樣的方式檢查自己的選項，錯誤以 1 結束。`args()` 保留給 handout 與測試用的探針。
 - 使用者 2026-11-01 定案「全部比照 handout」：缺值、不是數字的數值、不認得的選項都擋。不屬於任何選項的參數在 diagnose 時一併列入；重複的選項是實作時依同一個讀參數的迴圈加進來的，理由同樣是「不猜」：先前取第一個值，使用者可能以為生效的是後一個。
 - 在範圍內：`_lib.mjs`、五支腳本與它們的說明文字、slide-qa `SKILL.md`、`tests/options.test.mjs`。scaffold 的同類問題開為 #49。
+
+### D23. 讀不懂的 Quarto 設定寫法：拒絕猜，不解析（issue #46）
+
+slide-qa 的 `readQuartoYml` 與 scaffold 的 `renameRenderTarget` 是兩支逐行掃描器，只認範本那種區塊寫法。行內 mapping、加引號的鍵、冒號前有空白的鍵、anchor、alias、merge key、引號內的逗號與跳脫都是合法 YAML，卻會讓 slide-qa 退回資料夾裡唯一的候選（可能是比真正輸出舊的檔），也會讓 scaffold 寫出 render 仍指向 `talk.qmd` 的 deck，只印一行警告。
+
+- 使用者 2026-11-01 定案：認不出就拒絕猜，維持只用 Node 內建模組（D10 不變）。不採 `quarto inspect`：實測讀得對，但每次多約 1.5 秒，而且 scaffold 要改寫文字，用不上它。不加 YAML 套件：要改 D10，scaffold 解析後再寫回會丟掉範本的註解與排版。
+- `unreadQuartoLines(yml)` 以和掃描器相同的縮排狀態，列出寫法超出掃描器的行（行號與原文）：`project`、`format`、`revealjs`、`render`、`output-file` 加了引號、冒號前有空白、位在行內 mapping 裡或列表破折號之後；這幾個鍵的值是行內 mapping、anchor、alias、tag 或 block scalar；任何地方的 merge key（`<<`）與 `metadata-files`；`project.render` 或掃描器採用的 `output-file` 裡的 anchor、alias、tag、含逗號的引號值、跳脫。掃描器刻意不採用的區塊寫法（其他 format 的 `output-file`、更深一層的 `render`、`pre-render`、`post-render`）、引號值裡像鍵的文字、註解，都不算。slide-qa 的 `_lib.mjs` 與 scaffold 各有一份相同的函式（沿用兩邊各有一份 `splitComment` 的做法，兩個 skill 不互相 import），測試檢查兩份對每種寫法的結果一致。
+- slide-qa：設定檔照 Quarto 的做法取 `_quarto.yml`，沒有時取 `_quarto.yaml`（實測兩者都在時 Quarto 用 `_quarto.yml`）。設定檔有讀不懂的行，或資料夾裡的 profile 檔 `_quarto-<name>.yml` 設了 `render` 或 `output-file`（Quarto 只在那個 profile 啟用時合併它，腳本無從得知 render 時用了哪個），沒給檔名參數的腳本以狀態 2 結束，列出檔名、行號與原文（最多三筆），請使用者給檔名參數或改成區塊寫法；給了檔名參數就照用，不讀設定。
+- scaffold：範本的 `_quarto.yml` 有讀不懂的行，或範本裡的 profile 檔設了 `render` 或 `output-file`（profile 檔照原樣複製，改寫不到它），在寫入任何東西之前以狀態 1 結束，列出檔名與行號。D20 的殘留警告保留給區塊寫法裡改寫不到的 `talk.qmd`（例如列在 `resources` 底下）。
+- profile 檔與 `_quarto.yaml` 是 diagnose #46 時發現的同類來源，一併處理（寫在 #46 的 Diagnosis）。
+- 在範圍內：`_lib.mjs`、`scaffold.mjs`、兩份 SKILL.md、`tests/quarto-settings.test.mjs`。
 
 ## Implementation Contract
 

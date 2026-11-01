@@ -94,3 +94,8 @@
 
 - [x] 18.1 [Req: Scaffold writes only into an empty folder] #45 的同類問題（diagnose #45 時發現）：先寫測試（`tests/scaffold.test.mjs`），`--out`、`--name`、`--template`、`--title` 後面接 `--dry-run` 時以狀態 2 結束、訊息點名選項、資料夾裡沒有寫出任何東西；再改 `parseArgs`，下一個參數以 `--` 開頭時與放在最後同樣回報 `needs a value`。驗證：新測試在修改前失敗（`--out --dry-run` 以 0 結束並寫出 deck），修改後 `npm test` 全部通過。
 
+## 19. GitHub issue #46：讀不懂的 Quarto 設定寫法（2026-11-01）
+
+- [x] 19.1 [Req: Scripts find the deck file when none is given] [Req: Same-name templates resolve project, personal, official] 依 D23 先寫測試（`tests/quarto-settings.test.mjs`）：`unreadQuartoLines` 對 21 種讀不懂的寫法回報正確的行、對 11 種讀得懂或刻意不採用的寫法與四個官方範本不回報；scaffold 與 slide-qa 兩份偵測器結果一致；slide-qa 沒給檔名參數時以狀態 2 結束並印出檔名與行號、給了照用、`_quarto.yaml` 照 Quarto 的順序讀、profile 檔設了 render 或 output-file 時拒絕；scaffold 遇到讀不懂的範本與 profile 檔以狀態 1 結束且沒有建立資料夾，區塊寫法的自訂範本照常。驗證：新測試在實作前失敗（41 項；通過的 4 項是回歸防護）。
+- [x] 19.2 [Req: Scripts find the deck file when none is given] [Req: Same-name templates resolve project, personal, official] [after: 19.1] 依 D23 在 `_lib.mjs` 加 `unreadQuartoLines` 與 `quartoSettings`，`chooseDeckFile` 遇到讀不懂的設定時不選檔、`findDeckFile` 印出原因；`scaffold.mjs` 加同一份偵測器，在改寫範本 `_quarto.yml` 之前拒絕；兩份 SKILL.md 寫明哪些寫法讀不懂、讀不懂時怎麼辦。驗證：19.1 的測試通過，`npm test` 224 項全部通過。
+
