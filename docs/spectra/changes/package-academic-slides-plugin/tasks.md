@@ -130,3 +130,10 @@
 - [x] 24.5 [Req: Same-name templates resolve project, personal, official] [after: 24.4] 依 /idd-verify 第 2 輪（Codex）修正：回到 deck 資料夾本身的 render 路徑（`chapters/../`）算 `.`；空的 render 清單拒絕（Quarto 實測什麼都不輸出）；加上 `renameRenderTarget` 不改行數的測試。驗證：新測試在修正前失敗，修正後 `npm test` 383 項全部通過。
 - [x] 24.6 [Req: Same-name templates resolve project, personal, official] [after: 24.5] 依 /idd-verify 第 2 輪（對抗式審查）修正兩個回歸：render 值 `./`、`.//x` 照寫法保留（共用讀法，兩份同步改）；footer 改寫連同區塊純量的內容一起刪或換。另外：含 `..` 的 glob 算 deck 外；`_metadata.yml` 的文件改成只判斷輸出名稱（Quarto 實測不讀它的 `project.render`）；帶組織名的擴充格式記為限制，追蹤於 #57。驗證：新測試在修正前失敗（3 項），修正後 `npm test` 386 項、`npm run test:render` 53 項全部通過。
 - [ ] 24.2 [Req: Repository layout and manifests] [after: 24.6] 推送分支並開 PR，內文以 Refs #53 連結（不用 Fixes），由使用者確認後執行。
+
+## 25. GitHub issue #54：deck 資料夾在上層 Quarto 專案裡（2026-11-01）
+
+- [x] 25.1 [Req: Scripts find the deck file when none is given] 依 D28 先寫測試（`tests/quarto-settings.test.mjs`）：deck 資料夾沒有設定檔、上一層或上兩層有 `_quarto.yml` 或 `_quarto.yaml`（含沒有 `project:` 鍵的設定檔）→ 找 `.html` 被拒，指出上層設定檔，找 `.qmd` 照常；deck 資料夾有自己的設定檔時不受上層影響；check-mathjax 以 2 結束，訊息指出上層設定檔與 `--html`。再改 `_lib.mjs` 的 `quartoSettings`（`projectAbove`）與 `findDeckFile` 的訊息。版本升為 0.8.2。驗證：新測試在實作前失敗（2 項），實作後 `npm test` 377 項全部通過。
+- [x] 25.3 [Req: Scripts find the deck file when none is given] [after: 25.1] 依 /idd-verify 第 1 輪（Codex、對抗式審查）修正：從資料夾的實際位置往上找（`realpathSync.native`）；名為 `_quarto.yml` 的資料夾也算；訊息照磁碟上的檔名大小寫，措辭改為「deck 是該專案的輸入檔時」；測試路徑改用 `path.join`，並補上最近的專案、三層、`.pdf`、handout、`_quarto.yaml`、說明文字與控制字元的測試；D28 更正隱藏資料夾限制的成因。驗證：新測試在修正前失敗，修正後 `npm test` 383 項全部通過。
+- [x] 25.4 [Req: Scripts find the deck file when none is given] [after: 25.3] 依 /idd-verify 第 2 輪（Codex）修正：設定檔名完全相同者優先，大小寫不同的只在找不到時才用；測試的資料夾名稱在 Windows 上不含控制字元；加上 `--html` 可繞過拒絕、訊息說明理由的斷言；SKILL 註明上層專案只點名檔案、沒有行號。驗證：兩種拼法並存的測試在分大小寫的磁碟映像上修正前失敗、修正後通過；`npm test` 383 項通過、1 項在不分大小寫的磁碟上略過。
+- [ ] 25.2 [Req: Repository layout and manifests] [after: 25.4] 推送分支並開 PR，內文以 Refs #54 連結（不用 Fixes），由使用者確認後執行。

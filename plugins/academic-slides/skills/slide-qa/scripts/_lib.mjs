@@ -2,7 +2,7 @@
 // file server rooted at the folder that holds the rendered deck (revealjs needs http, not file://).
 import { createServer } from 'http';
 import { readFile, realpath, stat, lstat, mkdir, mkdtemp, writeFile, rename, rm } from 'fs/promises';
-import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from 'fs';
+import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, statSync } from 'fs';
 import path from 'path';
 
 // The unchecked reader: the value is whatever argument follows the option. handout (which checks its own
@@ -526,7 +526,45 @@ export function quartoSettings(dir = process.cwd()) {
     if (text === null) unread.push({ file: name, line: 0, text: 'could not be read', outputOnly: true });
     else add(name, outputNameLines(text), true);
   }
+  // A folder without a settings file of its own belongs to the nearest folder above that has one, as Quarto finds its
+  // project (any _quarto.yml or _quarto.yaml, up to the root of the file system): that project's settings decide the
+  // deck's output name and folder, which these scripts do not read (#54). A folder with its own settings file is its
+  // own project, and the folders above it do not apply.
+  if (!file) {
+    const here = realDir(dir);
+    const project = projectAbove(here);
+    if (project) {
+      unread.push({ file: path.relative(here, project) || project, line: 0, outputOnly: true,
+        text: 'this folder has no Quarto settings file of its own, so when the deck is one of the inputs of the Quarto project '
+          + 'there, Quarto renders it with that project\'s settings' });
+    }
+  }
   return { file, yml: yml ?? '', unread };
+}
+
+// Where a folder really is: a symbolic link followed by .. would otherwise send the search up the wrong folders
+// (verify round 1 of #54). A folder that cannot be resolved is taken as written.
+function realDir(dir) {
+  try { return realpathSync.native(dir); } catch { return path.resolve(dir); }   // native: the system resolves the link before .., not path.resolve
+}
+
+// The settings file of the nearest folder above `dir` that holds _quarto.yml or _quarto.yaml, or null (#54). Like
+// Quarto, anything by that name counts, a folder too (Quarto then stops with an error), and the name is given as it is
+// on disk (a case-insensitive disk finds _Quarto.yml; verify round 1).
+function projectAbove(dir) {
+  let at = dir;
+  for (let up = path.dirname(at); up !== at; at = up, up = path.dirname(at)) {
+    const name = ['_quarto.yml', '_quarto.yaml'].find((n) => existsSync(path.join(up, n)));
+    if (name) {
+      let onDisk = name;   // the exact name first: a case-sensitive disk can hold _Quarto.yml beside it (verify round 2)
+      try {
+        const names = readdirSync(up);
+        if (!names.includes(name)) onDisk = names.find((n) => n.toLowerCase() === name) ?? name;
+      } catch { /* unreadable folder: keep the name */ }
+      return path.join(up, onDisk);
+    }
+  }
+  return null;
 }
 
 // The lines of a .qmd file's front matter that set the output name (#50), as { file, line, text, outputOnly }.
@@ -564,7 +602,8 @@ export function deckMain(dir = process.cwd()) {
 // told, its own file of that type: talk.pdf, not talk-notes.pdf beside it (user decision 2026-10-31, after
 // verify round 1); if that file is missing, the result says so instead of picking another. When the main
 // file cannot be told, the folder's only candidate. Never a fixed name such as talk.html.
-export function chooseDeckFile(ext, { dir = process.cwd(), exclude = null } = {}) {
+export function chooseDeckFile(ext, { dir: given = process.cwd(), exclude = null } = {}) {
+  const dir = realDir(given);   // the folder where it really is, before any path is joined to it (verify round 1 of #54)
   const candidates = deckCandidates(ext, { dir, exclude });
   // Settings the scanner cannot read leave the main file unknown; refuse rather than guess (#46). Those that change
   // only the output name matter only when the lookup needs that name (#50).
@@ -602,7 +641,8 @@ export function findDeckFile(given, ext, option, { exclude = null } = {}) {
     console.error(`The deck's file could not be told from its Quarto settings in ${where}: ${lines.join('; ')}. Pass ${flag} <file>. `
       + 'These scripts read project.render and output-file only in block style, as the templates write them, in the settings '
       + 'file itself; they do not read other forms, profile files (_quarto-<name>.yml), merge keys, a project type other '
-      + `than default, or an output name set by an extension format, the front matter, _metadata.yml, output-ext or output-dir.`);
+      + 'than default, an output name set by an extension format, the front matter, _metadata.yml, output-ext or output-dir, '
+      + `or the settings of a Quarto project the deck folder sits in.`);
   } else if (r.reason === 'missing') {
     console.error(`The deck's main file is ${printable(r.main)}, but there is no ${printable(r.expected)} in ${where}`
       + `${list ? ` (found: ${list})` : ''}; ${NEXT[ext]}, or pass ${flag} <file>.`);
