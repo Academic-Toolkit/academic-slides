@@ -844,3 +844,44 @@ test('#53 verify r2: a block-scalar footer is removed or replaced with its text,
     assert.doesNotMatch(readFileSync(path.join(s.project, 'deck', '_quarto.yml'), 'utf8'), /output-file|second line/, JSON.stringify(settings));
   }
 });
+
+// ---------- #54: a deck folder inside a larger Quarto project ----------
+// Quarto 1.10.19: a deck folder without a settings file of its own takes the nearest folder above with _quarto.yml or
+// _quarto.yaml as its project (output-dir _out → _out/sub/deck.html); a deck folder with its own settings file is its
+// own project, and the folders above it do not apply.
+function nested(files) {
+  const base = realpathSync(mkdtempSync(path.join(tmpdir(), 'quarto-settings-parent-')));
+  for (const [name, content] of Object.entries(files)) {
+    mkdirSync(path.dirname(path.join(base, name)), { recursive: true });
+    writeFileSync(path.join(base, name), content);
+  }
+  return base;
+}
+
+test('#54: a deck folder without settings inside a Quarto project is refused for the .html lookup, not the .qmd lookup', () => {
+  for (const [name, files, deck, settings] of [
+    ['one level up', { '_quarto.yml': 'project:\n  output-dir: _out\n', 'sub/deck.qmd': QMD, 'sub/deck.html': '<html></html>' }, 'sub', '../_quarto.yml'],
+    ['two levels up, _quarto.yaml', { '_quarto.yaml': 'project:\n  type: website\n', 'a/b/deck.qmd': QMD, 'a/b/deck.html': '<html></html>' }, 'a/b', '../../_quarto.yaml'],
+    ['a settings file with no project key', { '_quarto.yml': 'format: html\n', 'sub/deck.qmd': QMD, 'sub/deck.html': '<html></html>' }, 'sub', '../_quarto.yml'],
+  ]) {
+    const dir = path.join(nested(files), deck);
+    const r = lib.chooseDeckFile('.html', { dir });
+    assert.equal(r.reason, 'unread', name);
+    assert.deepEqual(r.unread.map((u) => u.file), [settings], name);
+    assert.deepEqual(lib.chooseDeckFile('.qmd', { dir }), { file: 'deck.qmd' }, `${name} .qmd`);
+  }
+});
+
+test('#54: a deck folder with its own settings file is its own project, whatever is above it', () => {
+  const dir = path.join(nested({ '_quarto.yml': 'project:\n  output-dir: _out\n', 'sub/_quarto.yml': 'project:\n  render: [deck.qmd]\n', 'sub/deck.qmd': QMD, 'sub/deck.html': '<html></html>' }), 'sub');
+  assert.deepEqual(lib.chooseDeckFile('.html', { dir }), { file: 'deck.html' });
+});
+
+test('#54: check-mathjax exits 2 naming the project settings file above and the --html option', () => {
+  const dir = path.join(nested({ '_quarto.yml': 'project:\n  output-dir: _out\n', 'sub/deck.qmd': QMD, 'sub/deck.html': '<html></html>' }), 'sub');
+  const r = runQa(dir, 'check-mathjax.mjs');
+  assert.equal(r.code, 2, r.out);
+  assert.match(r.out, /\.\.\/_quarto\.yml/);
+  assert.match(r.out, /Quarto project/);
+  assert.match(r.out, /--html/);
+});
