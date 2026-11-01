@@ -111,55 +111,9 @@ function splitComment(body) {
   return [body, ''];
 }
 
-const unquote = (v) => (/^(["']).*\1$/.test(v) ? v.slice(1, -1) : v);
-
 // A value read from _quarto.yml names a file in the deck folder only when it is a plain file name: no folder,
 // no .., not absolute, no glob. Anything else is ignored, so the lookup never leaves the current folder.
 const plainName = (v) => typeof v === 'string' && v !== '' && path.basename(v) === v && v !== '.' && v !== '..' && !/[*?[\]{}]/.test(v);
-
-// The values of project.render (its direct child key; block or flow list, or one value; whole values only,
-// quoted or not, with ./ dropped) and the output-file that applies to revealjs (the one under format: revealjs:,
-// else the top-level one, whatever their order in the file), from a _quarto.yml. Block-style YAML as the templates
-// write it; other forms (flow mappings, quoted keys) are not read, and the scripts then need their file option.
-// Brackets and spaces off both ends, in one pass each: the regex this replaces backtracked on a long run of spaces (#51).
-function trimList(s) {
-  let i = 0;
-  let j = s.length;
-  while (i < j && (s[i] === '[' || /\s/.test(s[i]))) i++;
-  while (j > i && (s[j - 1] === ']' || /\s/.test(s[j - 1]))) j--;
-  return s.slice(i, j);
-}
-
-export function readQuartoYml(yml) {
-  const render = [];
-  let topOutput = null;
-  let revealOutput = null;
-  let top = null; let childIndent = -1; let renderIndent = -1; let fmtIndent = -1;
-  for (const { code, indent } of settingLines(yml)) {   // block scalar contents are text, not settings (#46)
-    if (indent === 0) { top = code.match(/^([^:\s]+):/)?.[1] ?? null; childIndent = -1; renderIndent = -1; fmtIndent = -1; }
-    else {
-      if (childIndent < 0) childIndent = indent;
-      if (indent <= childIndent && !(renderIndent === indent && /^\s*-/.test(code))) { renderIndent = -1; if (indent < childIndent || !/^\s*revealjs:/.test(code)) fmtIndent = -1; }
-      if (top === 'project' && indent === childIndent && /^\s*render:/.test(code)) renderIndent = indent;
-      if (top === 'format' && indent === childIndent && /^\s*revealjs:/.test(code)) fmtIndent = indent;
-      if (renderIndent >= 0) {
-        let rest = code.replace(/^\s*render:/, '');
-        rest = rest.replace(/^\s*-\s+/, '');                          // a block-list item
-        const pieces = /[[\],]/.test(rest) ? trimList(rest).split(',') : [rest];
-        for (const piece of pieces) {
-          const v = unquote(piece.trim()).replace(/^\.\//, '');
-          if (v) render.push(v);
-        }
-        continue;
-      }
-    }
-    if (indent === 0 || (fmtIndent >= 0 && indent > fmtIndent)) {
-      const o = code.match(/^[ \t]*output-file:[ \t]*(?:"([^"]*)"|'([^']*)'|(\S+))[ \t]*$/);
-      if (o) { const v = (o[1] ?? o[2] ?? o[3]).replace(/^\.\//, ''); if (indent === 0) topOutput = v; else revealOutput = v; }
-    }
-  }
-  return { render, outputFile: revealOutput ?? topOutput };
-}
 
 // Forms of _quarto.yml that the line scanner does not read (issue #46). The scanner reads project, format, revealjs,
 // render and output-file only as plain block keys (unquoted, no space before the colon, first on the line), render
@@ -372,6 +326,118 @@ export function profileSettingLines(yml) {
   return scanSettings(yml).map(({ line, text, kind }) => ({ line, text, kind, outputOnly: OUTPUT_KINDS.includes(kind) }));
 }
 
+// The reader of project.render and output-file, and the YAML blocks of a document, are shared with the scaffold
+// (#53): it checks a template's render entries and talk.qmd's blocks with the same code slide-qa reads them with.
+const unquote = (v) => (/^(["']).*\1$/.test(v) ? v.slice(1, -1) : v);
+
+// The values of project.render (its direct child key; block or flow list, or one value; whole values only,
+// quoted or not, with ./ dropped) and the output-file that applies to revealjs (the one under format: revealjs:,
+// else the top-level one, whatever their order in the file), from a _quarto.yml. Block-style YAML as the templates
+// write it; other forms (flow mappings, quoted keys) are not read, and the scripts then need their file option.
+// Brackets and spaces off both ends, in one pass each: the regex this replaces backtracked on a long run of spaces (#51).
+function trimList(s) {
+  let i = 0;
+  let j = s.length;
+  while (i < j && (s[i] === '[' || /\s/.test(s[i]))) i++;
+  while (j > i && (s[j - 1] === ']' || /\s/.test(s[j - 1]))) j--;
+  return s.slice(i, j);
+}
+
+// Each render value with the line it is on, and the output-file: the scaffold names the line of a render entry that
+// the template does not have (#53), and readQuartoYml keeps its shape.
+function readSettingsValues(yml) {
+  const entries = [];
+  let topOutput = null;
+  let revealOutput = null;
+  let top = null; let childIndent = -1; let renderIndent = -1; let fmtIndent = -1;
+  for (const { line, code, indent } of settingLines(yml)) {   // block scalar contents are text, not settings (#46)
+    if (indent === 0) { top = code.match(/^([^:\s]+):/)?.[1] ?? null; childIndent = -1; renderIndent = -1; fmtIndent = -1; }
+    else {
+      if (childIndent < 0) childIndent = indent;
+      if (indent <= childIndent && !(renderIndent === indent && /^\s*-/.test(code))) { renderIndent = -1; if (indent < childIndent || !/^\s*revealjs:/.test(code)) fmtIndent = -1; }
+      if (top === 'project' && indent === childIndent && /^\s*render:/.test(code)) renderIndent = indent;
+      if (top === 'format' && indent === childIndent && /^\s*revealjs:/.test(code)) fmtIndent = indent;
+      if (renderIndent >= 0) {
+        let rest = code.replace(/^\s*render:/, '');
+        rest = rest.replace(/^\s*-\s+/, '');                          // a block-list item
+        const pieces = /[[\],]/.test(rest) ? trimList(rest).split(',') : [rest];
+        for (const piece of pieces) {
+          const v = unquote(piece.trim()).replace(/^\.\//, '');
+          if (v) entries.push({ value: v, line });
+        }
+        continue;
+      }
+    }
+    if (indent === 0 || (fmtIndent >= 0 && indent > fmtIndent)) {
+      const o = code.match(/^[ \t]*output-file:[ \t]*(?:"([^"]*)"|'([^']*)'|(\S+))[ \t]*$/);
+      if (o) { const v = (o[1] ?? o[2] ?? o[3]).replace(/^\.\//, ''); if (indent === 0) topOutput = v; else revealOutput = v; }
+    }
+  }
+  return { entries, outputFile: revealOutput ?? topOutput };
+}
+
+export function readQuartoYml(yml) {
+  const { entries, outputFile } = readSettingsValues(yml);
+  return { render: entries.map((e) => e.value), outputFile };
+}
+
+export function renderEntries(yml) {
+  return readSettingsValues(yml).entries;
+}
+
+// The YAML blocks Quarto reads a document's metadata from, as { text, line(n) } (line(n): the file's line number of
+// the block's line n, 1 being the opening ---). Quarto's own rules (readYamlFromMarkdown; verify round 3): it drops
+// HTML comments and backtick-fenced code, then takes every line-start --- followed by a line that is not blank, up to
+// the next --- or ... line, whatever comes before it, and leaves out a block that starts with a blank line. Quarto
+// parses each block and stops the render on one that is not YAML, so reading them here cannot refuse a deck that
+// renders. Comments and fences are found line by line, not with Quarto's regular expressions, which take quadratic
+// time on many unclosed ones in a folder from elsewhere (#51).
+const QUARTO_YAML = /(^)(---[ \t]*[\r\n]+(?![ \t]*[\r\n]+)[\W\w]*?[\r\n]+(?:---|\.\.\.))([ \t]*)$/gm;   // kRegExYAML
+export function metadataBlocks(text) {
+  // drop HTML comments (<!-- up to the first --> after it), keeping the file's line number of every line that is left
+  let kept = ''; const origin = [0]; let line = 0; let at = 0;
+  for (;;) {
+    const open = text.indexOf('<!--', at);
+    const close = open < 0 ? -1 : text.indexOf('-->', open + 4);
+    const part = text.slice(at, close < 0 ? text.length : open);
+    kept += part;
+    for (let n = part.indexOf('\n'); n >= 0; n = part.indexOf('\n', n + 1)) origin.push(++line);
+    if (close < 0) break;
+    for (let n = text.indexOf('\n', open); n >= 0 && n < close; n = text.indexOf('\n', n + 1)) line++;
+    at = close + 3;
+  }
+  // blank fenced code: an opening line of backticks (after tabs, spaces or >) with no backtick after them, closed by the
+  // first line two or more lines down that has the same opening and only white space after it
+  const lines = kept.split('\n');
+  const closers = new Map();
+  lines.forEach((l, n) => { const m = l.match(/^([\t >]*`{3,})\s*$/); if (m) { if (!closers.has(m[1])) closers.set(m[1], []); closers.get(m[1]).push(n); } });
+  const next = new Map();   // per opening, how far its closer list has been read
+  for (let n = 0; n < lines.length; n++) {
+    const m = lines[n].match(/^([\t >]*`{3,})[^`]*$/);
+    if (!m) continue;
+    const list = closers.get(m[1]) ?? [];
+    let k = next.get(m[1]) ?? 0;
+    while (k < list.length && list[k] < n + 2) k++;
+    next.set(m[1], k);
+    if (k === list.length) continue;
+    for (let b = n; b <= list[k]; b++) lines[b] = '';
+    n = list[k];
+  }
+  const body = lines.join('\n');
+  const starts = [0];
+  for (let n = body.indexOf('\n'); n >= 0; n = body.indexOf('\n', n + 1)) starts.push(n + 1);
+  const blocks = [];
+  let row = 0;
+  for (const m of body.matchAll(QUARTO_YAML)) {
+    const block = m[2].replace(/^---/, '').replace(/---\s*$/, '').split('\n').map((x) => x.trimEnd()).join('\n');
+    if (/^\n\s*\n/.test(block) || /^\n\s*\n---/m.test(block) || block.trim() === '') continue;
+    while (row + 1 < starts.length && starts[row + 1] <= m.index) row++;
+    const first = row;
+    blocks.push({ text: block, line: (n) => origin[first + n - 1] + 1 });
+  }
+  return blocks;
+}
+
 // A plain or simply quoted YAML scalar ('…' without '', "…" without escapes), else null.
 function simpleScalar(s) {
   s = s.trim();
@@ -464,59 +530,6 @@ export function quartoSettings(dir = process.cwd()) {
 }
 
 // The lines of a .qmd file's front matter that set the output name (#50), as { file, line, text, outputOnly }.
-// The YAML blocks Quarto reads a document's metadata from, as { text, line(n) } (line(n): the file's line number of
-// the block's line n, 1 being the opening ---). Quarto's own rules (readYamlFromMarkdown; verify round 3): it drops
-// HTML comments and backtick-fenced code, then takes every line-start --- followed by a line that is not blank, up to
-// the next --- or ... line, whatever comes before it, and leaves out a block that starts with a blank line. Quarto
-// parses each block and stops the render on one that is not YAML, so reading them here cannot refuse a deck that
-// renders. Comments and fences are found line by line, not with Quarto's regular expressions, which take quadratic
-// time on many unclosed ones in a folder from elsewhere (#51).
-const QUARTO_YAML = /(^)(---[ \t]*[\r\n]+(?![ \t]*[\r\n]+)[\W\w]*?[\r\n]+(?:---|\.\.\.))([ \t]*)$/gm;   // kRegExYAML
-function metadataBlocks(text) {
-  // drop HTML comments (<!-- up to the first --> after it), keeping the file's line number of every line that is left
-  let kept = ''; const origin = [0]; let line = 0; let at = 0;
-  for (;;) {
-    const open = text.indexOf('<!--', at);
-    const close = open < 0 ? -1 : text.indexOf('-->', open + 4);
-    const part = text.slice(at, close < 0 ? text.length : open);
-    kept += part;
-    for (let n = part.indexOf('\n'); n >= 0; n = part.indexOf('\n', n + 1)) origin.push(++line);
-    if (close < 0) break;
-    for (let n = text.indexOf('\n', open); n >= 0 && n < close; n = text.indexOf('\n', n + 1)) line++;
-    at = close + 3;
-  }
-  // blank fenced code: an opening line of backticks (after tabs, spaces or >) with no backtick after them, closed by the
-  // first line two or more lines down that has the same opening and only white space after it
-  const lines = kept.split('\n');
-  const closers = new Map();
-  lines.forEach((l, n) => { const m = l.match(/^([\t >]*`{3,})\s*$/); if (m) { if (!closers.has(m[1])) closers.set(m[1], []); closers.get(m[1]).push(n); } });
-  const next = new Map();   // per opening, how far its closer list has been read
-  for (let n = 0; n < lines.length; n++) {
-    const m = lines[n].match(/^([\t >]*`{3,})[^`]*$/);
-    if (!m) continue;
-    const list = closers.get(m[1]) ?? [];
-    let k = next.get(m[1]) ?? 0;
-    while (k < list.length && list[k] < n + 2) k++;
-    next.set(m[1], k);
-    if (k === list.length) continue;
-    for (let b = n; b <= list[k]; b++) lines[b] = '';
-    n = list[k];
-  }
-  const body = lines.join('\n');
-  const starts = [0];
-  for (let n = body.indexOf('\n'); n >= 0; n = body.indexOf('\n', n + 1)) starts.push(n + 1);
-  const blocks = [];
-  let row = 0;
-  for (const m of body.matchAll(QUARTO_YAML)) {
-    const block = m[2].replace(/^---/, '').replace(/---\s*$/, '').split('\n').map((x) => x.trimEnd()).join('\n');
-    if (/^\n\s*\n/.test(block) || /^\n\s*\n---/m.test(block) || block.trim() === '') continue;
-    while (row + 1 < starts.length && starts[row + 1] <= m.index) row++;
-    const first = row;
-    blocks.push({ text: block, line: (n) => origin[first + n - 1] + 1 });
-  }
-  return blocks;
-}
-
 function frontMatterOutputLines(dir, name) {
   let text;
   try { text = readFileSync(path.join(dir, name), 'utf8').replace(/^\uFEFF/, ''); } catch { return []; }
