@@ -118,10 +118,7 @@ export function readQuartoYml(yml) {
   let topOutput = null;
   let revealOutput = null;
   let top = null; let childIndent = -1; let renderIndent = -1; let fmtIndent = -1;
-  for (const raw of yml.split(/\r?\n/)) {
-    const [code] = splitComment(raw);
-    if (/^\s*$/.test(code)) continue;
-    const indent = code.match(/^[ \t]*/)[0].length;
+  for (const { code, indent } of settingLines(yml)) {   // block scalar contents are text, not settings (#46)
     if (indent === 0) { top = code.match(/^([^:\s]+):/)?.[1] ?? null; childIndent = -1; renderIndent = -1; fmtIndent = -1; }
     else {
       if (childIndent < 0) childIndent = indent;
@@ -151,18 +148,21 @@ export function readQuartoYml(yml) {
 // render and output-file only as plain block keys (unquoted, no space before the colon, first on the line), render
 // as a block or flow list of plain or simply quoted values, and output-file as one plain or simply quoted value.
 // Every line that writes these settings another way is returned as { line, text }, so the caller refuses instead
-// of guessing: one of those keys quoted, with a space before the colon, inside a flow mapping, or after a list
-// dash; such a key's value given as a flow mapping, an anchor, an alias, a tag, or a block scalar; a merge key
-// (<<) or metadata-files anywhere; and in project.render or the output-file the scanner uses, an anchor, alias
-// or tag, a quoted value holding a comma, or an escape. The same code is in slide-deck-scaffold's scaffold.mjs;
-// tests/quarto-settings.test.mjs checks that the two agree.
+// of guessing: a flow mapping or sequence at the root; one of those keys quoted, with a space before the colon,
+// inside a flow mapping, or after a list dash; such a key's value given as a flow mapping, an anchor, an alias, a
+// tag, or a block scalar; a merge key (<<) or metadata-files anywhere; in project.render or the output-file the
+// scanner uses, an anchor, alias or tag, or an escape; and in project.render a quoted value holding a comma (the
+// scanner splits render values at commas; it reads an output-file value whole). The contents of block scalars
+// (| and >) are text, not settings, and are skipped here and by the scanner. The same code is in
+// slide-deck-scaffold's scaffold.mjs; tests/quarto-settings.test.mjs checks that the two agree.
 const SCANNED_KEYS = ['project', 'format', 'revealjs', 'render', 'output-file'];
-const KEY_MENTION = /(^|[\s{,[])(project|format|revealjs|render|output-file|metadata-files)([ \t]*):(?=[ \t]|$)/g;
+const KEY_MENTION = /(^|[\s{,[])(project|format|revealjs|render|output-file|metadata-files)([ \t]*):(?=[\s{["']|$)/g;
 const MERGE_KEY = /(^|[\s{,[-])<<[ \t]*:/;
 const SCANNED_OUTPUT_FILE = /^[ \t]*output-file:[ \t]*(?:"([^"]*)"|'([^']*)'|(\S+))[ \t]*$/;
+const BLOCK_SCALAR = /(?:^[ \t]*-|:)[ \t]+[|>][-+1-9]*[ \t]*$/;   // a value that starts a | or > block scalar
 
-// The line with every quoted string replaced by "", the quoted keys (a quoted string followed by a colon), and the
-// other quoted strings with their quote character.
+// The line with every quoted string replaced by "", the quoted keys (a quoted string followed by a colon, with or
+// without a space, as JSON-style YAML writes them), and the other quoted strings with their quote character.
 function maskQuoted(code) {
   let masked = '';
   const keys = [];
@@ -180,21 +180,36 @@ function maskQuoted(code) {
       if (q === '"' && code[j] === '\\') body += code[j++];                         // \x is an escape inside "…"
       body += code[j++];
     }
-    if (/^[ \t]*:(?=[ \t]|$)/.test(code.slice(j + 1))) keys.push(body); else values.push({ q, body });
+    if (/^[ \t]*:/.test(code.slice(j + 1))) keys.push(body); else values.push({ q, body });
     masked += '""';
     i = j;
   }
   return { masked, keys, values };
 }
 
-export function unreadQuartoLines(yml) {
-  const unread = [];
-  let top = null; let childIndent = -1; let renderIndent = -1; let fmtIndent = -1;
+// The lines of a YAML text that can hold settings, as { line, raw, code, indent, masked, keys, values }: blank
+// lines, comments, and the contents of block scalars are left out, so text that only quotes a setting is not read
+// as one.
+function settingLines(yml) {
+  const lines = [];
+  let scalarIndent = -1;
   yml.split(/\r?\n/).forEach((raw, n) => {
     const [code] = splitComment(raw);
     if (/^\s*$/.test(code)) return;
-    const { masked, keys, values } = maskQuoted(code);
     const indent = code.match(/^[ \t]*/)[0].length;
+    if (scalarIndent >= 0 && indent > scalarIndent) return;
+    scalarIndent = -1;
+    const masked = maskQuoted(code);
+    lines.push({ line: n + 1, raw, code, indent, ...masked });
+    if (BLOCK_SCALAR.test(masked.masked)) scalarIndent = indent;
+  });
+  return lines;
+}
+
+export function unreadQuartoLines(yml) {
+  const unread = [];
+  let top = null; let childIndent = -1; let renderIndent = -1; let fmtIndent = -1;
+  for (const { line, raw, code, indent, masked, keys, values } of settingLines(yml)) {
     const own = masked.match(/^[ \t]*([A-Za-z_][\w.-]*):(?=[ \t]|$)[ \t]*(.*)$/);
     const key = own?.[1];
     const value = (own?.[2] ?? '').trim();
@@ -205,7 +220,8 @@ export function unreadQuartoLines(yml) {
       if (top === 'project' && indent === childIndent && key === 'render') renderIndent = indent;
       if (top === 'format' && indent === childIndent && key === 'revealjs') fmtIndent = indent;
     }
-    let bad = keys.some((k) => SCANNED_KEYS.includes(k) || k === 'metadata-files') || MERGE_KEY.test(masked)
+    let bad = (indent === 0 && /^[{[]/.test(masked))
+      || keys.some((k) => SCANNED_KEYS.includes(k) || k === 'metadata-files') || MERGE_KEY.test(masked)
       || [...masked.matchAll(KEY_MENTION)].some((m) => m[2] === 'metadata-files' || m[3] !== '' || m.index + m[1].length !== indent);
     if (['project', 'format', 'revealjs'].includes(key) && /^[{[&*!|>]/.test(value)) bad = true;
     if (renderIndent >= 0) {
@@ -217,17 +233,26 @@ export function unreadQuartoLines(yml) {
       const o = code.match(SCANNED_OUTPUT_FILE);
       if (!o || /^[&*!|>{[]/.test(o[3] ?? '') || (o[1] ?? '').includes('\\')) bad = true;
     }
-    if (bad) unread.push({ line: n + 1, text: raw.trim() });
-  });
+    if (bad) unread.push({ line, text: raw.trim() });
+  }
   return unread;
+}
+
+// The lines of a profile file (_quarto-<name>.yml) that set render or output-file, or may set them indirectly
+// (metadata-files, a merge key), in any form; quoted text and block scalars are not settings.
+const DECK_FILE_KEYS = ['render', 'output-file', 'metadata-files'];
+export function profileSettingLines(yml) {
+  return settingLines(yml)
+    .filter(({ masked, keys }) => keys.some((k) => DECK_FILE_KEYS.includes(k)) || MERGE_KEY.test(masked)
+      || [...masked.matchAll(KEY_MENTION)].some((m) => DECK_FILE_KEYS.includes(m[2])))
+    .map(({ line, raw }) => ({ line, text: raw.trim() }));
 }
 
 // The deck's Quarto settings (issue #46): _quarto.yml, else _quarto.yaml (the file Quarto uses), and the settings the
 // scanner cannot read: the lines unreadQuartoLines reports in that file, and every line of a profile file
-// (_quarto-<name>.yml) that sets render or output-file, since Quarto merges a profile file only while that profile
+// (_quarto-<name>.yml) that profileSettingLines reports, since Quarto merges a profile file only while that profile
 // is active, which these scripts cannot know. A file that cannot be read counts as unread.
 const PROFILE_FILE = /^_quarto-.+\.ya?ml$/;
-const SETS_DECK_FILES = /(^|[\s{,[])["']?(render|output-file)["']?[ \t]*:/;
 export function quartoSettings(dir = process.cwd()) {
   const read = (name) => { try { return readFileSync(path.join(dir, name), 'utf8'); } catch { return null; } };
   const file = ['_quarto.yml', '_quarto.yaml'].find((name) => isFileIn(dir, name)) ?? null;
@@ -236,9 +261,7 @@ export function quartoSettings(dir = process.cwd()) {
   for (const name of readdirSync(dir).filter((f) => PROFILE_FILE.test(f) && isFileIn(dir, f)).sort()) {
     const text = read(name);
     if (text === null) { unread.push({ file: name, line: 0, text: 'could not be read' }); continue; }
-    text.split(/\r?\n/).forEach((raw, n) => {
-      if (SETS_DECK_FILES.test(splitComment(raw)[0])) unread.push({ file: name, line: n + 1, text: raw.trim() });
-    });
+    unread.push(...profileSettingLines(text).map((u) => ({ file: name, ...u })));
   }
   return { file, yml: yml ?? '', unread };
 }

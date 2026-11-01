@@ -42,6 +42,11 @@ const UNREAD = {
   'escape in output-file': ['format:\n  revealjs:\n    output-file: "slid\\u0065s"', 3],
   'render after a list dash': ['project:\n  - render: [deck.qmd]', 2],
   'tag on format': ['format: !custom\n  revealjs:\n    output-file: slides', 1],
+  // verify round 1 (Codex): compact JSON-style YAML and a flow mapping at the root
+  'compact JSON-style mapping': ['{"project":{"render":["deck.qmd"]}}', 1],
+  'flow mapping at the root': ['{project: {render: [deck.qmd]}}', 1],
+  'quoted key followed directly by its value': ['project:\n  "render":["deck.qmd"]', 2],
+  'unquoted key followed directly by a flow value': ['format:\n  revealjs:{output-file: slides}', 2],
 };
 
 // Forms that are read, or deliberately not used, and must not be refused.
@@ -57,6 +62,11 @@ const READ = {
   'top-level output-file, quoted': 'output-file: "slides.html"',
   'a comment that mentions the keys': '# project: {render: [x.qmd]}\nformat:  # format: {revealjs: x}\n  revealjs:\n    output-file: slides  # <<: *base',
   'an unquoted comma in a flow list': 'project:\n  render: [a.qmd, b.qmd]',
+  // verify round 1 (Codex): text inside block scalars is not settings; a quoted output-file is read whole
+  'a literal block scalar that quotes settings': 'description: |\n  project: {render: [example.qmd]}\n  <<: *base\n  metadata-files: [x.yml]\nproject:\n  render: [deck.qmd]',
+  'a folded block scalar with indicators': 'abstract: >-\n  format: {revealjs: {output-file: x}}\n\n  "render": [y.qmd]\nformat:\n  revealjs:\n    output-file: slides',
+  'a block scalar in a list item': 'notes:\n  - |\n    project: {render: [z.qmd]}\nproject:\n  render: [deck.qmd]',
+  'a quoted output-file holding a comma': 'output-file: "slides, final"',
 };
 
 // ---------- the detector ----------
@@ -147,6 +157,26 @@ test('a profile file that sets render or output-file is refused: which profile w
   assert.match(cli.out, /_quarto-print\.yml line 3/);
 });
 
+test('a profile file that mentions render only inside a quoted value or a block scalar is not refused', () => {
+  const dir = folder({ 'deck.qmd': QMD, '_quarto.yml': 'project:\n  render: [deck.qmd]\n',
+    '_quarto-dark.yml': 'title: "render: demo"\nabstract: |\n  output-file: nothing\nformat:\n  revealjs:\n    theme: dark\n' });
+  assert.deepEqual(lib.chooseDeckFile('.qmd', { dir }), { file: 'deck.qmd' });
+});
+
+test('a profile file that uses metadata-files, a merge key, or a quoted render key is refused', () => {
+  for (const [text, line] of [['metadata-files: [print-settings.yml]', 1], ['format:\n  revealjs:\n    <<: *print', 3], ['project:\n  "render": [deck.qmd]', 2]]) {
+    const dir = folder({ 'deck.qmd': QMD, '_quarto.yml': 'project:\n  render: [deck.qmd]\n', '_quarto-print.yml': text });
+    const r = lib.chooseDeckFile('.qmd', { dir });
+    assert.equal(r.reason, 'unread', text);
+    assert.deepEqual(r.unread.map((u) => [u.file, u.line]), [['_quarto-print.yml', line]], text);
+  }
+});
+
+test('the scaffold and slide-qa agree on which profile lines set the deck files', () => {
+  const texts = ['title: "render: demo"', 'metadata-files: [a.yml]', 'abstract: |\n  render: x', 'project:\n  render: [a.qmd]', '"output-file": x'];
+  for (const t of texts) assert.deepEqual(scaffold.profileSettingLines(t), lib.profileSettingLines(t), t);
+});
+
 test('a profile file that sets neither is not a reason to refuse', () => {
   const dir = folder({ 'deck.qmd': QMD, '_quarto.yml': 'project:\n  render: [deck.qmd]\n', '_quarto-dark.yml': 'format:\n  revealjs:\n    theme: dark\n' });
   assert.deepEqual(lib.chooseDeckFile('.qmd', { dir }), { file: 'deck.qmd' });
@@ -202,4 +232,12 @@ test('the scaffold still writes a block-style personal template', () => {
   const r = runScaffold(s, ['--template', 'blocky', '--name', 'w07', '--out', 'deck']);
   assert.equal(r.code, 0, r.out);
   assert.match(readFileSync(path.join(s.project, 'deck', '_quarto.yml'), 'utf8'), /- w07\.qmd/);
+});
+
+// verify round 1: the scanners skip block scalar contents too, or a setting the detector passes over as text would be read
+test('readQuartoYml and renameRenderTarget leave block scalar contents alone', () => {
+  const yml = 'project:\n  render: [deck.qmd]\nformat:\n  revealjs:\n    output-file: slides\n    notes: |\n      output-file: wrong\n';
+  assert.equal(lib.readQuartoYml(yml).outputFile, 'slides');
+  const tpl = 'format:\n  revealjs:\n    notes: >\n      output-file: talk\n    output-file: talk\n';
+  assert.equal(scaffold.renameRenderTarget(tpl, 'w07.qmd'), 'format:\n  revealjs:\n    notes: >\n      output-file: talk\n    output-file: w07\n');
 });
