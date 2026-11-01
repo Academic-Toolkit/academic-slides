@@ -102,5 +102,6 @@
 ## 20. chain #45、#49、#46：版本與 PR（2026-11-01）
 
 - [x] 20.1 [Req: Repository layout and manifests] [after: 17.2, 18.1, 19.2] `plugin.json` 與 `marketplace.json` 升為 0.8.0（打錯的選項、讀不懂的設定改為拒絕，是行為改變）。驗證：`npm test`、`npm run test:render`、兩處 `claude plugin validate --strict`、`spectra validate package-academic-slides-plugin` 都通過。
+- [x] 20.3 [Req: Check scripts refuse options they cannot read] [Req: Scripts find the deck file when none is given] [Req: Same-name templates resolve project, personal, official] [after: 20.1] 依 /idd-verify 第 1 輪（4 個審查角度、Devil's Advocate、Codex）修正：#46 拒絕 JSON 寫法、行首 flow、顯式鍵、第二份 YAML 文件、`output-file` 引號值的跳脫、render 裡 flow list 以外的逗號（`- my, talk.qmd`，issue 點名的寫法）；block scalar 的內容不算設定（偵測器與兩支掃描器都略過）；`Q & A.qmd`、`revealjs: {}`、其他鍵底下的 `format: {…}` 不再誤擋；`metadata-files` 依 Diagnosis 讀它列的檔，設了 render 或 output-file 才拒；profile 檔以同一個讀法檢查（不分大小寫、只在有設定檔時）；符號連結的設定檔不印內容；scaffold 的訊息換掉控制字元；文件寫實（`output-file` 的逗號不拒）。#45 只有空白的值算缺值、`--help` 列出全部的狀態 2 情形、SKILL 與 README 的指令範例納入測試。follow-up 開為 #50、#51、#52。驗證：新測試在修正前失敗，修正後 `npm test` 267 項、`npm run test:render`、`spectra validate` 都通過。
 - [ ] 20.2 [Req: Repository layout and manifests] [after: 20.1] 推送 cluster branch 並開一個 PR，內文以 Refs #45、Refs #46、Refs #49 連結（不用 Fixes，issue 於 merge 後由 /idd-close 關閉）；推送與開 PR 由 /idd-all-chain 在使用者確認後執行。驗證：`gh pr view` 顯示 PR 為 open。
 

@@ -347,7 +347,7 @@ function settingLines(yml) {
 
 export function unreadQuartoLines(yml) {
   const unread = [];
-  let top = null; let childIndent = -1; let renderIndent = -1; let fmtIndent = -1;
+  let top = null; let childIndent = -1; let renderIndent = -1; let fmtIndent = -1; let seen = false;
   for (const { line, raw, code, indent, masked, keys, values } of settingLines(yml)) {
     const own = masked.match(/^[ \t]*([A-Za-z_][\w.-]*):(?=[ \t]|$)[ \t]*(.*)$/);
     const key = own?.[1];
@@ -361,23 +361,75 @@ export function unreadQuartoLines(yml) {
     }
     let bad = (indent === 0 && /^[{[]/.test(masked))
       || keys.some((k) => SCANNED_KEYS.includes(k) || k === 'metadata-files') || MERGE_KEY.test(masked)
-      || [...masked.matchAll(KEY_MENTION)].some((m) => m[2] === 'metadata-files' || m[3] !== '' || m.index + m[1].length !== indent);
-    if (['project', 'format', 'revealjs'].includes(key) && /^[{[&*!|>]/.test(value)) bad = true;
+      || [...masked.matchAll(KEY_MENTION)].some((m) => m[3] !== '' || m.index + m[1].length !== indent)
+      || /^[ \t]*\?(?=[ \t]|$)/.test(masked)                                       // an explicit key (? key)
+      || (seen && /^(---|\.\.\.)(?=[ \t]|$)/.test(code));                            // a second YAML document
+    seen = true;
+    // project and format at the root, and revealjs under format, hold the scanned keys: their value must be a block
+    // mapping (or an empty {}), not a flow mapping, anchor, alias, tag, or block scalar
+    const scannedParent = ((key === 'project' || key === 'format') && indent === 0) || (key === 'revealjs' && top === 'format' && indent === childIndent);
+    if (scannedParent && value !== '{}' && /^[{[&*!|>]/.test(value)) bad = true;
     if (renderIndent >= 0) {
       const keyLine = key === 'render' && indent === renderIndent;
       const text = keyLine ? value : masked.trim().replace(/^-[ \t]*/, '');
-      if (/(^|[\s,[])[&*!|>{]/.test(text)) bad = true;
+      // a flow mapping or block scalar, an anchor (&a), alias (*a) or tag (!t) at the start of a value (not `Q & A.qmd`)
+      if (/^[{|>]/.test(text) || /(^|[\s,[])[&*!][^\s,[\]{}]/.test(text) || /[[,][ \t]*\{/.test(text)) bad = true;
       // Outside a flow list an unquoted comma is part of one value (`- my, talk.qmd`), which the scanner splits.
       if ((keyLine || /^[ \t]*-/.test(code)) && !/^\[/.test(text) && text.includes(',')) bad = true;
       if (values.some((v) => v.body.includes(',') || (v.q === '"' && v.body.includes('\\')) || (v.q === "'" && v.body.includes("''")))) bad = true;
     }
     if (key === 'output-file' && (indent === 0 || (fmtIndent >= 0 && indent > fmtIndent))) {
       const o = code.match(SCANNED_OUTPUT_FILE);
-      if (!o || /^[&*!|>{[]/.test(o[3] ?? '') || (o[1] ?? '').includes('\\')) bad = true;
+      // not matched, an anchor, alias, tag or flow value, a quoted value with '' or \" the quoted forms could not take, or an escape
+      if (!o || /^[&*!|>{["']/.test(o[3] ?? '') || (o[1] ?? '').includes('\\')) bad = true;
     }
     if (bad) unread.push({ line, text: raw.trim() });
   }
-  return unread;
+  // metadata-files is read (the caller checks the files it lists); a list in another form is not
+  for (const l of metadataFileLists(yml)) if (l.names === null && !unread.some((u) => u.line === l.line)) unread.push({ line: l.line, text: l.text });
+  return unread.sort((a, b) => a.line - b.line);
+}
+
+// A plain or simply quoted YAML scalar ('…' without '', "…" without escapes), else null.
+function simpleScalar(s) {
+  s = s.trim();
+  const q = s.match(/^"([^"\\]*)"$|^'([^']*)'$/);
+  if (q) return q[1] ?? q[2];
+  return s === '' || /^[&*!|>{[\]}"'@`%#,?:-]/.test(s) || /: |[ \t]#/.test(s) ? null : s;
+}
+
+// The files each metadata-files key lists (verify round 1): Quarto merges them into the settings, so the callers
+// read them and refuse only one that sets render or output-file (#46 Diagnosis). Returned as { line, text, names };
+// names is null when the list is written in a form not covered here (a flow list on the key's line, a block list of
+// simple scalars, or one simple scalar).
+export function metadataFileLists(yml) {
+  const lists = [];
+  let open = null;   // the block list being read: the key's indent and its entry
+  for (const { line, raw, code, indent, masked } of settingLines(yml)) {
+    if (open && /^[ \t]*-(?=[ \t]|$)/.test(masked) && indent >= open.indent) {
+      const name = simpleScalar(code.replace(/^[ \t]*-/, ''));
+      if (name === null) open.entry.names = null; else open.entry.names?.push(name);
+      continue;
+    }
+    open = null;
+    const m = masked.match(/^[ \t]*metadata-files:(?=[ \t]|$)[ \t]*(.*)$/);
+    if (!m) continue;
+    const entry = { line, text: raw.trim(), names: [] };
+    lists.push(entry);
+    const value = code.replace(/^[ \t]*metadata-files:[ \t]*/, '').trim();
+    if (m[1].trim() === '') { open = { indent, entry }; continue; }
+    if (!value.startsWith('[')) { const name = simpleScalar(value); entry.names = name === null ? null : [name]; continue; }
+    if (!value.endsWith(']')) { entry.names = null; continue; }
+    const items = [];
+    let cur = ''; let q = null;
+    for (const c of value.slice(1, -1)) {
+      if (q) { cur += c; if (c === q) q = null; } else if (c === '"' || c === "'") { q = c; cur += c; } else if (c === ',') { items.push(cur); cur = ''; } else cur += c;
+    }
+    items.push(cur);
+    const names = items.length === 1 && items[0].trim() === '' ? [] : items.map(simpleScalar);
+    entry.names = q || names.includes(null) ? null : names;
+  }
+  return lists;
 }
 
 // The lines of a profile file (_quarto-<name>.yml) that set render or output-file, or may set them indirectly
@@ -527,6 +579,19 @@ export function planDeck({ out, home, template, title, deckName, trustProject = 
   const templateYml = readFileSync(ymlFile, 'utf8');
   refuseUnreadSettings(ymlFile, unreadQuartoLines(templateYml), 'sets project, format, render or output-file in a form the scaffold '
     + 'cannot rewrite; write them in block style in the template\'s _quarto.yml itself, without metadata-files or merge keys, as the official templates do');
+  // A file metadata-files lists, and a profile file, are copied unchanged, so one that sets render or output-file would
+  // still point at talk.qmd (#46). metadata-files must list files kept beside _quarto.yml, or they cannot be checked.
+  for (const { line, names } of metadataFileLists(templateYml)) {
+    for (const name of names ?? []) {
+      const copy = copies.find((c) => c.rel === name);
+      if (!copy) {
+        refuseUnreadSettings(ymlFile, [{ line, text: `metadata-files lists ${name}` }], 'but that file is not in the template folder, so '
+          + 'the scaffold cannot check it; list only files kept beside _quarto.yml');
+      }
+      refuseUnreadSettings(copy.src, profileSettingLines(readFileSync(copy.src, 'utf8')),
+        'sets render or output-file, or may through metadata-files or a merge key, but the scaffold rewrites only _quarto.yml; move those settings there');
+    }
+  }
   // A profile file is copied unchanged, so one that sets render or output-file would still point at talk.qmd (#46).
   for (const { src, rel } of copies.filter((c) => PROFILE_FILE.test(c.rel))) {
     refuseUnreadSettings(src, profileSettingLines(readFileSync(src, 'utf8')),

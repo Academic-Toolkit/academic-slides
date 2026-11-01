@@ -208,3 +208,9 @@ test('the slide-qa commands in SKILL.md and README.md pass the option reader', (
     assert.doesNotMatch(r.out, OPTION_ERROR, `${script} ${args.join(' ')}`);
   }
 });
+
+// verify round 1 (logic): a value of only spaces is as empty as no value
+test('a value of only spaces is refused for text and file options', () => {
+  refused(['--out', '  '], /^--out needs a value/);
+  refused(['--html', ' '], /^--html needs a file name/);
+});

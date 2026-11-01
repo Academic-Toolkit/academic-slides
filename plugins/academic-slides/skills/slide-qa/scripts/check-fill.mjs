@@ -2,7 +2,7 @@
 // Fill check: how far down each content slide its body reaches, as a fraction of the space between
 // the bottom of the title and the top of the footer. Lists slides below --threshold with a suggested
 // class: roomy-1 (0.58–0.70), roomy-2 (0.45–0.58), roomy-3 (< 0.45), or vc when the slide is already
-// scaled. Informational: always exits 0 unless the HTML is missing.
+// scaled. Informational: always exits 0 unless the HTML is missing or an option is wrong (exit 2).
 import { options, playwright, deckPath, findDeckFile, serve, openDeck } from './_lib.mjs';
 
 const { get } = options(`Usage: node check-fill.mjs [--html <deck>.html] [--threshold 0.70] [--width 1280] [--height 720]

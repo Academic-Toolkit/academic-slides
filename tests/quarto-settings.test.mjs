@@ -36,7 +36,6 @@ const UNREAD = {
   'comma in a quoted block item': ['project:\n  render:\n    - "deck, notes.qmd"', 3],
   'escape in a quoted render value': ['project:\n  render:\n    - "dec\\u006b.qmd"', 3],
   'merge key': ['format:\n  revealjs:\n    <<: *base', 3],
-  'metadata-files': ['metadata-files: [extra.yml]', 1],
   'output-file with a space, unquoted': ['format:\n  revealjs:\n    output-file: my slides', 3],
   'output-file as an alias': ['output-file: *name', 1],
   'escape in output-file': ['format:\n  revealjs:\n    output-file: "slid\\u0065s"', 3],
@@ -50,6 +49,15 @@ const UNREAD = {
   // verify round 1 (requirements): an unquoted comma outside a flow list is part of one value, which the scanner splits
   'unquoted comma in a block list item': ['project:\n  render:\n    - my, talk.qmd', 3],
   'unquoted comma in a single render value': ['project:\n  render: my, talk.qmd', 2],
+  // verify round 1 (logic)
+  'escaped quote in a single-quoted output-file': ["output-file: 'it''s'", 1],
+  'escaped quote in a double-quoted output-file': ['output-file: "a\\"b"', 1],
+  'an explicit key': ['project:\n  ? render\n  : [deck.qmd]', 2],
+  'a second YAML document': ['project:\n  render: [a.qmd]\n---\nproject:\n  render: [b.qmd]', 3],
+  'a flow mapping inside a render list': ['project:\n  render: [{x: deck.qmd}]', 2],
+  'metadata-files as a flow list over several lines': ['metadata-files: [\n  a.yml\n]', 1],
+  'metadata-files with an alias': ['metadata-files: *shared', 1],
+  'metadata-files as a quoted key': ['"metadata-files": [a.yml]', 1],
 };
 
 // Forms that are read, or deliberately not used, and must not be refused.
@@ -70,6 +78,13 @@ const READ = {
   'a folded block scalar with indicators': 'abstract: >-\n  format: {revealjs: {output-file: x}}\n\n  "render": [y.qmd]\nformat:\n  revealjs:\n    output-file: slides',
   'a block scalar in a list item': 'notes:\n  - |\n    project: {render: [z.qmd]}\nproject:\n  render: [deck.qmd]',
   'a quoted output-file holding a comma': 'output-file: "slides, final"',
+  // verify round 1 (logic, regression): forms that were refused wrongly
+  'an ampersand in a render value': 'project:\n  render:\n    - Q & A.qmd',
+  'an empty revealjs mapping': 'format:\n  revealjs: {}',
+  'a flow mapping under another key named format': 'website:\n  format: {a: b}',
+  'metadata-files as a flow list': 'metadata-files: [shared.yml, "authors.yml"]',
+  'metadata-files as a block list': 'metadata-files:\n  - shared.yml\n  - authors.yml',
+  'a document marker at the top': '---\nproject:\n  render: [deck.qmd]',
 };
 
 // ---------- the detector ----------
@@ -293,4 +308,57 @@ test('the scaffold strips control characters, DEL and C1 included, from a refuse
   const r = runScaffold(s, ['--template', 'noisy', '--name', 'w07', '--out', 'deck']);
   assert.equal(r.code, 1, r.out);
   assert.doesNotMatch(r.out, /[\u007f-\u009f]/);
+});
+
+// verify round 1 (logic, regression): metadata-files is read, not refused outright; the listed files are refused only
+// when they set render or output-file, or cannot be read from this folder (#46 Diagnosis)
+test('metadataFileLists reads the listed names in the forms it covers', () => {
+  assert.deepEqual(lib.metadataFileLists('metadata-files: [a.yml, "b.yml"]'), [{ line: 1, text: 'metadata-files: [a.yml, "b.yml"]', names: ['a.yml', 'b.yml'] }]);
+  assert.deepEqual(lib.metadataFileLists('format:\n  revealjs:\n    metadata-files:\n      - a.yml\n      - \'c d.yml\'\n    theme: x').map((l) => [l.line, l.names]), [[3, ['a.yml', 'c d.yml']]]);
+  assert.deepEqual(lib.metadataFileLists('metadata-files: one.yml').map((l) => l.names), [['one.yml']]);
+  assert.deepEqual(lib.metadataFileLists('metadata-files: [\n  a.yml\n]').map((l) => l.names), [null]);
+  for (const yml of ['metadata-files: [a.yml]', 'metadata-files:\n  - a.yml', 'metadata-files: [\n a\n]']) {
+    assert.deepEqual(scaffold.metadataFileLists(yml), lib.metadataFileLists(yml), yml);
+  }
+});
+
+test('metadata-files that only lists other settings is read; one that sets the output file is refused', () => {
+  let dir = folder({ 'deck.qmd': QMD, '_quarto.yml': 'project:\n  render: [deck.qmd]\nmetadata-files: [shared.yml]\n', 'shared.yml': 'bibliography: refs.bib\n' });
+  assert.deepEqual(lib.chooseDeckFile('.qmd', { dir }), { file: 'deck.qmd' });
+  assert.equal(runQa(dir, 'check-density.mjs').code, 0);
+  dir = folder({ 'deck.qmd': QMD, '_quarto.yml': 'metadata-files:\n  - shared.yml\n', 'shared.yml': 'format:\n  revealjs:\n    output-file: slides\n' });
+  const r = lib.chooseDeckFile('.html', { dir });
+  assert.equal(r.reason, 'unread');
+  assert.deepEqual(r.unread.map((u) => [u.file, u.line]), [['shared.yml', 3]]);
+});
+
+test('metadata-files that lists a file outside the folder, or a missing one, is refused', () => {
+  for (const list of ['[../shared.yml]', '[sub/shared.yml]', '[missing.yml]']) {
+    const dir = folder({ 'deck.qmd': QMD, '_quarto.yml': `metadata-files: ${list}\n` });
+    const r = lib.chooseDeckFile('.qmd', { dir });
+    assert.equal(r.reason, 'unread', list);
+    assert.deepEqual(r.unread.map((u) => [u.file, u.line]), [['_quarto.yml', 1]], list);
+  }
+});
+
+test('profile files are not consulted when there is no _quarto.yml: Quarto uses them only in a project', () => {
+  const dir = folder({ 'deck.qmd': QMD, '_quarto-print.yml': 'project:\n  render: [other.qmd]\n' });
+  assert.deepEqual(lib.chooseDeckFile('.qmd', { dir }), { file: 'deck.qmd' });
+});
+
+test('the scaffold reads a template\'s metadata-files and refuses only one that sets render or output-file', () => {
+  let s = sandbox();
+  personalTemplate(s, 'meta', `metadata-files: [shared.yml]\n${THEME}`, { 'shared.yml': 'bibliography: refs.bib\n' });
+  let r = runScaffold(s, ['--template', 'meta', '--name', 'w07', '--out', 'deck']);
+  assert.equal(r.code, 0, r.out);
+  s = sandbox();
+  personalTemplate(s, 'meta2', `metadata-files: [shared.yml]\n${THEME}`, { 'shared.yml': 'project:\n  render: [talk.qmd]\n' });
+  r = runScaffold(s, ['--template', 'meta2', '--name', 'w07', '--out', 'deck']);
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /shared\.yml line 2/);
+  s = sandbox();
+  personalTemplate(s, 'meta3', `metadata-files: [../outside.yml]\n${THEME}`);
+  r = runScaffold(s, ['--template', 'meta3', '--name', 'w07', '--out', 'deck']);
+  assert.equal(r.code, 1, r.out);
+  assert.equal(existsSync(path.join(s.project, 'deck')), false);
 });

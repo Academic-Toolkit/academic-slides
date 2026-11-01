@@ -208,13 +208,22 @@ check-density、check-fill、check-layout、check-mathjax、export-pdf 原本把
 
 ### D23. 讀不懂的 Quarto 設定寫法：拒絕猜，不解析（issue #46）
 
-slide-qa 的 `readQuartoYml` 與 scaffold 的 `renameRenderTarget` 是兩支逐行掃描器，只認範本那種區塊寫法。行內 mapping、加引號的鍵、冒號前有空白的鍵、anchor、alias、merge key、引號內的逗號與跳脫都是合法 YAML，卻會讓 slide-qa 退回資料夾裡唯一的候選（可能是比真正輸出舊的檔），也會讓 scaffold 寫出 render 仍指向 `talk.qmd` 的 deck，只印一行警告。
+slide-qa 的 `readQuartoYml` 與 scaffold 的 `renameRenderTarget` 是兩支逐行掃描器，只認範本那種區塊寫法。行內 mapping、加引號的鍵、冒號前有空白的鍵、anchor、alias、merge key、值裡的逗號與跳脫都是合法 YAML，卻會讓 slide-qa 退回資料夾裡唯一的候選（可能是比真正輸出舊的檔），也會讓 scaffold 寫出 render 仍指向 `talk.qmd` 的 deck，只印一行警告。
 
 - 使用者 2026-11-01 定案：認不出就拒絕猜，維持只用 Node 內建模組（D10 不變）。不採 `quarto inspect`：實測讀得對，但每次多約 1.5 秒，而且 scaffold 要改寫文字，用不上它。不加 YAML 套件：要改 D10，scaffold 解析後再寫回會丟掉範本的註解與排版。
-- `unreadQuartoLines(yml)` 以和掃描器相同的縮排狀態，列出寫法超出掃描器的行（行號與原文）：`project`、`format`、`revealjs`、`render`、`output-file` 加了引號、冒號前有空白、位在行內 mapping 裡或列表破折號之後；這幾個鍵的值是行內 mapping、anchor、alias、tag 或 block scalar；行首的 flow mapping 或 flow sequence（含 JSON 寫法 `{"project":{…}}`，加引號的鍵後面緊接冒號也算鍵）；任何地方的 merge key（`<<`）與 `metadata-files`；`project.render` 或掃描器採用的 `output-file` 裡的 anchor、alias、tag、跳脫；以及 `project.render` 裡含逗號的引號值（掃描器依逗號切開 render 的值，`output-file` 則整個讀進來，逗號不影響）。block scalar（`|`、`>`）的內容是文字不是設定，偵測器與兩支掃描器都略過它（verify 第 1 輪：原本會把說明文字誤當設定而拒絕，掃描器也會把 revealjs 底下說明文字裡的 `output-file` 讀成設定）。掃描器刻意不採用的區塊寫法（其他 format 的 `output-file`、更深一層的 `render`、`pre-render`、`post-render`）、引號值裡像鍵的文字、註解，都不算。slide-qa 的 `_lib.mjs` 與 scaffold 各有一份相同的函式（沿用兩邊各有一份 `splitComment` 的做法，兩個 skill 不互相 import），測試檢查兩份對每種寫法的結果一致。
-- slide-qa：設定檔照 Quarto 的做法取 `_quarto.yml`，沒有時取 `_quarto.yaml`（實測兩者都在時 Quarto 用 `_quarto.yml`）。設定檔有讀不懂的行，或資料夾裡的 profile 檔 `_quarto-<name>.yml` 以任何寫法設了 `render` 或 `output-file`，或用了 `metadata-files`、merge key 而可能間接設定它們（引號內的文字與 block scalar 不算；Quarto 只在那個 profile 啟用時合併它，腳本無從得知 render 時用了哪個），沒給檔名參數的腳本以狀態 2 結束，列出檔名、行號與原文（最多三筆），請使用者給檔名參數或改成區塊寫法；給了檔名參數就照用，不讀設定。
-- scaffold：範本的 `_quarto.yml` 有讀不懂的行，或範本裡的 profile 檔設了（或可能間接設了）`render` 或 `output-file`（profile 檔照原樣複製，改寫不到它），在寫入任何東西之前以狀態 1 結束，列出檔名與行號。D20 的殘留警告保留給區塊寫法裡改寫不到的 `talk.qmd`（例如列在 `resources` 底下）。
-- profile 檔與 `_quarto.yaml` 是 diagnose #46 時發現的同類來源，一併處理（寫在 #46 的 Diagnosis）。
+- `unreadQuartoLines(yml)` 以和掃描器相同的縮排狀態，列出寫法超出掃描器的行（行號與原文）：
+  - 行首的 flow mapping 或 flow sequence（含 JSON 寫法 `{"project":{…}}`；加引號的鍵後面緊接冒號也算鍵）、顯式鍵（`? key`）、第二份 YAML 文件（開頭以外的 `---`、`...`）、任何地方的 merge key（`<<`）。
+  - `project`、`format`、`revealjs`、`render`、`output-file`、`metadata-files` 加了引號、冒號前有空白、位在行內 mapping 裡或列表破折號之後。
+  - 最上層的 `project`、`format` 與 `format` 底下的 `revealjs`，值是 flow mapping、anchor、alias、tag 或 block scalar（空的 `{}` 可以；其他鍵底下同名的 `format: {…}` 不算）。
+  - `project.render` 裡：開頭的 flow mapping 或 block scalar，anchor（`&a`）、alias（`*a`）、tag（`!t`）（`Q & A.qmd` 這種前後有空白的 `&` 不算），跳脫，以及含逗號的值：引號內的逗號，與 flow list 以外沒加引號的逗號（`- my, talk.qmd` 在 YAML 是一個值，掃描器卻依逗號切成兩個；issue #46 點名的寫法）。
+  - 掃描器採用的 `output-file`：anchor、alias、tag、flow 值、跳脫（`"a\"b"`、`'it''s'`）。`output-file` 是單一值，掃描器整個讀進來，引號內的逗號不影響。
+  - block scalar（`|`、`>`）的內容是文字不是設定，偵測器與兩支掃描器都略過它。掃描器刻意不採用的區塊寫法（其他 format 的 `output-file`、更深一層的 `render`、`pre-render`、`post-render`）、引號值裡像鍵的文字、註解，都不算。
+  - slide-qa 的 `_lib.mjs` 與 scaffold 各有一份相同的函式（沿用兩邊各有一份 `splitComment` 的做法，兩個 skill 不互相 import），測試檢查兩份對每種寫法的結果一致。
+- `metadata-files`：Quarto 把它列的檔合併進設定。依 #46 的 Diagnosis，讀它列的檔，其中設了 `render` 或 `output-file`（或再用 `metadata-files`、merge key）才拒絕；列的不是同一資料夾裡的單純檔名、檔案不存在，或清單不是 flow list、區塊清單、單一值這三種寫法，也拒絕。第 1 版一律拒絕，verify 第 1 輪指出它比 Diagnosis 寬，並擋下 0.7.0 能用的 deck（例如用 `metadata-files` 放作者或書目資料）。
+- slide-qa：設定檔照 Quarto 的做法取 `_quarto.yml`，沒有時取 `_quarto.yaml`（實測兩者都在時 Quarto 用 `_quarto.yml`）。設定檔有讀不懂的行，`metadata-files` 列的檔如上，或資料夾裡的 profile 檔 `_quarto-<name>.yml`（不分大小寫，macOS 上 Quarto 也會載入 `_QUARTO-p.yml`）以任何寫法設了 `render` 或 `output-file`，或用了 `metadata-files`、merge key（引號內的文字與 block scalar 不算；Quarto 只在那個 profile 啟用時合併它，腳本無從得知 render 時用了哪個；沒有設定檔時 Quarto 不用 profile，這時不檢查），沒給檔名參數的腳本以狀態 2 結束，列出檔名、行號與原文（最多三筆），請使用者給檔名參數，或把 `project.render` 與 `output-file` 以區塊寫法寫在設定檔本身；給了檔名參數就照用，不讀設定。設定檔是符號連結時照舊跟隨讀取（與 0.7.0 相同），但拒絕訊息只列檔名與行號、不印內容，免得把資料夾外檔案的內容印出來（verify 第 1 輪 security）。
+- scaffold：範本的 `_quarto.yml` 有讀不懂的行；`metadata-files` 列的檔不在範本資料夾裡，或設了 `render`、`output-file`；或範本裡的 profile 檔設了（或可能間接設了）它們（這些檔照原樣複製，改寫不到）：在寫入任何東西之前以狀態 1 結束，列出檔名與行號，印出的文字把控制字元（含 DEL 與 C1）換成 `?`。D20 的殘留警告保留給區塊寫法裡改寫不到的 `talk.qmd`（例如列在 `resources` 底下）。
+- 來源：profile 檔與 `metadata-files` 是 diagnose #46 時發現的同類來源（寫在 Diagnosis）。`_quarto.yaml` 是實作時實測 Quarto 的選檔順序後加入的，Diagnosis 沒有列，使用者也沒有另外決定；它只讓 deck 多一種讀得到的設定檔。
+- 不涵蓋（開為 #50）：`clean-revealjs` 這類擴充格式的 `output-file`、`.qmd` front matter 的 `output-file`、`_metadata.yml`、`project: output-dir`、`output-ext`。
 - 在範圍內：`_lib.mjs`、`scaffold.mjs`、兩份 SKILL.md、`tests/quarto-settings.test.mjs`。
 
 ## Implementation Contract

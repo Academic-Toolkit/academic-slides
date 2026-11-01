@@ -63,3 +63,13 @@
 - 版本升為 0.7.0。
 - 不在這次範圍：檔案以外的選項缺值的處理（#45）、scaffold 自動複製 beamer 檔。
 - 受影響的 capability：`deck-scaffold`、`slide-qa-tools`。
+
+## 後續變更：issue #45、#49、#46（2026-11-01，一條 chain、一個 PR）
+
+- #45：slide-qa 五支檢查腳本（check-density、check-fill、check-layout、check-mathjax、export-pdf）各自宣告選項，共用 `_lib.mjs` 的讀法；缺值、不是數字或超出範圍的數值、不認得的選項、不屬於任何選項的參數、重複的選項都以狀態 2 結束並點名選項，在找 deck 檔之前回報（使用者 2026-11-01 定案「全部比照 handout」）；handout 維持 #34 的狀態 1。
+- #49：scaffold 的帶值選項後面接另一個選項時以狀態 2 結束，不寫任何檔（`--out --dry-run` 原本會寫出 deck）。
+- #46：`_quarto.yml` 裡掃描器讀不懂的寫法不再猜：slide-qa 沒給檔名參數時以狀態 2 結束並指出檔名與行號，scaffold 在寫入前以狀態 1 拒絕這種範本；`metadata-files` 讀它列的檔，profile 檔設了 render 或 output-file 時也拒絕；只用 Node 內建模組（使用者 2026-11-01 定案）。#48（實際使用後回顧取名）依使用者決定 park，不在這條 chain。
+- 版本升為 0.8.0（打錯的選項、讀不懂的設定改為拒絕，是行為改變）。
+- 不在這次範圍（開為 follow-up）：其他決定輸出檔名的來源（#50）、既有訊息與 trim 對不受信任資料夾的處理（#51）、scaffold 與 slide-qa 選項規則的其餘差異（#52）。
+- 受影響的 capability：`deck-scaffold`、`slide-qa-tools`。
+
