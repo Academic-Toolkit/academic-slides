@@ -694,3 +694,29 @@ test('#53: the scaffold and slide-qa read project.render and output-file the sam
   const all = [...Object.values(UNREAD).map(([yml]) => yml), ...Object.values(READ)];
   for (const yml of all) assert.deepEqual(scaffold.readQuartoYml(yml), lib.readQuartoYml(yml), yml);
 });
+
+// verify round 1 of #53 (Codex): a glob that leaves the deck, a byte order mark before talk.qmd's front matter, and an
+// extension format's output-file in a profile file, which is copied unchanged
+test('#53 verify: a render glob outside the deck, a front matter after a byte order mark, and a profile output-file under an extension format are refused', () => {
+  for (const [name, yml, extra, file, line, why] of [
+    ['a glob above the deck', `project:\n  render: [talk.qmd, "../*.qmd"]\n${THEME}`, {}, '_quarto.yml', 2, /outside the new deck/],
+    ['an absolute glob', `project:\n  render: [talk.qmd, "/tmp/*.qmd"]\n${THEME}`, {}, '_quarto.yml', 2, /outside the new deck/],
+    ['a byte order mark before the front matter', `project:\n  render: [talk.qmd]\n${THEME}`, { 'talk.qmd': '﻿---\ntitle: "T"\noutput-file: w07\n---\n\n## Slide\n' }, 'talk.qmd', 3, /talk\.qmd/],
+    ['a profile output-file under an extension format', `project:\n  render: [talk.qmd]\n${THEME}`, { '_quarto-ext.yml': 'format:\n  clean-revealjs:\n    output-file: w07\n' }, '_quarto-ext.yml', 3, /rewrites only _quarto\.yml/],
+  ]) {
+    const s = sandbox();
+    personalTemplate(s, 'copied', yml, extra);
+    const r = runScaffold(s, ['--template', 'copied', '--name', 'w08', '--out', 'deck']);
+    assert.equal(r.code, 1, `${name}: ${r.out}`);
+    assert.match(r.out, new RegExp(`${file.replace(/\./g, '\\.')} line ${line}\\b`), name);
+    assert.match(r.out, why, name);
+    assert.equal(existsSync(path.join(s.project, 'deck')), false, `${name}: nothing written`);
+  }
+});
+
+test('#53 verify: a profile that changes only the output folder or extension is still accepted', () => {
+  const s = sandbox();
+  personalTemplate(s, 'place', `project:\n  render: [talk.qmd]\n${THEME}`, { '_quarto-pub.yml': 'project:\n  output-dir: _pub\nformat:\n  revealjs:\n    output-ext: htm\n' });
+  const r = runScaffold(s, ['--template', 'place', '--name', 'w08', '--out', 'deck']);
+  assert.equal(r.code, 0, r.out);
+});

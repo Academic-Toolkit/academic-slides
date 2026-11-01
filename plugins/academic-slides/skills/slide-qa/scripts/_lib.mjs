@@ -195,10 +195,10 @@ function settingLines(yml) {
 //   render         project.render, read by the scanner
 //   output-file    the output-file the scanner reads (the top level, or under format: revealjs:)
 //   metadata       metadata-files whose list the callers read
-//   output         another source of the output name the scanner does not read (#50), in any form, that changes only
-//                  where the deck is written or its extension: output-file under an extension format such as
-//                  clean-revealjs, output-ext, project.output-dir, a project type other than default; refused when the
-//                  name is needed, and no obstacle to the scaffold's rename (verify round 3)
+//   output         another source of the output name the scanner does not read (#50), in any form: output-file under
+//                  an extension format such as clean-revealjs, output-ext, project.output-dir, a project type other than
+//                  default; refused when the name is needed. All but the extension format's output-file change only where
+//                  the deck is written or its extension, which the scaffold accepts (verify round 3; #53 for the rest)
 function scanSettings(yml) {
   const found = [];
   let top = null; let childIndent = -1; let renderIndent = -1; let fmtIndent = -1; let fmtChild = null; let revChild = -1;
