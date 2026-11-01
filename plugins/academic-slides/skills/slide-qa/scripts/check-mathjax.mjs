@@ -8,7 +8,7 @@ import { options, playwright, deckPath, findDeckFile, serve } from './_lib.mjs';
 
 const { get } = options(`Usage: node check-mathjax.mjs [--html <deck>.html]
 Exit status: 0 no MathJax errors, 1 at least one error, 2 HTML not found, the deck's .html not found in the current folder
-             when --html is not given, or an option error (--html without a file name, an unknown option, an argument that belongs to
+             when --html is not given, its Quarto settings cannot be read, or an option error (--html without a file name, an unknown option, an argument that belongs to
              no option, an option given twice).`,
   { html: 'file' });
 const { root, name } = deckPath(findDeckFile(get('html'), '.html', 'html'));

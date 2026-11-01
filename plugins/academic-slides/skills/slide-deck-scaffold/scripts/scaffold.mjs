@@ -286,26 +286,32 @@ export function renameRenderTarget(text, mainFile) {
 // Forms of _quarto.yml that the line scanner does not read (issue #46). The scanner reads project, format, revealjs,
 // render and output-file only as plain block keys (unquoted, no space before the colon, first on the line), render
 // as a block or flow list of plain or simply quoted values, and output-file as one plain or simply quoted value.
-// Every line that writes these settings another way is returned as { line, text }, so the caller refuses instead
-// of guessing: a flow mapping or sequence at the root; one of those keys quoted, with a space before the colon,
-// inside a flow mapping, or after a list dash; such a key's value given as a flow mapping, an anchor, an alias, a
-// tag, or a block scalar; a merge key (<<) or metadata-files anywhere; in project.render or the output-file the
-// scanner uses, an anchor, alias or tag, or an escape; and in project.render a quoted value holding a comma (the
-// scanner splits render values at commas; it reads an output-file value whole). The contents of block scalars
-// (| and >) are text, not settings, and are skipped here and by the scanner. The same code is in
-// slide-qa's _lib.mjs; tests/quarto-settings.test.mjs checks that the two agree.
-const SCANNED_KEYS = ['project', 'format', 'revealjs', 'render', 'output-file'];
-const KEY_MENTION = /(^|[\s{,[])(project|format|revealjs|render|output-file|metadata-files)([ \t]*):(?=[\s{["']|$)/g;
+// scanSettings tags every line that bears on the deck's files; `unread` lines write these settings another way, so
+// the caller refuses instead of guessing: a flow mapping or sequence at the root, an explicit key (? key), a second
+// YAML document, a merge key (<<); one of those keys (or metadata-files, output-ext) quoted, with a space before
+// the colon, inside a flow mapping, or after a list dash; root project or format, or format's revealjs, given a flow
+// mapping (other than {}), anchor, alias, tag, or block scalar; in project.render or the output-file the scanner
+// uses, an anchor, alias or tag, an escape, a quoted value left open, or a value continued on the next line (YAML
+// joins it, the scanner does not); and in project.render a value holding a comma, quoted or outside a flow list
+// (the scanner splits render values at commas; it reads an output-file value whole). The contents of block scalars
+// (| and >) are text, not settings, and are skipped here and by the scanner; a byte order mark is dropped. The same
+// code is in slide-qa's _lib.mjs; tests/quarto-settings.test.mjs checks that the two agree, and that
+// whatever is accepted is read as a YAML reader reads it.
+const SCANNED_KEYS = ['project', 'format', 'revealjs', 'render', 'output-file', 'output-ext'];
+const KEY_MENTION = /(^|[\s{,[])(project|format|revealjs|render|output-file|output-ext|metadata-files)([ \t]*):(?=[\s{["']|$)/g;
 const MERGE_KEY = /(^|[\s{,[-])<<[ \t]*:/;
 const SCANNED_OUTPUT_FILE = /^[ \t]*output-file:[ \t]*(?:"([^"]*)"|'([^']*)'|(\S+))[ \t]*$/;
 const BLOCK_SCALAR = /(?:^[ \t]*-|:)[ \t]+[|>][-+1-9]*[ \t]*$/;   // a value that starts a | or > block scalar
+const OUTPUT_NAME = /(^|[\s{,[])(output-file|output-ext)[ \t]*:/;
 
 // The line with every quoted string replaced by "", the quoted keys (a quoted string followed by a colon, with or
-// without a space, as JSON-style YAML writes them), and the other quoted strings with their quote character.
+// without a space, as JSON-style YAML writes them), the other quoted strings with their quote character, and whether
+// a quoted string is left open at the end of the line.
 function maskQuoted(code) {
   let masked = '';
   const keys = [];
   const values = [];
+  let open = false;
   for (let i = 0; i < code.length; i++) {
     const q = code[i];
     if (q !== '"' && q !== "'") { masked += q; continue; }
@@ -317,22 +323,23 @@ function maskQuoted(code) {
         break;
       }
       if (q === '"' && code[j] === '\\') body += code[j++];                         // \x is an escape inside "…"
-      body += code[j++];
+      body += code[j++] ?? '';
     }
+    if (j >= code.length) open = true;
     if (/^[ \t]*:/.test(code.slice(j + 1))) keys.push(body); else values.push({ q, body });
     masked += '""';
     i = j;
   }
-  return { masked, keys, values };
+  return { masked, keys, values, open };
 }
 
-// The lines of a YAML text that can hold settings, as { line, raw, code, indent, masked, keys, values }: blank
+// The lines of a YAML text that can hold settings, as { line, raw, code, indent, masked, keys, values, open }: blank
 // lines, comments, and the contents of block scalars are left out, so text that only quotes a setting is not read
-// as one.
+// as one. A byte order mark at the start is dropped.
 function settingLines(yml) {
   const lines = [];
   let scalarIndent = -1;
-  yml.split(/\r?\n/).forEach((raw, n) => {
+  yml.replace(/^\uFEFF/, '').split(/\r?\n/).forEach((raw, n) => {
     const [code] = splitComment(raw);
     if (/^\s*$/.test(code)) return;
     const indent = code.match(/^[ \t]*/)[0].length;
@@ -345,21 +352,35 @@ function settingLines(yml) {
   return lines;
 }
 
-export function unreadQuartoLines(yml) {
-  const unread = [];
-  let top = null; let childIndent = -1; let renderIndent = -1; let fmtIndent = -1; let seen = false;
-  for (const { line, raw, code, indent, masked, keys, values } of settingLines(yml)) {
+// Every line that bears on the deck's files, as { line, text, kind }:
+//   unread       written in a form the scanner does not read (above): always refused
+//   render       project.render, read by the scanner
+//   output-file  the output-file the scanner reads (the top level, or under format: revealjs:)
+//   metadata     metadata-files whose list the callers read
+//   output       another source of the output name that the scanner does not read (#50): output-file under an
+//                extension format such as clean-revealjs, output-ext, project.output-dir; refused only when the
+//                lookup needs the output name (.html, .pdf)
+function scanSettings(yml) {
+  const found = [];
+  let top = null; let childIndent = -1; let renderIndent = -1; let fmtIndent = -1; let fmtChild = null; let seen = false;
+  let renderFlow = false;    // inside a render flow list spread over several lines
+  let continued = -1;        // indent of a plain output-file value that a deeper line without a key would continue
+  for (const { line, raw, code, indent, masked, keys, values, open } of settingLines(yml)) {
     const own = masked.match(/^[ \t]*([A-Za-z_][\w.-]*):(?=[ \t]|$)[ \t]*(.*)$/);
     const key = own?.[1];
     const value = (own?.[2] ?? '').trim();
-    if (indent === 0) { top = key ?? null; childIndent = -1; renderIndent = -1; fmtIndent = -1; }
+    const kinds = [];
+    let bad = continued >= 0 && indent > continued && !own && !/^[ \t]*-/.test(code);
+    continued = -1;
+    if (indent === 0) { top = key ?? null; childIndent = -1; renderIndent = -1; fmtIndent = -1; fmtChild = null; renderFlow = false; }
     else {
       if (childIndent < 0) childIndent = indent;
-      if (indent <= childIndent && !(renderIndent === indent && /^\s*-/.test(code))) { renderIndent = -1; if (indent < childIndent || key !== 'revealjs') fmtIndent = -1; }
+      if (indent <= childIndent && !(renderIndent === indent && /^\s*-/.test(code))) { renderIndent = -1; renderFlow = false; if (indent < childIndent || key !== 'revealjs') fmtIndent = -1; }
+      if (top === 'format' && indent === childIndent) fmtChild = key ?? null;
       if (top === 'project' && indent === childIndent && key === 'render') renderIndent = indent;
       if (top === 'format' && indent === childIndent && key === 'revealjs') fmtIndent = indent;
     }
-    let bad = (indent === 0 && /^[{[]/.test(masked))
+    bad = bad || (indent === 0 && /^[{[]/.test(masked))
       || keys.some((k) => SCANNED_KEYS.includes(k) || k === 'metadata-files') || MERGE_KEY.test(masked)
       || [...masked.matchAll(KEY_MENTION)].some((m) => m[3] !== '' || m.index + m[1].length !== indent)
       || /^[ \t]*\?(?=[ \t]|$)/.test(masked)                                       // an explicit key (? key)
@@ -376,18 +397,49 @@ export function unreadQuartoLines(yml) {
       if (/^[{|>]/.test(text) || /(^|[\s,[])[&*!][^\s,[\]{}]/.test(text) || /[[,][ \t]*\{/.test(text)) bad = true;
       // Outside a flow list an unquoted comma is part of one value (`- my, talk.qmd`), which the scanner splits.
       if ((keyLine || /^[ \t]*-/.test(code)) && !/^\[/.test(text) && text.includes(',')) bad = true;
-      if (values.some((v) => v.body.includes(',') || (v.q === '"' && v.body.includes('\\')) || (v.q === "'" && v.body.includes("''")))) bad = true;
+      if (open || values.some((v) => v.body.includes(',') || (v.q === '"' && v.body.includes('\\')) || (v.q === "'" && v.body.includes("''")))) bad = true;
+      if (keyLine) { renderFlow = /^\[/.test(text) && !/\][ \t]*$/.test(text); kinds.push('render'); }
+      else if (renderFlow) { if (/\]/.test(masked)) renderFlow = false; }
+      else if (!/^[ \t]*-/.test(code)) bad = true;   // a line continuing a value: YAML joins it, the scanner splits it
     }
     if (key === 'output-file' && (indent === 0 || (fmtIndent >= 0 && indent > fmtIndent))) {
       const o = code.match(SCANNED_OUTPUT_FILE);
       // not matched, an anchor, alias, tag or flow value, a quoted value with '' or \" the quoted forms could not take, or an escape
       if (!o || /^[&*!|>{["']/.test(o[3] ?? '') || (o[1] ?? '').includes('\\')) bad = true;
-    }
-    if (bad) unread.push({ line, text: raw.trim() });
+      else { kinds.push('output-file'); if (o[3] !== undefined) continued = indent; }
+    } else if (key === 'output-file' && top === 'format' && indent > childIndent && /.-revealjs$/.test(fmtChild ?? '')) kinds.push('output');
+    if (key === 'output-ext' || (top === 'project' && indent === childIndent && key === 'output-dir')) kinds.push('output');
+    if (bad) found.push({ line, text: raw.trim(), kind: 'unread' });
+    else for (const kind of kinds) found.push({ line, text: raw.trim(), kind });
   }
-  // metadata-files is read (the caller checks the files it lists); a list in another form is not
-  for (const l of metadataFileLists(yml)) if (l.names === null && !unread.some((u) => u.line === l.line)) unread.push({ line: l.line, text: l.text });
-  return unread.sort((a, b) => a.line - b.line);
+  for (const l of metadataFileLists(yml)) {
+    if (!found.some((f) => f.line === l.line && f.kind === 'unread')) found.push({ line: l.line, text: l.text, kind: l.names === null ? 'unread' : 'metadata' });
+  }
+  return found.sort((a, b) => a.line - b.line);
+}
+
+const pick = (found) => found.map(({ line, text }) => ({ line, text }));
+
+// The lines of a settings file the scanner cannot read (always refused).
+export function unreadQuartoLines(yml) {
+  return pick(scanSettings(yml).filter((f) => f.kind === 'unread'));
+}
+
+// The lines of a settings file that set the output name where the scanner does not read it (#50).
+export function outputSourceLines(yml) {
+  return pick(scanSettings(yml).filter((f) => f.kind === 'output'));
+}
+
+// The lines of a document's front matter or a _metadata.yml that set the output name (#50): the output-file the
+// scanner would read there, an extension format's output-file, output-ext, or an unread line that names one of them.
+export function outputNameLines(yml) {
+  return pick(scanSettings(yml).filter((f) => f.kind === 'output-file' || f.kind === 'output' || (f.kind === 'unread' && OUTPUT_NAME.test(f.text))));
+}
+
+// The lines of a profile file (_quarto-<name>.yml) or of a file metadata-files lists that bear on the deck's files,
+// judged by the same rules as the settings file; outputOnly marks those that change only the output name.
+export function profileSettingLines(yml) {
+  return scanSettings(yml).map(({ line, text, kind }) => ({ line, text, outputOnly: kind === 'output-file' || kind === 'output' }));
 }
 
 // A plain or simply quoted YAML scalar ('…' without '', "…" without escapes), else null.
@@ -430,16 +482,6 @@ export function metadataFileLists(yml) {
     entry.names = q || names.includes(null) ? null : names;
   }
   return lists;
-}
-
-// The lines of a profile file (_quarto-<name>.yml) that set render or output-file, or may set them indirectly
-// (metadata-files, a merge key), in any form; quoted text and block scalars are not settings.
-const DECK_FILE_KEYS = ['render', 'output-file', 'metadata-files'];
-export function profileSettingLines(yml) {
-  return settingLines(yml)
-    .filter(({ masked, keys }) => keys.some((k) => DECK_FILE_KEYS.includes(k)) || MERGE_KEY.test(masked)
-      || [...masked.matchAll(KEY_MENTION)].some((m) => DECK_FILE_KEYS.includes(m[2])))
-    .map(({ line, raw }) => ({ line, text: raw.trim() }));
 }
 
 // A template made by copying a finished deck carries the outputs of rendering talk.qmd; copied into a deck named
@@ -576,7 +618,7 @@ export function planDeck({ out, home, template, title, deckName, trustProject = 
   const qmd = rewriteFrontMatter(readFileSync(qmdFile, 'utf8'), {
     title: fields.title?.value, author: fields.author?.value, institute: fields.affiliation?.value, lang: fields.lang?.value,
   }, qmdFile);
-  const templateYml = readFileSync(ymlFile, 'utf8');
+  const templateYml = readFileSync(ymlFile, 'utf8').replace(/^\uFEFF/, '');   // a byte order mark is not part of the first key
   refuseUnreadSettings(ymlFile, unreadQuartoLines(templateYml), 'sets project, format, render or output-file in a form the scaffold '
     + 'cannot rewrite; write them in block style in the template\'s _quarto.yml itself, without metadata-files or merge keys, as the official templates do');
   // A file metadata-files lists, and a profile file, are copied unchanged, so one that sets render or output-file would

@@ -18,7 +18,7 @@ Presets: --landscape (the default) is 2 rows × 2 columns; --portrait is 3 rows 
 --rows and --cols replace the preset grid. Margin and gap are in mm, the frame width in pt.
 The header is the PDF's title (else the file name) unless --title or --no-header is given.
 Needs XeLaTeX (TeX Live) and pdfinfo (poppler).
-Exit status: 0 handout written, 1 failed (bad option, missing tool, LaTeX error), 2 PDF not found, or the deck's .pdf not found in the current folder when --pdf is not given.`);
+Exit status: 0 handout written, 1 failed (bad option, missing tool, LaTeX error), 2 PDF not found, or the deck's .pdf not found in the current folder when --pdf is not given, its Quarto settings cannot be read.`);
 
 function fail(message, code = 1) {
   console.error(message);
@@ -49,10 +49,16 @@ function number(name, fallback, { min, integer = false }) {
 // such as --potrait) is refused too, or the run would succeed with the default layout.
 const VALUE_OPTIONS = ['pdf', 'out', 'title', 'cjk-font', 'rows', 'cols', 'margin', 'gap', 'frame-width'];
 const FLAGS = ['landscape', 'portrait', 'no-frame', 'no-header', 'no-page-numbers'];
+const given = new Set();
 for (const token of process.argv.slice(2)) {
   if (!token.startsWith('--')) continue;
   const name = token.slice(2);
-  if (VALUE_OPTIONS.includes(name) || FLAGS.includes(name)) continue;
+  if (VALUE_OPTIONS.includes(name) || FLAGS.includes(name)) {
+    // Given twice, which value would count is a guess (user decision 2026-11-01, as in the check scripts).
+    if (given.has(name)) fail(`--${name} is given more than once.`);
+    given.add(name);
+    continue;
+  }
   if (name === 'nup') fail('--nup is not an option: give the grid as --rows R --cols C.');
   fail(`unknown option ${token} (see --help)`);
 }

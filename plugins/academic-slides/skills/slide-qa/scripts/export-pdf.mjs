@@ -8,7 +8,7 @@ import { options, playwright, deckPath, findDeckFile, serve, openPrintView, writ
 
 const { get } = options(`Usage: node export-pdf.mjs [--html <deck>.html] [--out <deck>.pdf] [--width 1280] [--height 720]
 Exit status: 0 PDF written, 1 export failed, 2 HTML not found, the deck's .html not found in the current folder when --html
-             is not given, or an option error (an option without a value, a value out of range, an unknown option, an argument that belongs to no
+             is not given, its Quarto settings cannot be read, or an option error (an option without a value, a value out of range, an unknown option, an argument that belongs to no
              option, an option given twice).`,
   { html: 'file', out: 'text', width: { min: 1, integer: true }, height: { min: 1, integer: true } });
 const WIDTH = get('width', 1280);

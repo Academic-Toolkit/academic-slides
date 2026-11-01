@@ -58,6 +58,11 @@ const UNREAD = {
   'metadata-files as a flow list over several lines': ['metadata-files: [\n  a.yml\n]', 1],
   'metadata-files with an alias': ['metadata-files: *shared', 1],
   'metadata-files as a quoted key': ['"metadata-files": [a.yml]', 1],
+  // verify round 1 (Devil's Advocate): a value continued on the next line is one value to YAML, two to the scanner
+  'multi-line plain render item': ['project:\n  render:\n    - my\n      talk.qmd', 4],
+  'multi-line plain render value': ['project:\n  render: my\n    talk.qmd', 3],
+  'multi-line quoted render item': ['project:\n  render:\n    - "my\n      talk.qmd"', 3],
+  'multi-line plain output-file': ['format:\n  revealjs:\n    output-file: my\n      slides', 4],
 };
 
 // Forms that are read, or deliberately not used, and must not be refused.
@@ -85,6 +90,8 @@ const READ = {
   'metadata-files as a flow list': 'metadata-files: [shared.yml, "authors.yml"]',
   'metadata-files as a block list': 'metadata-files:\n  - shared.yml\n  - authors.yml',
   'a document marker at the top': '---\nproject:\n  render: [deck.qmd]',
+  // verify round 1 (Devil's Advocate): a byte order mark before the first key
+  'a UTF-8 byte order mark': '\ufeffproject:\n  render: [deck.qmd]',
 };
 
 // ---------- the detector ----------
@@ -361,4 +368,96 @@ test('the scaffold reads a template\'s metadata-files and refuses only one that 
   r = runScaffold(s, ['--template', 'meta3', '--name', 'w07', '--out', 'deck']);
   assert.equal(r.code, 1, r.out);
   assert.equal(existsSync(path.join(s.project, 'deck')), false);
+});
+
+// verify round 1 (Devil's Advocate): every setting the detector accepts must be read as a YAML reader reads it. The
+// oracle is PyYAML's reading, computed by tests/fixtures/make-quarto-oracle.py (run by hand; Node built-ins only at run
+// time, D10).
+const ORACLE = JSON.parse(readFileSync(path.join(ROOT, 'tests/fixtures/quarto-settings-oracle.json'), 'utf8'));
+const dotless = (v) => v.replace(/^\.\//, '');
+
+test('every setting the detector accepts is read as PyYAML reads it', () => {
+  let checked = 0;
+  for (const { name, yml, oracle } of ORACLE) {
+    if (oracle === null || lib.unreadQuartoLines(yml).length) continue;   // not YAML, or refused
+    const r = lib.readQuartoYml(yml);
+    assert.deepEqual(r.render, oracle.render.map(dotless), `${name}: render`);
+    if (!lib.outputSourceLines(yml).length) {   // otherwise refused when the output name is needed (#50)
+      assert.equal(r.outputFile ?? null, oracle.outputFile === null ? null : dotless(oracle.outputFile), `${name}: output-file`);
+    }
+    checked++;
+  }
+  assert.ok(checked >= 20, `checked ${checked} accepted cases`);
+});
+
+test('the oracle cases that the scanner would misread are refused', () => {
+  for (const { name, yml, oracle } of ORACLE) {
+    if (oracle === null) continue;
+    const r = lib.readQuartoYml(yml);
+    const misread = JSON.stringify(r.render) !== JSON.stringify(oracle.render.map(dotless))
+      || (r.outputFile ?? null) !== (oracle.outputFile === null ? null : dotless(oracle.outputFile));
+    if (misread) assert.ok(lib.unreadQuartoLines(yml).length || lib.outputSourceLines(yml).length, `${name} is misread but not refused`);
+  }
+});
+
+test('a profile file is judged by the same rules as the settings file', () => {
+  const dir = folder({ 'deck.qmd': QMD, '_quarto.yml': 'project:\n  render: [deck.qmd]\n', '_quarto-print.yml': 'format:\n  pdf:\n    output-file: handout\n' });
+  assert.deepEqual(lib.chooseDeckFile('.qmd', { dir }), { file: 'deck.qmd' });
+});
+
+// issue #50: other places Quarto takes the output name from are refused when the lookup needs that name (.html, .pdf)
+const FM = (extra) => `---\ntitle: "T"\n${extra}---\n\n## A slide\n\nShort body text.\n`;
+const OUTPUT_SOURCES = {
+  'an extension format with its own output-file': [{ '_quarto.yml': 'format:\n  clean-revealjs:\n    output-file: slides\n' }, '_quarto.yml', 3],
+  'output-file in the front matter': [{ 'deck.qmd': FM('output-file: slides\n') }, 'deck.qmd', 3],
+  'output-file under revealjs in the front matter': [{ 'deck.qmd': FM('format:\n  revealjs:\n    output-file: slides\n') }, 'deck.qmd', 5],
+  'output-ext in the front matter': [{ 'deck.qmd': FM('output-ext: htm\n') }, 'deck.qmd', 3],
+  '_metadata.yml that sets output-file': [{ '_metadata.yml': 'format:\n  revealjs:\n    output-file: slides\n' }, '_metadata.yml', 3],
+  'project output-dir': [{ '_quarto.yml': 'project:\n  output-dir: _site\n' }, '_quarto.yml', 2],
+  'output-ext in _quarto.yml': [{ '_quarto.yml': 'output-ext: htm\n' }, '_quarto.yml', 1],
+};
+for (const [name, [files, file, line]] of Object.entries(OUTPUT_SOURCES)) {
+  test(`#50: ${name} is refused for the .html and .pdf lookups only`, () => {
+    const dir = folder({ 'deck.qmd': QMD, 'deck.html': '<html></html>', 'deck.pdf': '%PDF', ...files });
+    for (const ext of ['.html', '.pdf']) {
+      const r = lib.chooseDeckFile(ext, { dir });
+      assert.equal(r.reason, 'unread', `${name} ${ext}`);
+      assert.deepEqual(r.unread.map((u) => [u.file, u.line]), [[file, line]], `${name} ${ext}`);
+    }
+    assert.deepEqual(lib.chooseDeckFile('.qmd', { dir }), { file: 'deck.qmd' }, `${name} .qmd`);
+  });
+}
+
+test('#50: front matter and _metadata.yml without an output name are not refused', () => {
+  const dir = folder({ 'deck.qmd': FM('format:\n  revealjs:\n    theme: dark\n  pdf:\n    output-file: handout\n'), 'deck.html': '<html></html>', '_metadata.yml': 'author: X\n' });
+  assert.deepEqual(lib.chooseDeckFile('.html', { dir }), { file: 'deck.html' });
+  const cli = runQa(dir, 'check-mathjax.mjs', ['--no-such']);   // the option error proves the script got past nothing else
+  assert.equal(cli.code, 2);
+});
+
+test('#50: every official template passes the .html lookup', () => {
+  const tdir = path.join(SKILL, 'templates/quarto');
+  for (const n of readdirSync(tdir).filter((x) => existsSync(path.join(tdir, x, '_quarto.yml')))) {
+    const dir = folder({ '_quarto.yml': readFileSync(path.join(tdir, n, '_quarto.yml'), 'utf8').replace(/talk\.qmd/g, 'deck.qmd'),
+      'deck.qmd': readFileSync(path.join(tdir, n, 'talk.qmd'), 'utf8'), 'deck.html': '<html></html>' });
+    assert.deepEqual(lib.chooseDeckFile('.html', { dir }), { file: 'deck.html' }, n);
+  }
+});
+
+test('the scaffold reads a template _quarto.yml that starts with a byte order mark', () => {
+  const s = sandbox();
+  personalTemplate(s, 'bom', `﻿project:\n  render: [talk.qmd]\n${THEME}`);
+  const r = runScaffold(s, ['--template', 'bom', '--name', 'w07', '--out', 'deck']);
+  assert.equal(r.code, 0, r.out);
+  assert.doesNotMatch(r.out, /still mentions talk\.qmd/);
+  assert.match(readFileSync(path.join(s.project, 'deck', '_quarto.yml'), 'utf8'), /render: \[w07\.qmd\]/);
+});
+
+test('the refusal message names the sources of the output name it does not read (#50)', () => {
+  const dir = folder({ 'deck.qmd': QMD, 'deck.html': '<html></html>', '_quarto.yml': 'project:\n  output-dir: _site\n' });
+  const r = runQa(dir, 'check-mathjax.mjs');
+  assert.equal(r.code, 2, r.out);
+  assert.match(r.out, /_quarto\.yml line 2/);
+  assert.match(r.out, /output-dir/);
+  assert.match(r.out, /--html/);
 });

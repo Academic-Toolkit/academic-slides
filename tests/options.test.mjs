@@ -96,7 +96,7 @@ test('a value that is not a number, or out of range, is refused with the value s
 
 test('an unknown option is refused, so a typo does not run with the default', () => {
   refused(['--treshold', '0.5'], /^unknown option --treshold/);
-  refused(['--threshold=0.5'], /^unknown option --threshold=0\.5/);
+  // --threshold=0.5 has its own message: see the test for --option=value below
 });
 
 test('an argument that belongs to no option is refused', () => {
@@ -213,4 +213,28 @@ test('the slide-qa commands in SKILL.md and README.md pass the option reader', (
 test('a value of only spaces is refused for text and file options', () => {
   refused(['--out', '  '], /^--out needs a value/);
   refused(['--html', ' '], /^--html needs a file name/);
+});
+
+// verify round 1 (Devil's Advocate): messages that say what is wrong
+test('--option=value is refused with a message that shows the accepted form', () => {
+  refused(['--threshold=0.5'], /^--threshold=0\.5: write the value after a space \(--threshold 0\.5\)/);
+  refused(['--treshold=0.5'], /^unknown option --treshold=0\.5/);
+});
+
+test('an empty argument is shown as "" in the message', () => {
+  refused([''], /^unexpected argument "" \(see --help\)/);
+});
+
+for (const script of Object.keys(SCRIPT_OPTIONS)) {
+  test(`${script} --help says that Quarto settings it cannot read exit 2`, () => {
+    assert.match(runIn(emptyFolder(), script, ['--help']).out, /Quarto settings/);
+  });
+}
+
+// user decision 2026-11-01: an option given twice is refused by every entry point, handout too (status 1, #34)
+test('handout refuses an option given twice, and its --help mentions Quarto settings', () => {
+  const r = runIn(emptyFolder(), 'handout.mjs', ['--margin', '5', '--margin', '6']);
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /--margin is given more than once/);
+  assert.match(runIn(emptyFolder(), 'handout.mjs', ['--help']).out, /Quarto settings/);
 });
