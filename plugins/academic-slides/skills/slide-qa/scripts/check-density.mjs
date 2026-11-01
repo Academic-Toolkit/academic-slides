@@ -7,7 +7,7 @@
 // \appendix (tex).
 import { readFileSync, existsSync } from 'fs';
 import path from 'path';
-import { findDeckFile } from './_lib.mjs';
+import { options, findDeckFile } from './_lib.mjs';
 
 const HELP = `Usage: node check-density.mjs [--qmd <deck>.qmd] [--tex beamer/<deck>.tex] [--words 35] [--bullets 3]
                               [--skip-classes notes,hidden,source,sidenote,sim-tag]
@@ -18,17 +18,19 @@ const HELP = `Usage: node check-density.mjs [--qmd <deck>.qmd] [--tex beamer/<de
   --bullets       maximum bullets per main-body slide (default 3)
   --skip-classes  fenced-div / span classes whose text is not counted
   --skip-macros   beamer macros whose argument text is not counted
-Exit status: 0 all within limits and titles match, 1 otherwise, 2 file not found, or the deck's .qmd not found in the current folder when --qmd is not given.`;
+Exit status: 0 all within limits and titles match, 1 otherwise, 2 file not found, the deck's .qmd not found in the current folder
+             when --qmd is not given, or an option error (a value missing or out of range, an unknown option).`;
 
-const argv = process.argv.slice(2);
-if (argv.includes('--help') || argv.includes('-h')) { console.log(HELP); process.exit(0); }
-const arg = (name, fallback) => { const i = argv.indexOf(`--${name}`); return i >= 0 ? argv[i + 1] : fallback; };
-const QMD = findDeckFile(arg('qmd'), '.qmd', 'qmd');
-const TEX = arg('tex', null);
-const MAX_WORDS = Number(arg('words', 35));
-const MAX_BULLETS = Number(arg('bullets', 3));
-const SKIP = arg('skip-classes', 'notes,hidden,source,sidenote,sim-tag').split(',').filter(Boolean);
-const MACROS = arg('skip-macros', 'simtag,sourceline,sidenote').split(',').filter(Boolean);
+const { get } = options(HELP, {
+  qmd: 'file', tex: 'text', words: { min: 0, integer: true }, bullets: { min: 0, integer: true },
+  'skip-classes': 'list', 'skip-macros': 'list',
+});
+const QMD = findDeckFile(get('qmd'), '.qmd', 'qmd');
+const TEX = get('tex', null);
+const MAX_WORDS = get('words', 35);
+const MAX_BULLETS = get('bullets', 3);
+const SKIP = get('skip-classes', 'notes,hidden,source,sidenote,sim-tag').split(',').filter(Boolean);
+const MACROS = get('skip-macros', 'simtag,sourceline,sidenote').split(',').filter(Boolean);
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const WORD = /[A-Za-z][A-Za-z'\-]*/g;

@@ -4,12 +4,14 @@
 // check-layout.mjs measures this same print view, so a deck it passes prints with nothing running into
 // the footer, past the right edge, or onto a second title line.
 import path from 'path';
-import { args, playwright, deckPath, findDeckFile, serve, openPrintView, writeOutput } from './_lib.mjs';
+import { options, playwright, deckPath, findDeckFile, serve, openPrintView, writeOutput } from './_lib.mjs';
 
-const { get } = args(`Usage: node export-pdf.mjs [--html <deck>.html] [--out <deck>.pdf] [--width 1280] [--height 720]
-Exit status: 0 PDF written, 1 export failed, 2 HTML not found, or the deck's .html not found in the current folder when --html is not given.`);
-const WIDTH = Number(get('width', 1280));
-const HEIGHT = Number(get('height', 720));
+const { get } = options(`Usage: node export-pdf.mjs [--html <deck>.html] [--out <deck>.pdf] [--width 1280] [--height 720]
+Exit status: 0 PDF written, 1 export failed, 2 HTML not found, the deck's .html not found in the current folder when --html
+             is not given, or an option error (a value missing or out of range, an unknown option).`,
+  { html: 'file', out: 'text', width: { min: 1, integer: true }, height: { min: 1, integer: true } });
+const WIDTH = get('width', 1280);
+const HEIGHT = get('height', 720);
 const { root, name } = deckPath(findDeckFile(get('html'), '.html', 'html'));
 const OUT = path.resolve(get('out', path.join(root, name.replace(/\.html?$/, '.pdf'))));
 

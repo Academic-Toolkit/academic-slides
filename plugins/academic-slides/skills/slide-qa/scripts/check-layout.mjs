@@ -12,18 +12,20 @@
 // The print view is a different layout (revealjs's print stylesheet, an unscaled slide, the footer
 // placed on the paper), so a slide that is clean on screen can still run into the footer in the PDF.
 import path from 'path';
-import { args, playwright, deckPath, findDeckFile, serve, openDeck, openPrintView, outputDirectory, writeOutput } from './_lib.mjs';
+import { options, playwright, deckPath, findDeckFile, serve, openDeck, openPrintView, outputDirectory, writeOutput } from './_lib.mjs';
 
-const { get, has } = args(`Usage: node check-layout.mjs [--html <deck>.html] [--width 1280] [--height 720]
+const { get, has } = options(`Usage: node check-layout.mjs [--html <deck>.html] [--width 1280] [--height 720]
                              [--footer '.reveal .footer'] [--out <deck folder>/qa] [--shots]
   --out    screenshot folder (default: qa/ next to the deck HTML)
   --shots  save one screenshot per slide as <deck>-NN.png; flagged slides are always saved as <deck>-NN-flagged.png
 Checks every slide on screen at --width x --height, then every page of the print view that export-pdf.mjs
 prints; flagged PDF pages are saved as <deck>-print-NN-flagged.png (NN = PDF page number).
 Exit status: 0 no problems, 1 at least one flagged slide or PDF page, 2 HTML not found, or the deck's .html not found in the current folder when --html is not given,
-             3 the check could not run or the print view showed no slide pages.`);
-const WIDTH = Number(get('width', 1280));
-const HEIGHT = Number(get('height', 720));
+             or an option error (a value missing or out of range, an unknown option), 3 the check could not run or the print
+             view showed no slide pages.`,
+  { html: 'file', width: { min: 1, integer: true }, height: { min: 1, integer: true }, footer: 'text', out: 'text', shots: 'flag' });
+const WIDTH = get('width', 1280);
+const HEIGHT = get('height', 720);
 const FOOTER = get('footer', '.reveal .footer');
 const SHOTS = has('shots');
 const { root, name } = deckPath(findDeckFile(get('html'), '.html', 'html'));

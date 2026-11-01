@@ -5,12 +5,68 @@ import { readFile, realpath, stat, lstat, mkdir, mkdtemp, writeFile, rename, rm 
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import path from 'path';
 
+// The unchecked reader: the value is whatever argument follows the option. handout (which checks its own
+// options, #34) and the test probes still use it; the check scripts use options() below.
 export function args(help) {
   const argv = process.argv.slice(2);
   if (argv.includes('--help') || argv.includes('-h')) { console.log(help); process.exit(0); }
   const get = (name, fallback) => { const i = argv.indexOf(`--${name}`); return i >= 0 ? argv[i + 1] : fallback; };
   const has = (name) => argv.includes(`--${name}`);
   return { get, has };
+}
+
+export class OptionError extends Error {}
+
+// A script's options, read in order against what the script declares (issue #45). `spec` maps each option name
+// to its kind: 'file' (a file name), 'text', 'list' (comma-separated; may be empty), 'flag' (no value), or a
+// number rule { min, max, integer }. An option given without a value (last, or followed by another option), an
+// empty value (except for a list), a number that is not a number in range, an unknown option, an argument that
+// belongs to no option, and an option given twice are refused: otherwise a missing threshold reads as NaN, every
+// comparison with it is false, and the check passes.
+export function parseOptions(argv, spec) {
+  const given = new Map();
+  for (let i = 0; i < argv.length; i++) {
+    const token = argv[i];
+    if (!token.startsWith('--')) throw new OptionError(`unexpected argument ${printable(token)} (see --help)`);
+    const name = token.slice(2);
+    const kind = Object.hasOwn(spec, name) ? spec[name] : undefined;
+    if (kind === undefined) throw new OptionError(`unknown option ${printable(token)} (see --help)`);
+    if (given.has(name)) throw new OptionError(`--${name} is given more than once`);
+    if (kind === 'flag') { given.set(name, true); continue; }
+    const raw = argv[i + 1];
+    const missing = raw === undefined || raw.startsWith('--');
+    if (kind === 'file' && (missing || raw === '')) throw new OptionError(`--${name} needs a file name.`);
+    if (missing || (raw === '' && (kind === 'text'))) throw new OptionError(`--${name} needs a value.`);
+    i++;
+    given.set(name, typeof kind === 'object' ? number(name, raw, kind) : raw);
+  }
+  return {
+    get: (name, fallback) => (given.has(name) ? given.get(name) : fallback),
+    has: (name) => given.has(name),
+  };
+}
+
+function number(name, raw, { min, max, integer = false }) {
+  const value = Number(raw);
+  // Number('') is 0 and Number(' ') is 0, so a blank value (often an unset shell variable) is refused first.
+  const ok = raw.trim() !== '' && Number.isFinite(value) && value >= min && (max === undefined || value <= max)
+    && (!integer || Number.isInteger(value));
+  if (ok) return value;
+  const rule = max !== undefined ? `a number from ${min} to ${max}` : `${integer ? 'a whole number' : 'a number'} of at least ${min}`;
+  throw new OptionError(`--${name} must be ${rule} (got "${printable(raw)}")`);
+}
+
+// The check scripts' entry point: --help (or -h) anywhere prints the usage; an option error exits 2.
+export function options(help, spec) {
+  const argv = process.argv.slice(2);
+  if (argv.includes('--help') || argv.includes('-h')) { console.log(help); process.exit(0); }
+  try {
+    return parseOptions(argv, spec);
+  } catch (e) {
+    if (!(e instanceof OptionError)) throw e;
+    console.error(e.message);
+    process.exit(2);
+  }
 }
 
 export async function playwright() {

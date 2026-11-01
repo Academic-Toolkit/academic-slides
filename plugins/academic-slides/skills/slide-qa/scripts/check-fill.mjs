@@ -3,14 +3,16 @@
 // the bottom of the title and the top of the footer. Lists slides below --threshold with a suggested
 // class: roomy-1 (0.58–0.70), roomy-2 (0.45–0.58), roomy-3 (< 0.45), or vc when the slide is already
 // scaled. Informational: always exits 0 unless the HTML is missing.
-import { args, playwright, deckPath, findDeckFile, serve, openDeck } from './_lib.mjs';
+import { options, playwright, deckPath, findDeckFile, serve, openDeck } from './_lib.mjs';
 
-const { get } = args(`Usage: node check-fill.mjs [--html <deck>.html] [--threshold 0.70] [--width 1280] [--height 720]
+const { get } = options(`Usage: node check-fill.mjs [--html <deck>.html] [--threshold 0.70] [--width 1280] [--height 720]
                            [--footer '.reveal .footer']
-Exit status: 0 report printed, 2 HTML not found, or the deck's .html not found in the current folder when --html is not given.`);
-const THRESHOLD = Number(get('threshold', 0.7));
-const WIDTH = Number(get('width', 1280));
-const HEIGHT = Number(get('height', 720));
+Exit status: 0 report printed, 2 HTML not found, the deck's .html not found in the current folder when --html is not given,
+             or an option error (a value missing or out of range, an unknown option).`,
+  { html: 'file', threshold: { min: 0, max: 1 }, width: { min: 1, integer: true }, height: { min: 1, integer: true }, footer: 'text' });
+const THRESHOLD = get('threshold', 0.7);
+const WIDTH = get('width', 1280);
+const HEIGHT = get('height', 720);
 const FOOTER = get('footer', '.reveal .footer');
 const { root, name } = deckPath(findDeckFile(get('html'), '.html', 'html'));
 
