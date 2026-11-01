@@ -960,3 +960,21 @@ test('CLI: --name Talk still warns about a talk.qmd left under resources', () =>
   assert.match(r.out, /still mentions talk\.qmd/);
 });
 
+
+test('a valued option followed by another option is refused', () => {
+  const { base, home } = sandbox();
+
+  const dryRun = run(['--out', '--dry-run', '--name', 'w07'], home);
+  assert.equal(dryRun.code, 2);
+  assert.match(dryRun.out, /--out needs a value/);
+  assert.equal(existsSync(path.join(base, '--dry-run')), false);
+
+  const out = path.join(base, 'd2');
+  const title = run(['--title', '--dry-run', '--name', 'w08', '--out', out], home);
+  assert.equal(title.code, 2);
+  assert.match(title.out, /--title needs a value/);
+  assert.equal(existsSync(out), false);
+
+  const ok = run(['--name', 'w09', '--out', path.join(base, 'd3'), '--title', 'Analise'], home);
+  assert.equal(ok.code, 0, ok.out);
+});
