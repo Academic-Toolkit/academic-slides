@@ -273,6 +273,20 @@ D23 只讀 `project.render` 與 `format: revealjs:`（或最上層）的 `output
 - 重複選項的拒絕依使用者 2026-11-01 的決定（見 D22）。
 - `--旗標=值`（`--shots=1`、`--dry-run=1`、`--landscape=1`）在檢查腳本、scaffold、handout 都回「不接受值」；帶值選項寫成 `--x=值`，三處都提示改用空格（verify 第 3 輪）。
 
+### D27. 從完成的 deck 複製成的範本帶著原 deck 的名字：寫入前拒絕（issue #53）
+
+用完成的 deck（例如 `w07`）複製成範本時，有三處會帶著原 deck 的名字。scaffold 原本只改名 `talk.qmd` 與 `output-file: talk`，其餘照抄，#44 的警告也只找 `talk`：
+
+- `project.render` 的 `- "w07.qmd"`：Quarto 1.10.19 實測，`quarto render` 對不存在的 render 檔什麼都不輸出，也以 0 結束；
+- `_quarto.yml` 的 `output-file: w07`：新的 `w08.qmd` 輸出成 `w07.html`；
+- `talk.qmd` front matter 的 `output-file`：同上（#50 的 residue）。
+
+- 決定：預設，沿用使用者在 #46 的決定，認不出就拒絕猜。改寫之後、寫入任何東西之前以狀態 1 拒絕，點名範本的檔案與行號；不猜哪一項是原 deck 的主檔再改名。
+- render：每個不含 glob 字元的值，必須是 deck 的主檔，或範本裡實際有的檔或資料夾（比對用 `pathKey`，大小寫與 Unicode 形式的差異不算不同）。`..` 或絕對路徑指到新 deck 外面，也拒絕。
+- `output-file`：決定 `.html` 名字的那幾處（最上層、`format: revealjs:`、名稱以 `-revealjs` 結尾的擴充格式）。`talk`、`talk.html` 改成 deck 的名字（擴充格式這次一併改名），其他值拒絕。其他格式（`pdf`、`docx`）不動。自訂範本若把它固定成某個名字，也會被拒；這和 D20「deck 主檔依內容命名」相衝，訊息說明可改成 `talk`。
+- `talk.qmd` 照 Quarto 的規則找 YAML 區塊（與 slide-qa 同一份 `metadataBlocks`）：`output-file` 不論寫法都拒絕，`metadata-files` 與 merge key 也拒絕；scaffold 只改寫 `_quarto.yml`，和 profile 檔同一個原則。`output-ext` 只改副檔名、不帶舊名，照收，和 `_quarto.yml` 的 `output-ext` 一致；這收窄了 #53 範圍擴充 comment 的「警告（或拒絕）」。
+- 實作：`readQuartoYml`（連同 `trimList`、`unquote`）與 `metadataBlocks` 移進 `_lib.mjs` 與 `scaffold.mjs` 逐字相同的偵測器區塊。`readQuartoYml` 改由保留行號的 `renderEntries` 組成，兩邊只有一份讀法；測試比對兩份 `readQuartoYml` 的結果。slide-qa 的行為不變。
+
 ## Implementation Contract
 
 **Behavior：**

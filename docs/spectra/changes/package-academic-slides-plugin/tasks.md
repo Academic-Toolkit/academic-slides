@@ -122,3 +122,7 @@
 
 - [x] 23.1 [Req: Scripts find the deck file when none is given] 依 D24 先寫測試（`tests/quarto-settings.test.mjs`）：擴充格式的 `output-file`、front matter 的 `output-file` 與 `output-ext`、`_metadata.yml`、`project: output-dir`、`output-ext`，找 `.html` 與 `.pdf` 時以狀態 2 結束並指出檔名與行號，找 `.qmd` 不受影響；沒有輸出檔名設定的 front matter 與 `_metadata.yml`、四個官方範本都不被擋。再改 `chooseDeckFile` 與 `quartoSettings`。驗證：新測試在修正前失敗，修正後 `npm test` 全部通過。
 
+## 24. GitHub issue #53：從完成的 deck 複製成的範本（2026-11-01）
+
+- [x] 24.1 [Req: Same-name templates resolve project, personal, official] 依 D27 先寫測試（`tests/quarto-settings.test.mjs`）：render 列了原 deck 的檔、範本沒有的檔、deck 外的路徑；最上層、revealjs、擴充格式底下不是 `talk` 的 `output-file`；`talk.qmd` front matter、`format: revealjs:` 底下、後面另一段 YAML 區塊裡的 `output-file`，以及 front matter 的 `metadata-files`。這些都以狀態 1 結束並點名行號，什麼都不寫。範本裡有的檔（大小寫不同也算）、glob、`output-file: talk`、front matter 的 `output-ext` 照收；擴充格式的 `output-file: talk` 改成 deck 的名字；兩份 `readQuartoYml` 結果相同。再改 `scaffold.mjs`（`planDeck` 的三項檢查、`renameRenderTarget` 加上擴充格式），並把 `readQuartoYml`、`metadataBlocks` 移進兩份偵測器逐字相同的區塊。版本升為 0.8.1。驗證：新測試在實作前失敗（12 項），實作後 `npm test` 374 項全部通過。
+- [ ] 24.2 [Req: Repository layout and manifests] [after: 24.1] 推送分支並開 PR，內文以 Refs #53 連結（不用 Fixes），由使用者確認後執行。
