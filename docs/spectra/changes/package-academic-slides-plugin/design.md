@@ -296,6 +296,13 @@ D23 只讀 `project.render` 與 `format: revealjs:`（或最上層）的 `output
   - render 清單既沒有主檔、也沒有 `.` 或 glob 時拒絕：主檔永遠不會被 render（原 deck 的 `.qmd` 還留在範本裡時就會這樣）。
   - render 值照 Quarto 的讀法先正規化：`.`、路徑中的 `./`、`//` 照收；verify 第 2 輪起，回到 deck 資料夾本身的路徑（`chapters/../`）也算 `.`。
   - 空的 render 清單（`render: []`）也拒絕：Quarto 1.10.19 實測什麼都不輸出，並以 0 結束（verify 第 2 輪）。
+- verify 第 2 輪（對抗式審查）之後：
+  - 兩個前一輪帶進來的回歸已修：(1) render 值 `./` 讀進來時被去掉開頭的 `./` 變成空字串而丟掉，主檔檢查就誤擋 `render: ["./", appendix.qmd]`；`.//chapters/a.qmd` 則變成絕對路徑被當成 deck 外。共用的讀法改成只在 `./` 後面還有別的字、且不是 `/` 時才去掉，slide-qa 只用以 `.qmd` 結尾的單純檔名，不受影響。(2) 檢查改在範本文字上跑之後，設定層刪掉 `footer: |` 只刪第一行，區塊純量的內容留下來變成真的設定；footer 的改寫現在連同它的值一起刪或換（後面比 key 縮排深的行與中間的空行）。
+  - glob 裡只要有 `..` 就算 deck 外：`**` 可以比對零層資料夾，`**/../*.qmd` 正規化後會被抵銷，Quarto 實測卻寫到 deck 外。
+  - `_metadata.yml` 只判斷輸出名稱的設定：Quarto 1.10.19 實測不讀它的 `project.render`。
+- 已知限制（不在本 issue 修）：
+  - 帶組織名的擴充格式（`acme/clean-revealjs:`）與加引號的格式名，scanner 認不出來，底下的 `output-file` 不擋也不改名。這是 #50 起的 scanner 限制，兩份偵測器都有，追蹤於 #57。
+  - render 清單有任何 glob（含 `!` 排除項）就當成涵蓋主檔，不實際比對（spec 寫明）；Node 的 `path.matchesGlob` 可以拿掉這個限制，留待之後。
   - 帶舊名的 glob（`w07*.qmd`）照收：scaffold 不比對 glob，這是刻意的限制。
 - 實作：`readQuartoYml`（連同 `trimList`、`unquote`）與 `metadataBlocks` 移進 `_lib.mjs` 與 `scaffold.mjs` 逐字相同的偵測器區塊。`readQuartoYml` 與保留行號的 `renderEntries` 都由同一個 `readSettingsValues` 組成，兩邊只有一份讀法；測試比對兩份 `readQuartoYml` 的結果，也比對兩份偵測器區塊的原始碼（只差互相指引的那一行）。slide-qa 的行為不變。
 
