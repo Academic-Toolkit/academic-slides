@@ -99,3 +99,8 @@
 - [x] 19.1 [Req: Scripts find the deck file when none is given] [Req: Same-name templates resolve project, personal, official] 依 D23 先寫測試（`tests/quarto-settings.test.mjs`）：`unreadQuartoLines` 對 21 種讀不懂的寫法回報正確的行、對 11 種讀得懂或刻意不採用的寫法與四個官方範本不回報；scaffold 與 slide-qa 兩份偵測器結果一致；slide-qa 沒給檔名參數時以狀態 2 結束並印出檔名與行號、給了照用、`_quarto.yaml` 照 Quarto 的順序讀、profile 檔設了 render 或 output-file 時拒絕；scaffold 遇到讀不懂的範本與 profile 檔以狀態 1 結束且沒有建立資料夾，區塊寫法的自訂範本照常。驗證：新測試在實作前失敗（41 項；通過的 4 項是回歸防護）。
 - [x] 19.2 [Req: Scripts find the deck file when none is given] [Req: Same-name templates resolve project, personal, official] [after: 19.1] 依 D23 在 `_lib.mjs` 加 `unreadQuartoLines` 與 `quartoSettings`，`chooseDeckFile` 遇到讀不懂的設定時不選檔、`findDeckFile` 印出原因；`scaffold.mjs` 加同一份偵測器，在改寫範本 `_quarto.yml` 之前拒絕；兩份 SKILL.md 寫明哪些寫法讀不懂、讀不懂時怎麼辦。驗證：19.1 的測試通過，`npm test` 224 項全部通過。
 
+## 20. chain #45、#49、#46：版本與 PR（2026-11-01）
+
+- [x] 20.1 [Req: Repository layout and manifests] [after: 17.2, 18.1, 19.2] `plugin.json` 與 `marketplace.json` 升為 0.8.0（打錯的選項、讀不懂的設定改為拒絕，是行為改變）。驗證：`npm test`、`npm run test:render`、兩處 `claude plugin validate --strict`、`spectra validate package-academic-slides-plugin` 都通過。
+- [ ] 20.2 [Req: Repository layout and manifests] [after: 20.1] 推送 cluster branch 並開一個 PR，內文以 Refs #45、Refs #46、Refs #49 連結（不用 Fixes，issue 於 merge 後由 /idd-close 關閉）；推送與開 PR 由 /idd-all-chain 在使用者確認後執行。驗證：`gh pr view` 顯示 PR 為 open。
+
