@@ -65,8 +65,6 @@ const UNREAD = {
   'multi-line plain output-file': ['format:\n  revealjs:\n    output-file: my\n      slides', 4],
   // verify round 2 (Codex)
   'content after the document end marker': ['project:\n  render: [a.qmd]\n...\nproject:\n  render: [b.qmd]', 4],
-  'quoted output-dir': ['project:\n  "output-dir": _site', 2],
-  'output-dir with a space before the colon': ['project:\n  output-dir : _site', 2],
   'a multi-line flow mapping for format': ['format: {\n  revealjs: {theme: x}\n}', 1],
   // verify round 2 (adversarial)
   'a plain scalar continued inside a flow list': ['project:\n  render: [\n    my\n    talk.qmd\n  ]', 4],
@@ -106,6 +104,8 @@ const READ = {
   'a document end marker': 'project:\n  render: [deck.qmd]\n...',
   'a one-line flow mapping for format without an output name': 'format: {pdf: default, revealjs: {incremental: true}}',
   'a one-line flow mapping for project without render': 'project: {type: default}',
+  // verify round 3 (Codex N3): the comma that ends an item may start the next line
+  'a flow list with the comma at the start of the next line': 'project:\n  render: [\n    a.qmd\n    , b.qmd\n  ]',
   // verify round 2 (adversarial)
   'an anchored block scalar under revealjs': 'format:\n  revealjs:\n    output-file: slides\n    notes: &n |\n      output-file: wrong',
   'output-ext under another format': 'format:\n  pdf:\n    output-ext: tex',
@@ -554,4 +554,54 @@ test('a slide break and a fenced code example are not read as metadata blocks', 
   const qmd = '---\ntitle: "T"\n---\n\n## A\n\nText.\n\n---\n\n## B\n\n```yaml\n---\noutput-file: shown\n---\n```\n\n---\n## C\n\n[link](x)\n\n---\n';
   const dir = folder({ 'deck.qmd': qmd, 'deck.html': '<html></html>' });
   assert.deepEqual(lib.chooseDeckFile('.html', { dir }), { file: 'deck.html' });
+});
+
+// verify round 3 (Codex N1, N5)
+const OUTPUT_SOURCES_R3 = {
+  'a project type in a one-line flow mapping': [{ '_quarto.yml': 'project: {type: website}\n' }, '_quarto.yml', 1],
+  'a quoted project type key': [{ '_quarto.yml': 'project:\n  "type": book\n' }, '_quarto.yml', 2],
+  'a later block that starts with a comment': [{ 'deck.qmd': `${QMD}\n---\n# output settings\noutput-file: slides\n---\n` }, 'deck.qmd', 11],
+  // only where the deck is written: the scaffold accepts it as it accepts a bare output-dir (verify round 3, N2)
+  'output-dir with a space before the colon': [{ '_quarto.yml': 'project:\n  output-dir : _site\n' }, '_quarto.yml', 2],
+  'a later block that starts with a merge key': [{ 'deck.qmd': `${QMD}\n---\n<<: {output-file: slides}\n---\n` }, 'deck.qmd', 10],
+};
+for (const [name, [files, file, line]] of Object.entries(OUTPUT_SOURCES_R3)) {
+  test(`#50 round 3: ${name} is refused for the .html lookup, not for the .qmd lookup`, () => {
+    const dir = folder({ 'deck.qmd': QMD, 'deck.html': '<html></html>', ...files });
+    const r = lib.chooseDeckFile('.html', { dir });
+    assert.equal(r.reason, 'unread', name);
+    assert.equal(r.unread[0].file, file, name);
+    assert.equal(r.unread[0].line, line, name);
+    assert.deepEqual(lib.chooseDeckFile('.qmd', { dir }), { file: 'deck.qmd' }, `${name} .qmd`);
+  });
+}
+
+// verify round 3 (Codex N1, N4, N7): settings that do not change the deck's .html are not refused
+const HTML_UNCHANGED_R3 = {
+  'a quoted default project type': { '_quarto.yml': 'project:\n  type: "default"\n' },
+  'a default project type in a flow mapping': { '_quarto.yml': 'project: {type: default}\n' },
+  'a quoted output-ext under another format in the front matter': { 'deck.qmd': FM('format:\n  pdf:\n    "output-ext": tex\n') },
+  'a quoted output-file under another format': { '_quarto.yml': 'format:\n  pdf:\n    "output-file": print\n' },
+  'a code example whose inner fence has an info string': { 'deck.qmd': `${QMD}\n\`\`\`markdown\n\`\`\`yaml\n\n---\noutput-file: shown\n---\n\`\`\`\n` },
+};
+for (const [name, files] of Object.entries(HTML_UNCHANGED_R3)) {
+  test(`round 3: ${name} does not stop the .html lookup`, () => {
+    const dir = folder({ 'deck.qmd': QMD, 'deck.html': '<html></html>', ...files });
+    assert.deepEqual(lib.chooseDeckFile('.html', { dir }), { file: 'deck.html' }, name);
+  });
+}
+
+// verify round 3 (Codex N2): quoted forms of the output folder and extension are accepted too; an output-file the
+// scaffold cannot rewrite is still refused
+test('the scaffold accepts quoted output-dir and output-ext in a template profile, and refuses a quoted output-file', () => {
+  for (const [name, profile, code] of [
+    ['quotedir', 'project:\n  "output-dir": _print\n', 0],
+    ['quotedext', '"output-ext": htm\n', 0],
+    ['quotedfile', 'format:\n  revealjs:\n    "output-file": talk\n', 1],
+  ]) {
+    const s = sandbox();
+    personalTemplate(s, name, `project:\n  render: [talk.qmd]\n${THEME}`, { [`_quarto-${name}.yml`]: profile });
+    const r = runScaffold(s, ['--template', name, '--name', 'w07', '--out', 'deck']);
+    assert.equal(r.code, code, `${name}: ${r.out}`);
+  }
 });

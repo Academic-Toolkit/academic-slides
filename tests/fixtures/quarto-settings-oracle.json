@@ -328,6 +328,17 @@
   }
  },
  {
+  "name": "flow list with the comma at the start of the next line",
+  "yml": "project:\n  render: [\n    a.qmd\n    , b.qmd\n  ]\n",
+  "oracle": {
+   "render": [
+    "a.qmd",
+    "b.qmd"
+   ],
+   "outputFile": null
+  }
+ },
+ {
   "name": "multi-line plain render item",
   "yml": "project:\n  render:\n    - my\n      talk.qmd\n",
   "oracle": {

@@ -307,6 +307,9 @@ export function renameRenderTarget(text, mainFile) {
 // output name (an unread one stops the .html and .pdf lookups; #50, verify round 2).
 const FILE_KEYS = ['project', 'render', 'metadata-files'];
 const OUTPUT_KEYS = ['format', 'revealjs', 'output-file', 'output-ext', 'output-dir'];
+const RENAME_KEYS = ['format', 'revealjs', 'output-file'];   // the scaffold rewrites the name these set
+const REVEALJS_FORMAT = /^(revealjs|.+-revealjs)$/;
+const DEFAULT_TYPE = /^(?:"default"|'default'|default)?$/;   // project.type default, quoted or not, or no value
 const KEY_MENTION = /(^|[\s{,[])(project|format|revealjs|render|output-file|output-ext|output-dir|metadata-files)([ \t]*):(?=[\s{["']|$)/g;
 const MERGE_KEY = /(^|[\s{,[-])<<[ \t]*:/;
 const SCANNED_OUTPUT_FILE = /^[ \t]*output-file:[ \t]*(?:"([^"]*)"|'([^']*)'|(\S+))[ \t]*$/;
@@ -366,8 +369,10 @@ function settingLines(yml) {
 //   render         project.render, read by the scanner
 //   output-file    the output-file the scanner reads (the top level, or under format: revealjs:)
 //   metadata       metadata-files whose list the callers read
-//   output         another source of the output name the scanner does not read (#50): output-file under an extension
-//                  format such as clean-revealjs, output-ext, project.output-dir; refused when the name is needed
+//   output         another source of the output name the scanner does not read (#50), in any form, that changes only
+//                  where the deck is written or its extension: output-file under an extension format such as
+//                  clean-revealjs, output-ext, project.output-dir, a project type other than default; refused when the
+//                  name is needed, and no obstacle to the scaffold's rename (verify round 3)
 function scanSettings(yml) {
   const found = [];
   let top = null; let childIndent = -1; let renderIndent = -1; let fmtIndent = -1; let fmtChild = null; let revChild = -1;
@@ -382,6 +387,7 @@ function scanSettings(yml) {
     const kinds = [];
     let files = false;
     let output = continued >= 0 && indent > continued && !own && !/^[ \t]*-/.test(code);   // continues an output-file value
+    let renames = output;      // the unread output setting is one the scaffold would have to rewrite (verify round 3)
     continued = -1;
     // a render flow list left open must go on deeper than its key: YAML would read a line at or left of it otherwise
     if (renderFlow && indent <= renderIndent && !/^[ \t]*\]/.test(masked)) files = true;   // the closing ] may sit there
@@ -400,20 +406,30 @@ function scanSettings(yml) {
       || (seen && /^---(?=[ \t]|$)/.test(code))) files = true;
     if (/^\.\.\.(?=[ \t]|$)/.test(code)) ended = true;
     seen = true;
-    for (const k of keys) { if (FILE_KEYS.includes(k)) files = true; else if (OUTPUT_KEYS.includes(k)) output = true; }
+    // output-file and output-ext under another format (pdf, docx) do not name the deck's .html, in any form (round 3)
+    const otherFormat = top === 'format' && indent > childIndent && fmtChild !== null && !REVEALJS_FORMAT.test(fmtChild);
+    const outputKey = (k) => {
+      if (otherFormat && (k === 'output-file' || k === 'output-ext')) return;
+      output = true; if (RENAME_KEYS.includes(k)) renames = true;
+    };
+    for (const k of keys) { if (FILE_KEYS.includes(k)) files = true; else if (OUTPUT_KEYS.includes(k)) outputKey(k); }
     for (const m of masked.matchAll(KEY_MENTION)) {
       if (m[3] === '' && m.index + m[1].length === indent) continue;   // a plain block key, first on its line
       // format and revealjs named inside a one-line flow mapping set nothing on their own; an output key named there is
       // caught by itself. A space before the colon is never read.
       if (m[3] === '' && (m[2] === 'format' || m[2] === 'revealjs')) continue;
-      if (FILE_KEYS.includes(m[2])) files = true; else output = true;
+      if (FILE_KEYS.includes(m[2])) files = true; else outputKey(m[2]);
     }
+    // project.type other than default, in any form: block, quoted key, space before the colon, one-line flow mapping
+    const type = top === 'project' && indent === childIndent ? code.match(/^[ \t]*(["']?)type\1[ \t]*:[ \t]*(.*?)[ \t]*$/)
+      : key === 'project' && indent === 0 ? code.match(/[{,][ \t]*(["']?)type\1[ \t]*:[ \t]*([^,}]*?)[ \t]*(?=[,}])/) : null;
+    if (type && !DEFAULT_TYPE.test(type[2])) output = true;
     // project and format at the root, and revealjs under format, hold the scanned keys: a flow mapping there is read only
     // when it closes on its line (what it names is checked above); an anchor, alias, tag, block scalar or sequence never
     const scannedParent = ((key === 'project' || key === 'format') && indent === 0) || (key === 'revealjs' && top === 'format' && indent === childIndent);
     if (scannedParent && value !== '{}'
       && (/^[&*!|>[]/.test(value) || (value.startsWith('{') && !/\}[ \t]*$/.test(value)) || /(^|[\s,[{])[&*][^\s,[\]{}]/.test(value))) {
-      if (key === 'project') files = true; else output = true;
+      if (key === 'project') files = true; else { output = true; renames = true; }
     }
     if (renderIndent >= 0) {
       const keyLine = key === 'render' && indent === renderIndent;
@@ -428,8 +444,9 @@ function scanSettings(yml) {
         flowItemOpen = renderFlow && !/[[,][ \t]*$/.test(text);
         kinds.push('render');
       } else if (renderFlow) {
-        // in a flow list a value runs on until a comma: a line after one that ended without a comma continues it
-        if (flowItemOpen && !/^[ \t]*\]/.test(masked)) files = true;
+        // in a flow list a value runs on until a comma: a line after one that ended without a comma continues it,
+        // unless it starts with the comma or the closing ] (verify round 3)
+        if (flowItemOpen && !/^[ \t]*[\],]/.test(masked)) files = true;
         if (/\]/.test(masked)) renderFlow = false;
         flowItemOpen = !/[[,][ \t]*$/.test(masked.trim());
       } else if (!/^[ \t]*-/.test(code)) files = true;   // a line continuing a value: YAML joins it, the scanner splits it
@@ -439,15 +456,15 @@ function scanSettings(yml) {
       // not matched, an anchor, alias, tag or flow value, a quoted value with '' or \" the quoted forms could not take, an
       // escape, a null or empty value, or a key deeper than revealjs's own (Quarto does not take it; verify round 2)
       if (!o || /^[&*!|>{["']/.test(o[3] ?? '') || (o[1] ?? '').includes('\\') || /^(~|null|Null|NULL)$/.test(o[3] ?? '')
-        || o[1] === '' || o[2] === '' || (indent > 0 && indent > revChild)) output = true;
+        || o[1] === '' || o[2] === '' || (indent > 0 && indent > revChild)) { output = true; renames = true; }
       else { kinds.push('output-file'); if (o[3] !== undefined) continued = indent; }
     } else if (key === 'output-file' && top === 'format' && indent > childIndent && /.-revealjs$/.test(fmtChild ?? '')) kinds.push('output');
     // output-ext at the top level or under a revealjs format; an output folder, set or implied by a project type other
     // than default (website, book, manuscript write to _site, _book, _manuscript)
-    if ((key === 'output-ext' && (indent === 0 || (top === 'format' && indent > childIndent && /^(revealjs|.+-revealjs)$/.test(fmtChild ?? ''))))
-      || (top === 'project' && indent === childIndent && (key === 'output-dir' || (key === 'type' && value !== '' && !/^["']?default["']?$/.test(value))))) kinds.push('output');
+    if ((key === 'output-ext' && (indent === 0 || (top === 'format' && indent > childIndent && REVEALJS_FORMAT.test(fmtChild ?? ''))))
+      || (top === 'project' && indent === childIndent && key === 'output-dir')) kinds.push('output');
     if (files) found.push({ line, text: raw.trim(), kind: 'unread' });
-    else if (output) found.push({ line, text: raw.trim(), kind: 'unread-output' });
+    else if (output) found.push({ line, text: raw.trim(), kind: renames ? 'unread-output' : 'output' });
     else for (const kind of kinds) found.push({ line, text: raw.trim(), kind });
   }
   for (const l of metadataFileLists(yml)) {

@@ -129,3 +129,13 @@ test('a line break inside a name the scaffold prints cannot start a line of its 
   assert.equal(r.code, 0, r.out);
   assert.doesNotMatch(r.out, /^warning: forged line/m);
 });
+
+// verify round 3 (Codex N6): a line break inside a value handout prints cannot start a line of its own
+test('handout keeps a line break in an option or a file name from forging a line', () => {
+  const dir = emptyFolder();
+  for (const args of [['--bogus\nwarning: forged'], ['--pdf', 'x\nwarning: forged.pdf'], ['--margin', '1\nwarning: forged']]) {
+    const r = run(path.join(QA, 'handout.mjs'), args, dir);
+    assert.notEqual(r.code, 0, r.out);
+    assert.doesNotMatch(r.out, /^warning: forged/m, JSON.stringify(args));
+  }
+});

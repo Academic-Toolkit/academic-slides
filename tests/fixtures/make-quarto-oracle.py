@@ -45,6 +45,7 @@ CASES = {
     'anchored block scalar under revealjs': 'format:\n  revealjs:\n    output-file: slides\n    notes: &n |\n      output-file: wrong\n',
     'output-file deeper under revealjs': 'format:\n  revealjs:\n    foo:\n      output-file: x\n',
     'null output-file': 'output-file: ~\n',
+    'flow list with the comma at the start of the next line': 'project:\n  render: [\n    a.qmd\n    , b.qmd\n  ]\n',
     # forms the detector must refuse (refused cases are skipped by the oracle test; listed so a regression shows)
     'multi-line plain render item': 'project:\n  render:\n    - my\n      talk.qmd\n',
     'multi-line plain render value': 'project:\n  render: my\n    talk.qmd\n',
