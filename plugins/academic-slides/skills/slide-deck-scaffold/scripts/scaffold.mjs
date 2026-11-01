@@ -751,13 +751,22 @@ function staleRenderLines(yml, templateLines, copies, mainFile) {
     const k = pathKey(v).replace(/\/+$/, '');
     return k === pathKey(mainFile) || keys.some((c) => c === k || c.startsWith(`${k}/`));
   };
-  // outside the deck first, globs included (verify round 1: "../*.qmd" left the deck); a glob inside it is Quarto's
-  const outside = (v) => path.isAbsolute(v) || path.win32.isAbsolute(v) || v.split(/[\\/]/).includes('..');
-  const pick = (test) => [...new Set(renderEntries(yml).filter(({ value }) => test(value)).map(({ line }) => line))]
+  // A value as Quarto reads it: ./ and // inside a path do not change it (verify round 1). Outside the deck is checked
+  // first, globs included ("../*.qmd" left the deck); a glob inside it is Quarto's; "." is the whole deck.
+  const norm = (v) => path.posix.normalize(v.replace(/\\/g, '/'));
+  const glob = (v) => /[*?[\]{}!]/.test(v);
+  const outside = (v) => path.isAbsolute(v) || path.win32.isAbsolute(v) || norm(v) === '..' || norm(v).startsWith('../');
+  const entries = renderEntries(yml);
+  const pick = (test) => [...new Set(entries.filter(({ value }) => test(value)).map(({ line }) => line))]
     .map((line) => ({ line, text: templateLines[line - 1] ?? '' }));
+  // A render list that names neither the main file, nor ".", nor a glob never renders the deck itself (verify round 1).
+  const renderKey = scanSettings(yml).find((f) => f.kind === 'render');
+  const covers = (v) => glob(v) || norm(v) === '.' || pathKey(norm(v)) === pathKey(mainFile);
   return {
     outside: pick(outside),
-    missing: pick((v) => !outside(v) && !/[*?[\]{}!]/.test(v) && !has(v)),
+    missing: pick((v) => !outside(v) && !glob(v) && norm(v) !== '.' && !has(norm(v))),
+    noMain: entries.length && renderKey && !entries.some(({ value }) => covers(value))
+      ? [{ line: renderKey.line, text: templateLines[renderKey.line - 1] ?? '' }] : [],
   };
 }
 
@@ -766,7 +775,7 @@ function staleOutputLines(yml, templateLines, stem) {
   return scanSettings(yml)
     .filter(({ kind, text }) => kind === 'output-file' || (kind === 'output' && /^output-file:/.test(text)))
     .filter(({ text }) => {
-      const o = text.match(SCANNED_OUTPUT_FILE);
+      const o = splitComment(text)[0].trimEnd().match(SCANNED_OUTPUT_FILE);   // a comment after the value is not part of it
       return !own.has(pathKey((o?.[1] ?? o?.[2] ?? o?.[3] ?? '').replace(/^\.\//, '')));
     })
     .map(({ line }) => ({ line, text: templateLines[line - 1] ?? '' }));
@@ -859,16 +868,28 @@ export function planDeck({ out, home, template, title, deckName, trustProject = 
       'sets render or the output name, or may (through metadata-files, a merge key, or a form the scaffold cannot read), but the scaffold rewrites only _quarto.yml; move those settings there');
   }
   const yml = rewriteQuartoYml(templateYml, { theme, footer: fields.footer?.value, mainFile }, ymlFile);
+  // Checked on the template's text with only the renames applied, so line numbers are the template's: a settings layer
+  // can add or remove the footer line in the written file (verify round 1 of #53).
+  const renamed = renameRenderTarget(templateYml, mainFile);
   const templateLines = templateYml.split(/\r?\n/);
-  const staleRender = staleRenderLines(yml, templateLines, copies, mainFile);
+  const staleRender = staleRenderLines(renamed, templateLines, copies, mainFile);
   refuseUnreadSettings(ymlFile, staleRender.outside, 'names a path outside the new deck folder (.. or an absolute path); a deck '
     + 'renders only its own files, so list talk.qmd, which the scaffold renames to the deck\'s main file, files kept in the template, or a glob inside it');
   refuseUnreadSettings(ymlFile, staleRender.missing, 'names a file that is neither talk.qmd nor '
     + 'kept in the template (left from the deck it was copied from?); Quarto renders nothing for it and exits 0. List talk.qmd, '
     + 'which the scaffold renames to the deck\'s main file, files kept in the template, or a glob');
-  refuseUnreadSettings(ymlFile, staleOutputLines(yml, templateLines, stem), 'names the deck\'s HTML after something other than talk '
+  refuseUnreadSettings(ymlFile, staleRender.noMain, 'lists files to render but not talk.qmd, the deck\'s main file, which would '
+    + 'then never be rendered (left from the deck the template was copied from?). Add talk.qmd, which the scaffold renames, or use a glob');
+  refuseUnreadSettings(ymlFile, staleOutputLines(renamed, templateLines, stem), 'names the deck\'s HTML after something other than talk '
     + '(left from the deck it was copied from?); the deck would render under that name. Write output-file: talk, which the '
     + 'scaffold renames to the deck\'s name, or remove it');
+  // _metadata.yml beside talk.qmd is merged into it and copied unchanged, so it is judged like a profile file (verify
+  // round 1 of #53): it may change where the deck is written or its extension, not its name.
+  for (const { src } of copies.filter((c) => /^_metadata\.ya?ml$/i.test(c.rel))) {
+    refuseUnreadSettings(src, profileSettingLines(readFileSync(src, 'utf8')).filter((l) => l.kind !== 'render').filter(placeOnlyAccepted),
+      'sets the output name, or may (through metadata-files, a merge key, or a form the scaffold cannot read); _metadata.yml is copied '
+      + 'unchanged, so the deck would render under that name. Remove it, or write output-file: talk in the template\'s _quarto.yml');
+  }
   refuseUnreadSettings(qmdFile, frontMatterNameLines(templateQmd.replace(/^\uFEFF/, '')), 'sets the output name in talk.qmd, or may (through metadata-files '
     + 'or a merge key); talk.qmd is copied as it is, so the deck would render under that name. Remove it, or write output-file: '
     + 'talk in the template\'s _quarto.yml, which the scaffold renames');

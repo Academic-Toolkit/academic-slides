@@ -720,3 +720,70 @@ test('#53 verify: a profile that changes only the output folder or extension is 
   const r = runScaffold(s, ['--template', 'place', '--name', 'w08', '--out', 'deck']);
   assert.equal(r.code, 0, r.out);
 });
+
+// verify round 1 of #53 (adversarial)
+test('#53 verify: output-file talk with a comment after it is renamed, not refused', () => {
+  for (const [name, yml] of [
+    ['revealjs', `project:\n  render: [talk.qmd]\nformat:\n  revealjs:\n    theme: [default, _theme/deck.scss]\n    footer: "Venue"\n    output-file: talk   # renamed by the scaffold\n`],
+    ['top level', `output-file: talk.html # deck name\nproject:\n  render: [talk.qmd]\n${THEME}`],
+    ['extension', `project:\n  render: [talk.qmd]\n${THEME}  clean-revealjs:\n    output-file: "talk" # x\n`],
+  ]) {
+    const s = sandbox();
+    personalTemplate(s, 'commented', yml);
+    const r = runScaffold(s, ['--template', 'commented', '--name', 'w08', '--out', 'deck']);
+    assert.equal(r.code, 0, `${name}: ${r.out}`);
+    assert.match(readFileSync(path.join(s.project, 'deck', '_quarto.yml'), 'utf8'), /output-file: "?w08(\.html)?"?/, name);
+  }
+});
+
+test('#53 verify: the line named is the template\'s, also when a settings layer removes or adds the footer', () => {
+  for (const [settings, yml, line] of [
+    [{ footer: null }, `project:\n  render: [talk.qmd]\nformat:\n  revealjs:\n    theme: [default, _theme/deck.scss]\n    footer: "Venue"\n    output-file: w07\n`, 7],
+    [{ footer: 'My venue' }, `project:\n  render: [talk.qmd]\nformat:\n  revealjs:\n    theme: [default, _theme/deck.scss]\n    output-file: w07\n`, 6],
+  ]) {
+    const s = sandbox();
+    mkdirSync(path.join(s.home, '.claude', '.academic-slides'), { recursive: true });
+    writeFileSync(path.join(s.home, '.claude', '.academic-slides', 'local.json'), JSON.stringify(settings));
+    personalTemplate(s, 'footed', yml);
+    const r = runScaffold(s, ['--template', 'footed', '--name', 'w08', '--out', 'deck']);
+    assert.equal(r.code, 1, r.out);
+    assert.match(r.out, new RegExp(`_quarto\\.yml line ${line} \\("    output-file: w07"\\)`), JSON.stringify(settings));
+  }
+});
+
+test('#53 verify: _metadata.yml in the template is judged like a profile file, and the main file must be rendered', () => {
+  for (const [name, yml, extra, file, line] of [
+    ['_metadata.yml output-file', `project:\n  render: [talk.qmd]\n${THEME}`, { '_metadata.yml': 'output-file: w07\n' }, '_metadata.yml', 1],
+    ['_metadata.yaml under revealjs', `project:\n  render: [talk.qmd]\n${THEME}`, { '_metadata.yaml': 'format:\n  revealjs:\n    output-file: w07\n' }, '_metadata.yaml', 3],
+    ['render without the main file', `project:\n  render:\n    - "w07.qmd"\n${THEME}`, { 'w07.qmd': OLD_DECK }, '_quarto.yml', 2],
+  ]) {
+    const s = sandbox();
+    personalTemplate(s, 'meta', yml, extra);
+    const r = runScaffold(s, ['--template', 'meta', '--name', 'w08', '--out', 'deck']);
+    assert.equal(r.code, 1, `${name}: ${r.out}`);
+    assert.match(r.out, new RegExp(`${file.replace(/\./g, '\\.')} line ${line}\\b`), name);
+  }
+  const s = sandbox();
+  personalTemplate(s, 'metaplace', `project:\n  render: [talk.qmd]\n${THEME}`, { '_metadata.yml': 'format:\n  revealjs:\n    output-ext: htm\n' });
+  assert.equal(runScaffold(s, ['--template', 'metaplace', '--name', 'w08', '--out', 'deck']).code, 0);
+});
+
+test('#53 verify: render values Quarto reads as written (".", ./ and // inside a path) are accepted', () => {
+  const s = sandbox();
+  personalTemplate(s, 'dotted', `project:\n  render:\n    - talk.qmd\n    - "."\n    - chapters/./intro.qmd\n    - chapters//intro.qmd\n${THEME}`);
+  mkdirSync(path.join(s.templates, 'dotted', 'chapters'));
+  writeFileSync(path.join(s.templates, 'dotted', 'chapters', 'intro.qmd'), OLD_DECK);
+  const r = runScaffold(s, ['--template', 'dotted', '--name', 'w08', '--out', 'deck']);
+  assert.equal(r.code, 0, r.out);
+});
+
+test('#53 verify: the two copies of the detector block are the same text, but for the line that points at the other', () => {
+  const block = (file) => {
+    const text = readFileSync(file, 'utf8');
+    const from = text.indexOf('// Forms of _quarto.yml');
+    const to = text.indexOf('export function metadataFileLists');
+    assert.ok(from >= 0 && to > from, file);
+    return text.slice(from, to).split('\n').filter((l) => !l.startsWith('// code is in '));
+  };
+  assert.deepEqual(block(SCAFFOLD), block(path.join(QA, '_lib.mjs')));
+});
